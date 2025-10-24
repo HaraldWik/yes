@@ -61,8 +61,11 @@ pub fn close(self: @This()) void {
 }
 
 pub fn next(self: @This()) ?@import("root.zig").Event {
+    // const event: c.XEvent = event: {
     var event: c.XEvent = undefined;
-    if (c.XNextEvent(self.display, &event) != c.XCSUCCESS) return null;
+    while (c.XPending(self.display) > 0) {
+        if (c.XNextEvent(self.display, &event) != c.XCSUCCESS) return null;
+    }
 
     return switch (event.type) {
         c.Expose => expose: {
@@ -79,4 +82,17 @@ pub fn next(self: @This()) ?@import("root.zig").Event {
         c.ClientMessage => if (event.xclient.data.l[0] == self.wm_delete_window) null else .none,
         else => .none,
     };
+}
+
+pub fn getSize(self: @This()) [2]usize {
+    var root: c.Window = undefined;
+    var x: c_int = 0;
+    var y: c_int = 0;
+    var width: c_uint = 0;
+    var height: c_uint = 0;
+    var border: c_uint = 0;
+    var depth: c_uint = 0;
+
+    _ = c.XGetGeometry(self.display, self.window, &root, &x, &y, &width, &height, &border, &depth);
+    return .{ @intCast(width), @intCast(height) };
 }

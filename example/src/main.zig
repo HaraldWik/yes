@@ -8,5 +8,7 @@ pub fn main() !void {
     // next returns null on exit
     while (window.next()) |event| {
         _ = event;
+        const width: usize, const height: usize = window.getSize();
+        std.debug.print("Size {d} {d}\n", .{ width, height });
     } else std.debug.print("Exit!\n", .{});
 }

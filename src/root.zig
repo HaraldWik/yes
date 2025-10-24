@@ -40,6 +40,10 @@ pub const Window = struct {
     pub fn next(self: @This()) ?Event {
         return self.handle.next();
     }
+
+    pub fn getSize(self: @This()) [2]usize {
+        return self.handle.getSize();
+    }
 };
 
 pub const Event = union(enum) {

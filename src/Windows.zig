@@ -59,6 +59,12 @@ pub fn next(self: @This()) ?@import("root.zig").Event {
     return if (quit) null else .none;
 }
 
+pub fn getSize(self: @This()) [2]usize {
+    var rect: windows.RECT = undefined;
+    _ = GetClientRect(self.hwnd, &rect);
+    return .{ @intCast(rect.right - rect.left), @intCast(rect.bottom - rect.top) };
+}
+
 fn handleMessages(hwnd: windows.HWND, message: windows.UINT, w_param: usize, l_param: isize) callconv(.winapi) windows.LRESULT {
     switch (message) {
         WM_QUIT, WM_DESTROY => quit = true,
@@ -68,7 +74,7 @@ fn handleMessages(hwnd: windows.HWND, message: windows.UINT, w_param: usize, l_p
 }
 
 /// OLD
-extern "user32" fn MessageBoxA(?windows.HWND, [*:0]const u8, [*:0]const u8, u32) callconv(.winapi) i32;
+extern "user32" fn MessageBoxA(parent: ?windows.HWND, msg: [*:0]const u8, title: [*:0]const u8, flags: u32) callconv(.winapi) i32;
 
 const WNDPROC = *const fn (hwnd: windows.HWND, uMsg: windows.UINT, wParam: usize, lParam: isize) callconv(.winapi) windows.LRESULT;
 
@@ -119,6 +125,8 @@ const CREATESTRUCTW = extern struct {
 extern "kernel32" fn GetModuleHandleW(lpModuleName: ?windows.LPCWSTR) callconv(.winapi) ?windows.HINSTANCE;
 
 extern "user32" fn RegisterClassExW(lpwcx: *const WNDCLASSEXW) callconv(.winapi) u16; // Returns an ATOM (u16) or 0 on failure
+
+extern "user32" fn GetClientRect(hwnd: windows.HWND, rect: *windows.RECT) i32;
 
 extern "user32" fn CreateWindowExW(
     dwExStyle: windows.DWORD,
