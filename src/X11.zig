@@ -20,7 +20,7 @@ pub fn open(config: @import("root.zig").Window.Config) !@This() {
         @intCast(config.width), @intCast(config.width), // Width, Height
         2, // Border width
         c.BlackPixel(display, screen), // Border color
-        c.WhitePixel(display, screen) // Background color
+        c.BlackPixel(display, screen) // Background color
     );
 
     _ = c.XStoreName(display, window, config.title.ptr);

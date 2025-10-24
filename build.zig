@@ -12,9 +12,10 @@ pub fn build(b: *std.Build) void {
     });
 
     switch (target.result.os.tag) {
-        .linux => {
-            mod.linkSystemLibrary("X11", .{});
+        .windows => {
+            mod.linkSystemLibrary("user32", .{});
+            mod.linkSystemLibrary("kernel32", .{});
         },
-        else => {},
+        else => mod.linkSystemLibrary("X11", .{}),
     }
 }

@@ -3,13 +3,14 @@ const builtin = @import("builtin");
 
 const native_os = builtin.os.tag;
 
+pub const Windows = @import("Windows.zig");
 pub const X11 = @import("X11.zig");
 
 pub const Window = struct {
     handle: Handle,
 
     pub const Handle = switch (native_os) {
-        .windows => std.os.windows.HWND,
+        .windows => Windows,
         else => X11,
     };
 
@@ -26,7 +27,7 @@ pub const Window = struct {
 
     pub fn open(config: Config) !@This() {
         const handle: Handle = switch (native_os) {
-            .windows => undefined,
+            .windows => try Windows.open(config),
             else => try X11.open(config),
         };
         return .{ .handle = handle };
