@@ -9,6 +9,6 @@ pub fn main() !void {
     while (window.next()) |event| {
         _ = event;
         const width: usize, const height: usize = window.getSize();
-        std.debug.print("Size {d} {d}\n", .{ width, height });
-    } else std.debug.print("Exit!\n", .{});
+        std.debug.print("Size {d} {d}\r", .{ width, height });
+    } else std.debug.print("\x1b[2KExit!\n", .{});
 }

@@ -79,7 +79,12 @@ pub fn next(self: @This()) ?@import("root.zig").Event {
             break :key .none;
         },
 
-        c.ClientMessage => if (event.xclient.data.l[0] == self.wm_delete_window) null else .none,
+        c.ClientMessage => {
+            // var wm_delete_window: c_ulong = c.XInternAtom(self.display, "WM_DELETE_WINDOW", @intFromBool(false));
+            // _ = c.XSetWMProtocols(self.display, self.window, &wm_delete_window, 1);
+
+            return if (event.xclient.data.l[0] == self.wm_delete_window) null else .none;
+        },
         else => .none,
     };
 }

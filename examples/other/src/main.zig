@@ -1,0 +1,14 @@
+const std = @import("std");
+const yes = @import("yes");
+
+pub fn main() !void {
+    const window: yes.Window = try .open(.{ .title = "Title", .width = 900, .height = 600 });
+    defer window.close();
+
+    // next returns null on exit
+    while (window.next()) |event| {
+        _ = event;
+        // const width: usize, const height: usize = window.getSize();
+        // std.debug.print("Size {d} {d}\n", .{ width, height });
+    } else std.debug.print("Exit!\n", .{});
+}

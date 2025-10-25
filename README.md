@@ -31,3 +31,6 @@ There is no wayland support and there prob wont be any, anyone experienced with 
 Current support platforms
 
 Linux, Unix - X11 
+
+Thanks to 
+Leandros for the windows headers! [here](https://github.com/Leandros/WindowsHModular/)

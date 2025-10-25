@@ -5,7 +5,7 @@
     .minimum_zig_version = "0.16.0-dev.253+4314c9653",
     .dependencies = .{
         .yes = .{
-            .path = "../",
+            .path = "../../",
         },
     },
     .paths = .{
