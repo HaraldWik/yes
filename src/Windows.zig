@@ -1,16 +1,14 @@
 const std = @import("std");
-const win32 = @import("win32").everything;
+pub const win32 = @import("win32").everything;
 // zig build -Dtarget=x86_64-windows && wine zig-out/bin/example.exe
 
-instance: win32.HINSTANCE,
-hwnd: win32.HWND,
+instance: win32.HINSTANCE = undefined,
+hwnd: win32.HWND = undefined,
+quit: bool = false,
 
-var quit: bool = false;
-
-pub fn open(config: @import("root.zig").Window.Config) !@This() {
+pub fn open(self: *@This(), config: @import("root.zig").Window.Config) !void {
     const instance = win32.GetModuleHandleW(null) orelse return error.GetInstanceHandle;
-
-    var self: @This() = .{ .instance = instance, .hwnd = undefined };
+    self.instance = instance;
 
     const class_name: [*:0]const u16 = std.unicode.utf8ToUtf16LeStringLiteral("WindowClass");
 
@@ -39,15 +37,13 @@ pub fn open(config: @import("root.zig").Window.Config) !@This() {
         null,
         null,
         instance,
-        @ptrCast(&self),
+        @ptrCast(self),
     ) orelse return error.CreateWindowFailed;
 
     self.hwnd = hwnd;
 
     _ = win32.ShowWindow(hwnd, .{ .SHOWNORMAL = 1 });
     _ = win32.UpdateWindow(hwnd);
-
-    return self;
 }
 
 pub fn close(self: @This()) void {
@@ -55,7 +51,7 @@ pub fn close(self: @This()) void {
 }
 
 pub fn next(self: @This()) ?@import("root.zig").Event {
-    if (quit) return null;
+    if (self.quit) return null;
 
     var msg: win32.MSG = undefined;
     while (win32.PeekMessageW(&msg, self.hwnd, 0, 0, .{ .REMOVE = 1 }) == @intFromBool(true)) {
@@ -72,9 +68,41 @@ pub fn getSize(self: @This()) [2]usize {
 }
 
 fn handleMessages(hwnd: win32.HWND, message: u32, w_param: usize, l_param: isize) callconv(.winapi) win32.LRESULT {
-    switch (message) {
-        win32.WM_QUIT, win32.WM_DESTROY => quit = true,
-        else => return win32.DefWindowProcW(hwnd, message, w_param, l_param),
+    if (message == win32.WM_NCCREATE) {
+        const cs: *const win32.CREATESTRUCTW = @ptrFromInt(@as(usize, @intCast(l_param)));
+        _ = win32.SetWindowLongPtrW(hwnd, win32.GWLP_USERDATA, @intCast(@intFromPtr(cs.lpCreateParams)));
+
+        return win32.DefWindowProcW(hwnd, message, w_param, l_param);
     }
-    return 0;
+
+    const self: *@This() = self: {
+        const self_ptr = win32.GetWindowLongPtrW(hwnd, win32.GWLP_USERDATA);
+        if (self_ptr == 0) return win32.DefWindowProcW(hwnd, message, w_param, l_param);
+        break :self @ptrFromInt(@as(usize, @intCast(self_ptr)));
+    };
+
+    return switch (message) {
+        win32.WM_KEYDOWN => result: {
+            const vk: u32 = @intCast(w_param);
+            std.debug.print("Key down: {d}\n", .{vk});
+            break :result 0;
+        },
+        win32.WM_KEYUP => result: {
+            const vk: u32 = @intCast(w_param);
+            std.debug.print("Key up: {d}\n", .{vk});
+            break :result 0;
+        },
+        win32.WM_CHAR => result: {
+            const ch: u16 = @intCast(w_param);
+            std.debug.print("Char: {d} {c}\n", .{ ch, @as(u8, @intCast(ch)) });
+            break :result 0;
+        },
+        win32.WM_DESTROY => result: {
+            self.quit = true;
+
+            win32.PostQuitMessage(0);
+            break :result 0;
+        },
+        else => return win32.DefWindowProcW(hwnd, message, w_param, l_param),
+    };
 }

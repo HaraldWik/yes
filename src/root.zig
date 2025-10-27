@@ -10,7 +10,7 @@ pub const Window = struct {
     handle: Handle,
 
     pub const Handle = switch (native_os) {
-        .windows => Windows,
+        .windows => *Windows,
         else => X11,
     };
 
@@ -26,11 +26,14 @@ pub const Window = struct {
     };
 
     pub fn open(config: Config) !@This() {
-        const handle: Handle = switch (native_os) {
-            .windows => try Windows.open(config),
-            else => try X11.open(config),
+        return switch (native_os) {
+            .windows => handle: {
+                var window: Windows = .{};
+                try window.open(config);
+                break :handle .{ .handle = &window };
+            },
+            else => .{ .handle = try .open(config) },
         };
-        return .{ .handle = handle };
     }
 
     pub fn close(self: @This()) void {
