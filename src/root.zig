@@ -4,14 +4,14 @@ const builtin = @import("builtin");
 const native_os = builtin.os.tag;
 
 pub const Windows = @import("Windows.zig");
-pub const X11 = @import("X11.zig");
+pub const X = @import("X.zig");
 
 pub const Window = struct {
     handle: Handle,
 
     pub const Handle = switch (native_os) {
         .windows => *Windows,
-        else => X11,
+        else => X,
     };
 
     pub const Config = struct {
@@ -47,8 +47,129 @@ pub const Window = struct {
     pub fn getSize(self: @This()) [2]usize {
         return self.handle.getSize();
     }
-};
 
+    pub fn isKeyDown(self: @This(), key: Key) bool {
+        return self.handle.isKeyDown(key);
+    }
+};
 pub const Event = union(enum) {
     none: void,
+};
+
+pub const Key = enum(u8) {
+    // Digits
+    @"0" = '0',
+    @"1" = '1',
+    @"2" = '2',
+    @"3" = '3',
+    @"4" = '4',
+    @"5" = '5',
+    @"6" = '6',
+    @"7" = '7',
+    @"8" = '8',
+    @"9" = '9',
+
+    // Letters
+    a = 'A',
+    b = 'B',
+    c = 'C',
+    d = 'D',
+    e = 'E',
+    f = 'F',
+    g = 'G',
+    h = 'H',
+    i = 'I',
+    j = 'J',
+    k = 'K',
+    l = 'L',
+    m = 'M',
+    n = 'N',
+    o = 'O',
+    p = 'P',
+    q = 'Q',
+    r = 'R',
+    s = 'S',
+    t = 'T',
+    u = 'U',
+    v = 'V',
+    w = 'W',
+    x = 'X',
+    y = 'Y',
+    z = 'Z',
+
+    // --- Punctuation / symbols ---
+    space = ' ',
+    minus = '-',
+    equal = '=',
+    left_bracket = '[',
+    right_bracket = ']',
+    backslash = '\\',
+    semicolon = ';',
+    quote = '\'',
+    comma = ',',
+    period = '.',
+    slash = '/',
+    grave = '`',
+
+    // Control keys
+    backspace,
+    tab,
+    clear,
+    enter,
+    escape,
+    delete,
+
+    // Modifiers
+    left_shift,
+    right_shift,
+    left_ctrl,
+    right_ctrl,
+    left_alt,
+    right_alt,
+    left_super, // Windows / Command key
+    right_super,
+    caps_lock,
+
+    // Navigation
+    up,
+    down,
+    left,
+    right,
+    home,
+    end,
+    page_up,
+    page_down,
+    insert,
+
+    // Function keys
+    f1,
+    f2,
+    f3,
+    f4,
+    f5,
+    f6,
+    f7,
+    f8,
+    f9,
+    f10,
+    f11,
+    f12,
+
+    // Numpad
+    numpad_0,
+    numpad_1,
+    numpad_2,
+    numpad_3,
+    numpad_4,
+    numpad_5,
+    numpad_6,
+    numpad_7,
+    numpad_8,
+    numpad_9,
+    numpad_add,
+    numpad_subtract,
+    numpad_multiply,
+    numpad_divide,
+    numpad_enter,
+    numpad_decimal,
 };

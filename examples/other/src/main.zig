@@ -7,5 +7,8 @@ pub fn main() !void {
 
     while (window.next()) |event| {
         _ = event;
+        if (window.isKeyDown(.a)) std.debug.print("A\n", .{});
+        if (window.isKeyDown(.escape)) std.debug.print("ESC\n", .{});
+        if (window.isKeyDown(.left_ctrl)) std.debug.print("LCTRL\n", .{});
     } else std.debug.print("Exit!\n", .{});
 }
