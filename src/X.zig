@@ -4,6 +4,7 @@ pub const c = @cImport({ // TODO: Remove c import
     @cInclude("X11/Xlib.h");
     @cInclude("X11/Xutil.h");
     @cInclude("X11/Xatom.h");
+    @cInclude("GL/glx.h");
 });
 
 window: c.Window,
@@ -14,14 +15,45 @@ pub fn open(config: root.Window.Config) !@This() {
     const display: *c.Display = c.XOpenDisplay(null) orelse return error.OpenDisplay;
     const screen = c.DefaultScreen(display);
 
-    const window: c.Window = c.XCreateSimpleWindow(display, c.RootWindow(display, screen), // Parent window
-        0, 0, // X, Y position
-        @intCast(config.width), @intCast(config.width), // Width, Height
-        2, // Border width
-        c.BlackPixel(display, screen), // Border color
-        c.BlackPixel(display, screen) // Background color
-    );
+    // const window: c.Window = c.XCreateSimpleWindow(display, c.RootWindow(display, screen), // Parent window
+    //     0, 0, // X, Y position
+    //     @intCast(config.width), @intCast(config.height), // Width, Height
+    //     2, // Border width
+    //     c.BlackPixel(display, screen), // Border color
+    //     c.BlackPixel(display, screen) // Background color
+    // );
 
+    var visual_attribs = [_]c_int{
+        c.GLX_RGBA,
+        c.GLX_DOUBLEBUFFER,
+        c.GLX_DEPTH_SIZE,
+        24,
+        c.GLX_STENCIL_SIZE,
+        8,
+        c.None,
+    };
+
+    const visual: *c.XVisualInfo = c.glXChooseVisual(display, screen, &visual_attribs);
+
+    var swa: c.XSetWindowAttributes = .{
+        .colormap = c.XCreateColormap(display, c.RootWindow(display, screen), visual.visual, c.AllocNone),
+        .event_mask = c.ExposureMask | c.KeyPressMask | c.StructureNotifyMask,
+    };
+
+    const window: c.Window = c.XCreateWindow(
+        display,
+        c.RootWindow(display, screen),
+        0,
+        0,
+        800,
+        600,
+        0,
+        visual.depth,
+        c.InputOutput,
+        visual.visual,
+        c.CWColormap | c.CWEventMask,
+        &swa,
+    );
     _ = c.XStoreName(display, window, config.title.ptr);
     var hints: c.XSizeHints = .{};
 
@@ -46,6 +78,15 @@ pub fn open(config: root.Window.Config) !@This() {
 
     _ = c.XMapWindow(display, window);
     _ = c.XFlush(display);
+
+    switch (config.renderer) {
+        .opengl => {
+            const ctx: c.GLXContext = c.glXCreateContext(display, visual, null, @intFromBool(true));
+            _ = c.glXMakeCurrent(display, window, ctx);
+        },
+        .vulkan => {},
+        .none => {},
+    }
 
     return .{
         .window = window,

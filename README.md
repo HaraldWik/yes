@@ -26,10 +26,7 @@ pub fn main() !void {
 
 ```
 
-There is no wayland support and there prob wont be any, anyone experienced with wayland will know that supporting it is futile and its better to have just X11 support since it runs thru XWayland anyways
-
-Current support platforms
-
+Windows,
 Linux, Unix - X11 
 
 Thanks to 

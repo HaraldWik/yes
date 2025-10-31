@@ -36,6 +36,9 @@ pub fn build(b: *std.Build) void {
             mod.linkSystemLibrary("user32", .{});
             mod.linkSystemLibrary("kernel32", .{});
         },
-        else => mod.linkSystemLibrary("X11", .{}),
+        else => {
+            mod.linkSystemLibrary("glx", .{});
+            mod.linkSystemLibrary("X11", .{});
+        },
     }
 }

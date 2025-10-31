@@ -1,5 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
+pub const opengl = @import("opengl.zig");
 
 const native_os = builtin.os.tag;
 
@@ -23,6 +24,13 @@ pub const Window = struct {
         max_width: ?usize = null,
         max_height: ?usize = null,
         resizable: bool = true,
+        renderer: Renderer = .none,
+
+        pub const Renderer = enum {
+            none,
+            opengl,
+            vulkan,
+        };
     };
 
     pub fn open(config: Config) !@This() {
@@ -52,6 +60,7 @@ pub const Window = struct {
         return self.handle.isKeyDown(key);
     }
 };
+
 pub const Event = union(enum) {
     none: void,
 };

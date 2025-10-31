@@ -3,9 +3,13 @@ const root = @import("root.zig");
 pub const win32 = @import("win32").everything;
 // zig build -Dtarget=x86_64-windows && wine zig-out/bin/example.exe
 
+const c = @cImport(@cInclude("GL/gl.h"));
+
 instance: win32.HINSTANCE = undefined,
 hwnd: win32.HWND = undefined,
 quit: bool = false,
+hdc: win32.HDC = undefined,
+hglrc: win32.HGLRC = undefined,
 
 pub fn open(self: *@This(), config: root.Window.Config) !void {
     const instance = win32.GetModuleHandleW(null) orelse return error.GetInstanceHandle;
@@ -45,6 +49,40 @@ pub fn open(self: *@This(), config: root.Window.Config) !void {
 
     _ = win32.ShowWindow(hwnd, .{ .SHOWNORMAL = 1 });
     _ = win32.UpdateWindow(hwnd);
+
+    // OpenGL setup
+    if (config.renderer != .opengl) return;
+
+    const hdc = win32.GetDC(hwnd) orelse return error.GetDC;
+    self.hdc = hdc;
+
+    // Describe desired framebuffer
+    var pfd: win32.PIXELFORMATDESCRIPTOR = std.mem.zeroes(win32.PIXELFORMATDESCRIPTOR);
+    pfd.nSize = @sizeOf(win32.PIXELFORMATDESCRIPTOR);
+    pfd.nVersion = 1;
+    pfd.dwFlags = .{
+        .DRAW_TO_WINDOW = 1,
+        .SUPPORT_OPENGL = 1,
+        .DOUBLEBUFFER = 1,
+    };
+    // win32.PFD_DRAW_TO_WINDOW | win32.PFD_SUPPORT_OPENGL | win32.PFD_DOUBLEBUFFER;
+    pfd.iPixelType = win32.PFD_TYPE_RGBA;
+    pfd.cColorBits = 32;
+    pfd.cDepthBits = 24;
+    pfd.cStencilBits = 8;
+    pfd.iLayerType = win32.PFD_MAIN_PLANE;
+
+    // Choose and set pixel format
+    const pf = win32.ChoosePixelFormat(hdc, &pfd);
+    if (pf == 0) return error.ChoosePixelFormat;
+    if (win32.SetPixelFormat(hdc, pf, &pfd) == 0) return error.SetPixelFormat;
+
+    // Create legacy OpenGL context
+    const hglrc = win32.wglCreateContext(hdc) orelse return error.WglCreateContext;
+    self.hglrc = hglrc;
+
+    // Activate it
+    if (win32.wglMakeCurrent(hdc, hglrc) == 0) return error.WglMakeCurrent;
 }
 
 pub fn close(self: @This()) void {
@@ -104,6 +142,12 @@ fn handleMessages(hwnd: win32.HWND, message: u32, w_param: usize, l_param: isize
         //     const ch: u16 = @intCast(w_param);
         //     std.debug.print("Char: {d} {c}\n", .{ ch, @as(u8, @intCast(ch)) });
         //     break :result 0;
+        // },
+        // win32.WM_GETMINMAXINFO => result: {
+        //     const max: *win32.MINMAXINFO = @ptrFromInt(@as(usize, @intCast(l_param)));
+        //     max.*.ptMaxSize = .{ .x = 400, .y = 400 };
+
+        //     break :result 0; // handled
         // },
         win32.WM_DESTROY => result: {
             self.quit = true;

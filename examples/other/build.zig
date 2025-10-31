@@ -5,6 +5,7 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
 
     const yes = b.dependency("yes", .{ .target = target, .optimize = optimize }).module("yes");
+    const gl = b.dependency("zig_opengl", .{ .target = target, .optimize = optimize }).module("zig_opengl");
 
     const exe = b.addExecutable(.{
         .name = "example",
@@ -14,6 +15,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
             .imports = &.{
                 .{ .name = "yes", .module = yes },
+                .{ .name = "opengl", .module = gl },
             },
         }),
     });
