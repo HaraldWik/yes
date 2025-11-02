@@ -56,7 +56,6 @@ pub fn open(self: *@This(), config: root.Window.Config) !void {
     const hdc = win32.GetDC(hwnd) orelse return error.GetDC;
     self.hdc = hdc;
 
-    // Describe desired framebuffer
     var pfd: win32.PIXELFORMATDESCRIPTOR = std.mem.zeroes(win32.PIXELFORMATDESCRIPTOR);
     pfd.nSize = @sizeOf(win32.PIXELFORMATDESCRIPTOR);
     pfd.nVersion = 1;
@@ -65,23 +64,19 @@ pub fn open(self: *@This(), config: root.Window.Config) !void {
         .SUPPORT_OPENGL = 1,
         .DOUBLEBUFFER = 1,
     };
-    // win32.PFD_DRAW_TO_WINDOW | win32.PFD_SUPPORT_OPENGL | win32.PFD_DOUBLEBUFFER;
     pfd.iPixelType = win32.PFD_TYPE_RGBA;
     pfd.cColorBits = 32;
     pfd.cDepthBits = 24;
     pfd.cStencilBits = 8;
     pfd.iLayerType = win32.PFD_MAIN_PLANE;
 
-    // Choose and set pixel format
     const pf = win32.ChoosePixelFormat(hdc, &pfd);
     if (pf == 0) return error.ChoosePixelFormat;
     if (win32.SetPixelFormat(hdc, pf, &pfd) == 0) return error.SetPixelFormat;
 
-    // Create legacy OpenGL context
     const hglrc = win32.wglCreateContext(hdc) orelse return error.WglCreateContext;
     self.hglrc = hglrc;
 
-    // Activate it
     if (win32.wglMakeCurrent(hdc, hglrc) == 0) return error.WglMakeCurrent;
 }
 
