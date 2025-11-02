@@ -4,13 +4,13 @@
     .fingerprint = 0x75e735a95dccdea4,
     .minimum_zig_version = "0.16.0-dev.253+4314c9653",
     .dependencies = .{
-        .windows = .{
-            .url = "git+https://github.com/Leandros/WindowsHModular/#3adbb67f6f77025b5a9ef9f140c10e3393ca9093",
-            .hash = "N-V-__8AAHLkBACRet2MmyqYHV40ZNc9vbI9BqSNCmSVa4i1",
-        },
         .zigwin32 = .{
             .url = "git+https://github.com/marlersoft/zigwin32/#5587b16fa040573846a6bf531301f6206d31a6bf",
             .hash = "zigwin32-25.0.28-preview-AAAAAICM5AMResOGQnQ85mfe60TTOQeMtt7GRATUOKoP",
+        },
+        .wayland = .{
+            .url = "git+https://github.com/nobled/wayland#f5ccd7a9e670e097ff9b5faae8a26b3af4bb7b60",
+            .hash = "N-V-__8AACwsCAAIDGKG1kp0-KCtL2wz2a-dulrOlui702Jk",
         },
     },
     .paths = .{

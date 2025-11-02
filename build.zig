@@ -39,6 +39,7 @@ pub fn build(b: *std.Build) void {
         else => {
             mod.linkSystemLibrary("glx", .{});
             mod.linkSystemLibrary("X11", .{});
+            mod.linkSystemLibrary("wayland-client", .{});
         },
     }
 }

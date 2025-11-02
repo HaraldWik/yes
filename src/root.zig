@@ -5,14 +5,44 @@ pub const opengl = @import("opengl.zig");
 const native_os = builtin.os.tag;
 
 pub const Windows = @import("Windows.zig");
-pub const X = @import("X.zig");
+pub const Posix = union(enum) {
+    x: X,
+    wayland: Wayland,
+
+    pub const X = @import("X.zig");
+    pub const Wayland = @import("Wayland.zig");
+
+    pub fn close(self: @This()) void {
+        switch (self) {
+            inline else => |a| a.close(),
+        }
+    }
+
+    pub fn next(self: @This()) ?Event {
+        return switch (self) {
+            inline else => |a| return a.next(),
+        };
+    }
+
+    pub fn getSize(self: @This()) [2]usize {
+        return switch (self) {
+            inline else => |a| a.getSize(),
+        };
+    }
+
+    pub fn isKeyDown(self: @This(), key: Key) bool {
+        return switch (self) {
+            inline else => |a| a.isKeyDown(key),
+        };
+    }
+};
 
 pub const Window = struct {
     handle: Handle,
 
     pub const Handle = switch (native_os) {
         .windows => *Windows,
-        else => X,
+        else => Posix,
     };
 
     pub const Config = struct {
@@ -40,7 +70,19 @@ pub const Window = struct {
                 try window.open(config);
                 break :handle .{ .handle = &window };
             },
-            else => .{ .handle = try .open(config) },
+            else => handle: {
+                const session = std.posix.getenv("XDG_SESSION_TYPE") orelse "x11";
+                std.debug.print("Session: {s}\n", .{session});
+
+                if (std.mem.eql(u8, session, "x11"))
+                    break :handle .{ .handle = .{ .x = try .open(config) } };
+
+                if (std.mem.eql(u8, session, "wayland"))
+                    break :handle .{ .handle = .{ .wayland = try .open(config) } };
+
+                return error.None;
+            },
+            // .{ .handle = try .open(config) },
         };
     }
 
