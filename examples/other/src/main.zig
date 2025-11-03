@@ -49,7 +49,7 @@ pub fn main() !void {
     gl.load(yes.opengl.getProcAddress, false);
     gl.debug.set(null);
 
-    if (gl.c.glGetString(gl.c.GL_VERSION)) |version| std.debug.print("GL version: {s}\n", .{version});
+    if (gl.String.get(.version, null)) |version| std.debug.print("GL version: {s}\n", .{version});
 
     const vertex_shader: gl.Shader = .init(.vertex);
     defer vertex_shader.deinit();

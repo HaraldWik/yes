@@ -6,7 +6,7 @@ pub const win32 = @import("win32").everything;
 pub const glx = struct {
     pub const Drawable = c_ulong;
     pub extern fn glXGetProcAddress(name: [*:0]const u8) ?Proc;
-    pub extern fn glXSwapBuffers(display: *root.X.c.Display, drawable: Drawable) void;
+    pub extern fn glXSwapBuffers(display: *root.Posix.X.c.Display, drawable: Drawable) void;
 };
 
 const native_os = builtin.os.tag;
@@ -27,6 +27,9 @@ pub fn getProcAddress(name: [*:0]const u8) ?Proc {
 pub fn swapBuffers(window: root.Window) void {
     switch (native_os) {
         .windows => _ = win32.SwapBuffers(window.handle.hdc),
-        else => glx.glXSwapBuffers(@ptrCast(window.handle.display), window.handle.window),
+        else => switch (window.handle) {
+            .x => glx.glXSwapBuffers(@ptrCast(window.handle.x.display), window.handle.x.window),
+            .wayland => unreachable,
+        },
     }
 }

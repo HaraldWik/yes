@@ -5,12 +5,21 @@ pub const opengl = @import("opengl.zig");
 const native_os = builtin.os.tag;
 
 pub const Windows = @import("Windows.zig");
-pub const Posix = union(enum) {
+pub const Posix = union(Tag) {
     x: X,
     wayland: Wayland,
 
+    pub const Tag = enum { x, wayland };
+
     pub const X = @import("X.zig");
     pub const Wayland = @import("Wayland.zig");
+
+    pub const session_type = "XDG_SESSION_TYPE";
+
+    pub fn getSessionType() Tag {
+        const session = std.posix.getenv(Posix.session_type) orelse "x11";
+        return if (std.mem.eql(u8, session, "wayland")) .wayland else .x;
+    }
 
     pub fn close(self: @This()) void {
         switch (self) {
@@ -64,25 +73,25 @@ pub const Window = struct {
     };
 
     pub fn open(config: Config) !@This() {
-        return switch (native_os) {
-            .windows => handle: {
-                var window: Windows = .{};
-                try window.open(config);
-                break :handle .{ .handle = &window };
+        return .{
+            .handle = switch (native_os) {
+                .windows => handle: {
+                    var window: Windows = .{};
+                    try window.open(config);
+                    break :handle &window;
+                },
+                else => switch (Posix.getSessionType()) {
+                    .x => .{ .x = try .open(config) },
+                    .wayland => .{
+                        .wayland = handle: {
+                            var window: Posix.Wayland = .{};
+                            try window.open(config);
+                            break :handle window;
+                        },
+                    },
+                },
+                // .{ .handle = try .open(config) },
             },
-            else => handle: {
-                const session = std.posix.getenv("XDG_SESSION_TYPE") orelse "x11";
-                std.debug.print("Session: {s}\n", .{session});
-
-                if (std.mem.eql(u8, session, "x11"))
-                    break :handle .{ .handle = .{ .x = try .open(config) } };
-
-                if (std.mem.eql(u8, session, "wayland"))
-                    break :handle .{ .handle = .{ .wayland = try .open(config) } };
-
-                return error.None;
-            },
-            // .{ .handle = try .open(config) },
         };
     }
 

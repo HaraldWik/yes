@@ -4,22 +4,16 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    // const windows = b.dependency("windows", .{});
+    const zigwin32 = b.dependency("zigwin32", .{}).module("win32");
+    // const wayland = b.dependency("wayland", .{});
 
-    // const header = b.addTranslateC(.{
-    //     .root_source_file = windows.path("include/win32/window.h"),
+    // const wayland_client = b.addTranslateC(.{
+    //     .root_source_file = wayland.path("src/wayland-client.h"),
     //     .target = target,
     //     .optimize = optimize,
-    //     .use_clang = false,
-    //     .link_libc = true,
     // }).createModule();
-    // header.linkSystemLibrary("c", .{});
-    // header.addIncludePath(windows.path("include/win32/"));
-    // header.addCMacro("_WIN64", "1");
-    // header.addCMacro("INT64", "long long");
-    // header.addCMacro("_MSC_VER", "1");
-
-    const zigwin32 = b.dependency("zigwin32", .{}).module("win32");
+    // wayland_client.addIncludePath(wayland.path("src"));
+    // wayland_client.addCMacro("WAYLAND_CLIENT_PROTOCOL_H", "1");
 
     const mod = b.addModule("yes", .{
         .root_source_file = b.path("src/root.zig"),
@@ -27,6 +21,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .imports = &.{
             .{ .name = "win32", .module = zigwin32 },
+            // .{ .name = "wayland_client", .module = wayland_client },
         },
         .link_libc = true,
     });

@@ -9,6 +9,7 @@ pub fn main() !void {
     while (window.next()) |event| {
         _ = event;
         const width: usize, const height: usize = window.getSize();
+        if (window.isKeyDown(.a)) std.debug.print("A, ", .{});
         std.debug.print("Size {d} {d}\r", .{ width, height });
-    } else std.debug.print("\x1b[2KExit!\n", .{});
+    } else std.debug.print("\x1b[2K{s}\n", .{"Exit!"});
 }
