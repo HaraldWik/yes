@@ -23,6 +23,8 @@ pub fn open(self: *@This(), config: root.Window.Config) !void {
     const surface: *c.wl_surface = c.wl_compositor_create_surface(@ptrCast(self.compositor)) orelse return error.CreateSurface;
     self.surface = surface;
 
+    return error.NotImplemented;
+
     // const window: c.wl_egl_window = undefined;
 }
 

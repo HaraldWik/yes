@@ -20,30 +20,6 @@ pub const Posix = union(Tag) {
         const session = std.posix.getenv(Posix.session_type) orelse "x11";
         return if (std.mem.eql(u8, session, "wayland")) .wayland else .x;
     }
-
-    pub fn close(self: @This()) void {
-        switch (self) {
-            inline else => |a| a.close(),
-        }
-    }
-
-    pub fn next(self: @This()) ?Event {
-        return switch (self) {
-            inline else => |a| return a.next(),
-        };
-    }
-
-    pub fn getSize(self: @This()) [2]usize {
-        return switch (self) {
-            inline else => |a| a.getSize(),
-        };
-    }
-
-    pub fn isKeyDown(self: @This(), key: Key) bool {
-        return switch (self) {
-            inline else => |a| a.isKeyDown(key),
-        };
-    }
 };
 
 pub const Window = struct {
@@ -80,12 +56,12 @@ pub const Window = struct {
                     try window.open(config);
                     break :handle &window;
                 },
-                else => switch (Posix.getSessionType()) {
-                    .x => .{ .x = try .open(config) },
+                else => session_type: switch (Posix.getSessionType()) {
+                    .x => .{ .x = (Posix.X.open(config) catch continue :session_type .wayland) },
                     .wayland => .{
                         .wayland = handle: {
                             var window: Posix.Wayland = .{};
-                            try window.open(config);
+                            window.open(config) catch continue :session_type .x;
                             break :handle window;
                         },
                     },
@@ -96,19 +72,39 @@ pub const Window = struct {
     }
 
     pub fn close(self: @This()) void {
-        self.handle.close();
+        switch (native_os) {
+            .windows => self.handle.close(),
+            else => switch (self.handle) {
+                inline else => |handle| handle.close(),
+            },
+        }
     }
 
     pub fn next(self: @This()) ?Event {
-        return self.handle.next();
+        return switch (native_os) {
+            .windows => self.handle.next(),
+            else => switch (self.handle) {
+                inline else => |handle| handle.next(),
+            },
+        };
     }
 
     pub fn getSize(self: @This()) [2]usize {
-        return self.handle.getSize();
+        return switch (native_os) {
+            .windows => self.handle.getSize(),
+            else => switch (self.handle) {
+                inline else => |handle| handle.getSize(),
+            },
+        };
     }
 
     pub fn isKeyDown(self: @This(), key: Key) bool {
-        return self.handle.isKeyDown(key);
+        return switch (native_os) {
+            .windows => self.handle.isKeyDown(key),
+            else => switch (self.handle) {
+                inline else => |handle| handle.isKeyDown(key),
+            },
+        };
     }
 };
 

@@ -15,12 +15,10 @@ pub fn open(self: *@This(), config: root.Window.Config) !void {
     const instance = win32.GetModuleHandleW(null) orelse return error.GetInstanceHandle;
     self.instance = instance;
 
-    const class_name: [*:0]const u16 = std.unicode.utf8ToUtf16LeStringLiteral("WindowClass");
-
     var class: win32.WNDCLASSEXW = std.mem.zeroes(win32.WNDCLASSEXW);
 
     class.cbSize = @sizeOf(win32.WNDCLASSEXW);
-    class.lpszClassName = class_name;
+    class.lpszClassName = std.unicode.utf8ToUtf16LeStringLiteral("WindowClass");
     class.lpfnWndProc = handleMessages;
     class.hInstance = instance;
     class.hCursor = win32.LoadCursorW(null, win32.IDC_ARROW);
