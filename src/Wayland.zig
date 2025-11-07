@@ -4,7 +4,7 @@ const c = @cImport({ // TODO: Remove C import
     @cInclude("wayland-client.h");
     @cInclude("wayland-egl.h");
 });
-// const c = @import("wayland_client");
+// const wayland = @import("wayland");
 
 display: *c.wl_display = undefined,
 compositor: *c.wl_compositor = undefined,
