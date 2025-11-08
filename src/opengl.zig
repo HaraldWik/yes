@@ -7,12 +7,20 @@ const native_os = builtin.os.tag;
 pub const win32 = @import("win32").everything;
 pub const glx = struct {
     pub const Drawable = c_ulong;
-    pub extern fn glXGetProcAddress(name: [*:0]const u8) ?Proc;
-    pub extern fn glXSwapBuffers(display: *root.Posix.X.c.Display, drawable: Drawable) void;
+    pub const getProcAddress = glXGetProcAddress;
+    pub const swapBuffers = glXSwapBuffers;
+
+    extern fn glXGetProcAddress(name: [*:0]const u8) ?Proc;
+    extern fn glXSwapBuffers(display: *root.Posix.X.c.Display, drawable: Drawable) void;
 };
 pub const egl = struct {
-    pub extern fn eglGetProcAddress(name: [*:0]const u8) ?Proc;
-    pub extern fn eglSwapBuffers(display: *anyopaque, surface: *anyopaque) c_uint;
+    pub const getProcAddress = eglGetProcAddress;
+    pub const swapBuffers = eglSwapBuffers;
+    pub const getError = eglGetError;
+
+    extern fn eglGetProcAddress(name: [*:0]const u8) ?Proc;
+    extern fn eglSwapBuffers(display: *anyopaque, surface: *anyopaque) c_uint;
+    extern fn eglGetError() i32;
 };
 
 pub const Proc = *const fn () callconv(.c) void;
@@ -24,17 +32,20 @@ pub fn getProcAddress(name: [*:0]const u8) ?Proc {
             defer _ = win32.FreeLibrary(gl);
             break :proc win32.GetProcAddress(gl, name);
         }),
-
-        else => glx.glXGetProcAddress(name) orelse egl.eglGetProcAddress(name),
+        else => glx.getProcAddress(name) orelse egl.getProcAddress(name),
     };
 }
 
-pub fn swapBuffers(window: root.Window) void {
+pub fn swapBuffers(window: root.Window) !void {
     switch (native_os) {
         .windows => _ = win32.SwapBuffers(window.handle.api.opengl.hdc),
         else => switch (window.handle) {
-            .x => glx.glXSwapBuffers(@ptrCast(window.handle.x.display), window.handle.x.window),
-            .wayland => _ = egl.eglSwapBuffers(window.handle.wayland.api.opengl.display, window.handle.wayland.api.opengl.surface),
+            .x => glx.swapBuffers(@ptrCast(window.handle.x.display), window.handle.x.window),
+            .wayland => {
+                if (egl.swapBuffers(window.handle.wayland.api.opengl.display, window.handle.wayland.api.opengl.surface) == 0) return error.EglSwapBuffers;
+                root.Posix.Wayland.wl.wl_surface_commit(window.handle.wayland.surface);
+                if (root.Posix.Wayland.wl.wl_display_flush(window.handle.wayland.display) < 0) return error.FlushDisplay;
+            },
         },
     }
 }

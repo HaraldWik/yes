@@ -18,6 +18,18 @@ pub const Posix = union(Tag) {
     pub const session_type = "XDG_SESSION_TYPE";
 
     pub fn getSessionType() Tag {
+        for (std.os.argv) |arg| {
+            const identifier = "--xdg=";
+            if (!std.mem.startsWith(u8, std.mem.span(arg), identifier)) continue;
+
+            const @"type" = std.mem.span(arg)[identifier.len..];
+            return if (std.mem.eql(u8, @"type", "wayland"))
+                .wayland
+            else if (std.mem.eql(u8, @"type", "x"))
+                .x
+            else
+                unreachable;
+        }
         const session = std.posix.getenv(Posix.session_type) orelse "x11";
         return if (std.mem.eql(u8, session, "wayland")) .wayland else .x;
     }

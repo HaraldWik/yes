@@ -1,10 +1,10 @@
 const std = @import("std");
 const root = @import("root.zig");
-const wl = @cImport({ // TODO: Remove C import
+pub const wl = @cImport({ // TODO: Remove C import
     @cInclude("wayland-client.h");
     @cInclude("wayland-egl.h");
 });
-const egl = @cImport({
+pub const egl = @cImport({
     @cInclude("EGL/egl.h");
     @cInclude("GLES2/gl2.h");
 });
@@ -48,16 +48,13 @@ const Registry = struct {
 
 pub fn open(config: root.Window.Config) !@This() {
     const display: *wl.wl_display = wl.wl_display_connect(null) orelse return error.ConnectDisplay;
-
     const compositor: *wl.wl_compositor = try registry: {
         var data: Registry = undefined;
         const registry: *wl.wl_registry = wl.wl_display_get_registry(display) orelse return error.GetDisplayRegistry;
-        _ = wl.wl_registry_add_listener(registry, &wl.wl_registry_listener{ .global = @ptrCast(&Registry.init), .global_remove = @ptrCast(&Registry.deinit) }, @ptrCast(&data));
-        _ = wl.wl_display_roundtrip(display);
-        if (data.compositor == null) return error.RegisterCompositor;
+        if (wl.wl_registry_add_listener(registry, &wl.wl_registry_listener{ .global = @ptrCast(&Registry.init), .global_remove = @ptrCast(&Registry.deinit) }, @ptrCast(&data)) != 0) return error.RegistryAddListener;
+        if (wl.wl_display_roundtrip(display) < 0) return error.DisplayRoundtrip;
         break :registry data.compositor orelse error.RegisterCompositor;
     };
-
     const surface: *wl.wl_surface = wl.wl_compositor_create_surface(compositor) orelse return error.CreateSurface;
 
     return .{
@@ -67,27 +64,46 @@ pub fn open(config: root.Window.Config) !@This() {
         .api = api: switch (config.api) {
             .opengl => {
                 const egl_window: *wl.wl_egl_window = wl.wl_egl_window_create(surface, @intCast(config.width), @intCast(config.height)) orelse return error.EglWindowCreate;
+
                 const egl_display = egl.eglGetDisplay(@ptrCast(display)) orelse return error.EglGetDisplay;
 
                 var major: egl.EGLint = 0;
                 var minor: egl.EGLint = 0;
-                if (egl.eglInitialize(egl_display, &major, &minor) == egl.EGL_FALSE)
-                    return error.EglInitialize;
+                if (egl.eglInitialize(egl_display, &major, &minor) == egl.EGL_FALSE) return error.EglInitialize;
 
+                // Bind desktop OpenGL (not GLES)
                 if (egl.eglBindAPI(egl.EGL_OPENGL_API) == egl.EGL_FALSE) return error.BindAPI;
 
+                // Choose an OpenGL-compatible EGL config
                 const attribs = [_]egl.EGLint{
-                    egl.EGL_RED_SIZE, 8,
+                    egl.EGL_SURFACE_TYPE,    egl.EGL_WINDOW_BIT,
+                    egl.EGL_RENDERABLE_TYPE, egl.EGL_OPENGL_BIT,
+                    egl.EGL_RED_SIZE,        8,
+                    egl.EGL_GREEN_SIZE,      8,
+                    egl.EGL_BLUE_SIZE,       8,
+                    egl.EGL_ALPHA_SIZE,      8,
+                    egl.EGL_DEPTH_SIZE,      24,
+                    egl.EGL_STENCIL_SIZE,    8,
                     egl.EGL_NONE,
                 };
+
                 var egl_config: egl.EGLConfig = null;
                 var num_configs: egl.EGLint = 0;
-                if (egl.eglChooseConfig(egl_display, &attribs[0], &egl_config, 1, &num_configs) == egl.EGL_FALSE) return error.EglChooseConfig;
+                if (egl.eglChooseConfig(egl_display, &attribs[0], &egl_config, 1, &num_configs) == egl.EGL_FALSE or num_configs == 0)
+                    return error.EglChooseConfig;
 
-                const egl_context = egl.eglCreateContext(egl_display, egl_config, egl.EGL_NO_CONTEXT, null) orelse return error.EglCreateContext;
+                // Request OpenGL 4.6 core context
+                const context_attribs = [_]egl.EGLint{
+                    egl.EGL_CONTEXT_MAJOR_VERSION,       4,
+                    egl.EGL_CONTEXT_MINOR_VERSION,       6,
+                    egl.EGL_CONTEXT_OPENGL_PROFILE_MASK, egl.EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT,
+                    egl.EGL_NONE,
+                };
+
+                const egl_context = egl.eglCreateContext(egl_display, egl_config, egl.EGL_NO_CONTEXT, &context_attribs[0]) orelse return error.EglCreateContext;
                 const egl_surface = egl.eglCreateWindowSurface(egl_display, egl_config, @intFromPtr(egl_window), null) orelse return error.EglCreateWindowSurface;
-
                 if (egl.eglMakeCurrent(egl_display, egl_surface, egl_surface, egl_context) == egl.EGL_FALSE) return error.MakeCurrent;
+
                 break :api .{ .opengl = .{
                     .window = egl_window,
                     .display = egl_display,

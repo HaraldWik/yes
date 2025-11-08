@@ -111,6 +111,6 @@ pub fn main() !void {
 
         gl.draw.elements(.triangles, indices.len, u32, null);
 
-        yes.opengl.swapBuffers(window);
+        try yes.opengl.swapBuffers(window);
     } else std.debug.print("Exit!\n", .{});
 }
