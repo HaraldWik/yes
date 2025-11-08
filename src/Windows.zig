@@ -1,6 +1,5 @@
 const std = @import("std");
 const root = @import("root.zig");
-const build_options = @import("build_options");
 pub const win32 = @import("win32").everything;
 // zig build -Dtarget=x86_64-windows && wine zig-out/bin/example.exe
 
@@ -72,8 +71,7 @@ pub fn open(self: *@This(), config: root.Window.Config) !void {
     _ = win32.UpdateWindow(hwnd);
 
     self.api = api: switch (config.api) {
-        .none => unreachable,
-        .opengl => if (build_options.opengl) {
+        .opengl => {
             const hdc = win32.GetDC(hwnd) orelse return error.GetDC;
 
             var pfd: win32.PIXELFORMATDESCRIPTOR = std.mem.zeroInit(win32.PIXELFORMATDESCRIPTOR, .{
@@ -151,15 +149,16 @@ pub fn open(self: *@This(), config: root.Window.Config) !void {
                 .hglrc = hglrc,
                 .wgl = wgl,
             } };
-        } else @compileError("'opengl' build option is not set to true"),
-        .vulkan => if (build_options.vulkan) {
+        },
+        .vulkan => {
             const vulkan: win32.HINSTANCE = win32.LoadLibraryW(win32.L("vulkan-1.dll")) orelse return error.LoadLibraryWVulkan;
             const getInstanceProcAddress: GraphicsApi.Vulkan.GetInstanceProcAddress = @ptrCast(win32.GetProcAddress(vulkan, "vkGetInstanceProcAddr") orelse return error.GetProcAddress);
             break :api .{ .vulkan = .{
                 .instance = vulkan,
                 .getInstanceProcAddress = getInstanceProcAddress,
             } };
-        } else @compileError("'vulkan' build option is not set to true"),
+        },
+        .none => .{ .none = undefined },
     };
 }
 

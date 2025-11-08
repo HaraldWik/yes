@@ -35,6 +35,11 @@ pub fn build(b: *std.Build) void {
             mod.linkSystemLibrary("X11", .{});
 
             mod.linkSystemLibrary("wayland-client", .{});
+            if (opengl) {
+                mod.linkSystemLibrary("wayland-egl", .{});
+                mod.linkSystemLibrary("egl", .{});
+                mod.linkSystemLibrary("GLESv2", .{});
+            }
         },
     }
 }

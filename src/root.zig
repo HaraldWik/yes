@@ -1,5 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
+const build_options = @import("build_options");
 pub const opengl = @import("opengl.zig");
 
 const native_os = builtin.os.tag;
@@ -43,6 +44,9 @@ pub const Window = struct {
     };
 
     pub fn open(config: Config) !@This() {
+        if (config.api == .opengl and !build_options.opengl) @compileError("opengl is not enabled");
+        if (config.api == .vulkan and !build_options.vulkan) @compileError("vulkan is not enabled");
+
         return .{
             .handle = switch (native_os) {
                 .windows => handle: {
@@ -50,15 +54,9 @@ pub const Window = struct {
                     try window.open(config);
                     break :handle &window;
                 },
-                else => session_type: switch (Posix.getSessionType()) {
-                    .x => .{ .x = (Posix.X.open(config) catch continue :session_type .wayland) },
-                    .wayland => .{
-                        .wayland = handle: {
-                            var window: Posix.Wayland = .{};
-                            window.open(config) catch continue :session_type .x;
-                            break :handle window;
-                        },
-                    },
+                else => switch (Posix.getSessionType()) {
+                    .x => .{ .x = try Posix.X.open(config) },
+                    .wayland => .{ .wayland = try Posix.Wayland.open(config) },
                 },
                 // .{ .handle = try .open(config) },
             },

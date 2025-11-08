@@ -16,8 +16,8 @@ pub fn open(config: root.Window.Config) !@This() {
     const screen = c.DefaultScreen(display);
 
     var visual: *c.XVisualInfo = undefined;
-    const window: c.Window = switch (config.api) {
-        .opengl => window: {
+    const window: c.Window = window: switch (config.api) {
+        .opengl => {
             var visual_attribs = [_:0]c_int{
                 c.GLX_RGBA,
                 c.GLX_DOUBLEBUFFER,
@@ -25,6 +25,7 @@ pub fn open(config: root.Window.Config) !@This() {
                 24,
                 c.GLX_STENCIL_SIZE,
                 8,
+                c.GLX_NONE,
             };
 
             visual = c.glXChooseVisual(display, screen, &visual_attribs);
