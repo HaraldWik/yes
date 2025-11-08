@@ -103,6 +103,7 @@ pub const Window = struct {
 };
 
 pub const Event = union(enum) {
+    resize: [2]usize,
     none: void,
 };
 

@@ -4,7 +4,10 @@ const c = @cImport({ // TODO: Remove C import
     @cInclude("wayland-client.h");
     @cInclude("wayland-egl.h");
 });
-// const wayland = @import("wayland");
+const egl = @cImport({
+    @cInclude("EGL/egl.h");
+    @cInclude("GLES2/gl2.h");
+});
 
 display: *c.wl_display = undefined,
 compositor: *c.wl_compositor = undefined,
@@ -23,9 +26,9 @@ pub fn open(self: *@This(), config: root.Window.Config) !void {
     const surface: *c.wl_surface = c.wl_compositor_create_surface(@ptrCast(self.compositor)) orelse return error.CreateSurface;
     self.surface = surface;
 
-    return error.NotImplemented;
-
     // const window: c.wl_egl_window = undefined;
+
+    return error.NotImplemented;
 }
 
 pub fn close(self: @This()) void {

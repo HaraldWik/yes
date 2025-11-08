@@ -7,9 +7,10 @@ pub fn main() !void {
 
     // next returns null on exit
     while (window.next()) |event| {
-        _ = event;
-        const width: usize, const height: usize = window.getSize();
-        if (window.isKeyDown(.a)) std.debug.print("A, ", .{});
-        std.debug.print("Size {d} {d}\r", .{ width, height });
-    } else std.debug.print("\x1b[2K{s}\n", .{"Exit!"});
+        switch (event) {
+            .resize => |size| std.debug.print("width: {d}, height: {d}\n", .{ size[0], size[1] }),
+            else => {},
+        }
+        if (window.isKeyDown(.a)) std.debug.print("A\n", .{});
+    } else std.debug.print("Exit!\n", .{});
 }

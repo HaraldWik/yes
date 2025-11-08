@@ -42,7 +42,7 @@ pub fn main() !void {
         .title = "Title",
         .width = 900,
         .height = 600,
-        .api = .opengl,
+        .api = .opengl, // Don't forget to set to OpenGL
     });
     defer window.close();
 
@@ -83,17 +83,23 @@ pub fn main() !void {
     vao.elementBuffer(ebo);
 
     while (window.next()) |event| {
-        _ = event;
+        switch (event) {
+            .resize => |size| {
+                std.debug.print("New size: {any}\n", .{size});
+            },
+            else => {},
+        }
 
         const width: usize, const height: usize = window.getSize();
 
         gl.clear.buffer(.{ .color = true });
-        gl.clear.color(0.1, 0.4, 0.5, 1.0);
 
-        if (window.isKeyDown(.a)) {
-            gl.clear.color(1.0, 0.4, 0.5, 1.0);
-        }
-        if (window.isKeyDown(.escape)) std.debug.print("ESC\n", .{});
+        if (window.isKeyDown(.a))
+            gl.clear.color(1.0, 0.4, 0.5, 1.0)
+        else
+            gl.clear.color(0.1, 0.4, 0.5, 1.0);
+
+        if (window.isKeyDown(.escape)) break;
         if (window.isKeyDown(.left_ctrl)) std.debug.print("LCTRL\n", .{});
 
         gl.clear.color(0.1, 0.5, 0.3, 1.0);

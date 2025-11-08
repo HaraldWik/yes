@@ -15,45 +15,51 @@ pub fn open(config: root.Window.Config) !@This() {
     const display: *c.Display = c.XOpenDisplay(null) orelse return error.OpenDisplay;
     const screen = c.DefaultScreen(display);
 
-    // const window: c.Window = c.XCreateSimpleWindow(display, c.RootWindow(display, screen), // Parent window
-    //     0, 0, // X, Y position
-    //     @intCast(config.width), @intCast(config.height), // Width, Height
-    //     2, // Border width
-    //     c.BlackPixel(display, screen), // Border color
-    //     c.BlackPixel(display, screen) // Background color
-    // );
+    var visual: *c.XVisualInfo = undefined;
+    const window: c.Window = switch (config.api) {
+        .opengl => window: {
+            var visual_attribs = [_:0]c_int{
+                c.GLX_RGBA,
+                c.GLX_DOUBLEBUFFER,
+                c.GLX_DEPTH_SIZE,
+                24,
+                c.GLX_STENCIL_SIZE,
+                8,
+            };
 
-    var visual_attribs = [_]c_int{
-        c.GLX_RGBA,
-        c.GLX_DOUBLEBUFFER,
-        c.GLX_DEPTH_SIZE,
-        24,
-        c.GLX_STENCIL_SIZE,
-        8,
-        c.None,
+            visual = c.glXChooseVisual(display, screen, &visual_attribs);
+
+            var swa: c.XSetWindowAttributes = .{
+                .colormap = c.XCreateColormap(display, c.RootWindow(display, screen), visual.visual, c.AllocNone),
+                .event_mask = c.ExposureMask | c.KeyPressMask | c.StructureNotifyMask,
+            };
+
+            const window: c.Window = c.XCreateWindow(
+                display,
+                c.RootWindow(display, screen),
+                0,
+                0,
+                800,
+                600,
+                0,
+                visual.depth,
+                c.InputOutput,
+                visual.visual,
+                c.CWColormap | c.CWEventMask,
+                &swa,
+            );
+            break :window window;
+        },
+        .vulkan => return error.NotImplemented, // TODO: add vulkan window for X
+        .none => c.XCreateSimpleWindow(display, c.RootWindow(display, screen), // Parent window
+            0, 0, // X, Y position
+            @intCast(config.width), @intCast(config.height), // Width, Height
+            2, // Border width
+            c.BlackPixel(display, screen), // Border color
+            c.BlackPixel(display, screen) // Background color
+        ),
     };
 
-    const visual: *c.XVisualInfo = c.glXChooseVisual(display, screen, &visual_attribs);
-
-    var swa: c.XSetWindowAttributes = .{
-        .colormap = c.XCreateColormap(display, c.RootWindow(display, screen), visual.visual, c.AllocNone),
-        .event_mask = c.ExposureMask | c.KeyPressMask | c.StructureNotifyMask,
-    };
-
-    const window: c.Window = c.XCreateWindow(
-        display,
-        c.RootWindow(display, screen),
-        0,
-        0,
-        800,
-        600,
-        0,
-        visual.depth,
-        c.InputOutput,
-        visual.visual,
-        c.CWColormap | c.CWEventMask,
-        &swa,
-    );
     _ = c.XStoreName(display, window, config.title.ptr);
     var hints: c.XSizeHints = .{};
 
@@ -101,13 +107,18 @@ pub fn close(self: @This()) void {
 }
 
 pub fn next(self: @This()) ?root.Event {
-    // const event: c.XEvent = event: {
     var event: c.XEvent = undefined;
     while (c.XPending(self.display) > 0) {
         if (c.XNextEvent(self.display, &event) != c.XCSUCCESS) return null;
     }
 
     return switch (event.type) {
+        c.ClientMessage => event: {
+            if (@as(c.Atom, @intCast(event.xclient.data.l[0])) == self.wm_delete_window) break :event null;
+            break :event .none;
+        },
+        c.ConfigureNotify => .{ .resize = .{ @intCast(event.xconfigure.width), @intCast(event.xconfigure.height) } },
+        // c.Expose => return .expose,
         else => .none,
     };
 }
