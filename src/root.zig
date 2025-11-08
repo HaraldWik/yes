@@ -39,13 +39,7 @@ pub const Window = struct {
         max_width: ?usize = null,
         max_height: ?usize = null,
         resizable: bool = true,
-        renderer: Renderer = .none,
-
-        pub const Renderer = enum {
-            none,
-            opengl,
-            vulkan,
-        };
+        api: GraphicsApi = .none,
     };
 
     pub fn open(config: Config) !@This() {
@@ -228,4 +222,10 @@ pub const Key = enum(u8) {
     numpad_divide,
     numpad_enter,
     numpad_decimal,
+};
+
+pub const GraphicsApi = enum {
+    opengl,
+    vulkan,
+    none,
 };

@@ -4,20 +4,14 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    const opengl = b.option(bool, "opengl", "OpenGL") orelse true;
+    const vulkan = b.option(bool, "vulkan", "Vulkan") orelse true;
+
+    const options = b.addOptions();
+    options.addOption(@TypeOf(opengl), "opengl", opengl);
+    options.addOption(@TypeOf(vulkan), "vulkan", vulkan);
+
     const zigwin32 = b.dependency("zigwin32", .{}).module("win32");
-    // const wayland_dep = b.dependency("wayland", .{});
-    // const wayland = b.addTranslateC(.{
-    //     .root_source_file = wayland_dep.path("src/wayland-client.h"),
-    //     .target = target,
-    //     .optimize = optimize,
-    // }).createModule();
-    // wayland.addIncludePath(wayland_dep.path("src"));
-    // wayland.addCSourceFiles(.{
-    //     .files = &.{
-    //         // "wayland-client.h",
-    //         "wayland-egl.h",
-    //     },
-    // });
 
     const mod = b.addModule("yes", .{
         .root_source_file = b.path("src/root.zig"),
@@ -29,6 +23,7 @@ pub fn build(b: *std.Build) void {
         },
         .link_libc = true,
     });
+    mod.addOptions("build_options", options);
 
     switch (target.result.os.tag) {
         .windows => {

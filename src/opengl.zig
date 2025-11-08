@@ -15,18 +15,19 @@ pub const Proc = *const fn () callconv(.c) void;
 
 pub fn getProcAddress(name: [*:0]const u8) ?Proc {
     return switch (native_os) {
-        .windows => proc: {
-            if (win32.wglGetProcAddress(name)) |proc| break :proc @ptrCast(proc);
-            const gl = win32.LoadLibraryA("opengl32.dll") orelse break :proc null;
-            break :proc @ptrCast(win32.GetProcAddress(gl, name) orelse win32.wglGetProcAddress(name));
-        },
+        .windows => @ptrCast(win32.wglGetProcAddress(name) orelse proc: {
+            const gl = win32.LoadLibraryW(win32.L("opengl32.dll")) orelse break :proc null;
+            defer _ = win32.FreeLibrary(gl);
+            break :proc win32.GetProcAddress(gl, name);
+        }),
+
         else => glx.glXGetProcAddress(name),
     };
 }
 
 pub fn swapBuffers(window: root.Window) void {
     switch (native_os) {
-        .windows => _ = win32.SwapBuffers(window.handle.hdc),
+        .windows => _ = win32.SwapBuffers(window.handle.api.opengl.hdc),
         else => switch (window.handle) {
             .x => glx.glXSwapBuffers(@ptrCast(window.handle.x.display), window.handle.x.window),
             .wayland => unreachable,

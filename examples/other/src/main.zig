@@ -42,7 +42,7 @@ pub fn main() !void {
         .title = "Title",
         .width = 900,
         .height = 600,
-        .renderer = .opengl,
+        .api = .opengl,
     });
     defer window.close();
 

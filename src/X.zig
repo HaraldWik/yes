@@ -79,7 +79,7 @@ pub fn open(config: root.Window.Config) !@This() {
     _ = c.XMapWindow(display, window);
     _ = c.XFlush(display);
 
-    switch (config.renderer) {
+    switch (config.api) {
         .opengl => {
             const ctx: c.GLXContext = c.glXCreateContext(display, visual, null, @intFromBool(true));
             _ = c.glXMakeCurrent(display, window, ctx);
