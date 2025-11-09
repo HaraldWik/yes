@@ -67,8 +67,8 @@ pub const Window = struct {
                     break :handle &window;
                 },
                 else => switch (Posix.getSessionType()) {
-                    .x => .{ .x = try Posix.X.open(config) },
-                    .wayland => .{ .wayland = try Posix.Wayland.open(config) },
+                    .x, .wayland => .{ .x = try Posix.X.open(config) },
+                    // .wayland => .{ .wayland = try Posix.Wayland.open(config) },
                 },
                 // .{ .handle = try .open(config) },
             },

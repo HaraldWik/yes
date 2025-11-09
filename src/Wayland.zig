@@ -17,7 +17,7 @@ shell: *wl.wl_shell,
 seat: *wl.wl_seat,
 base: *xdg.xdg_wm_base,
 surface: *wl.wl_surface,
-shell_surface_t: *wl.wl_shell_surface,
+// shell_surface: *wl.wl_shell_surface,
 api: GraphicsApi,
 
 pub const GraphicsApi = union(root.GraphicsApi) {
@@ -79,11 +79,11 @@ pub fn open(config: root.Window.Config) !@This() {
     }.ping;
 
     if (base != null) {
-        if (xdg.xdg_wm_base_add_listener(base, &xdg.xdg_wm_base_listener{ .ping = ping }, &serial) != 0) return error.XdgBaseAddListener;
+        if (xdg.xdg_wm_base_add_listener(base, &xdg.xdg_wm_base_listener{ .ping = @ptrCast(&ping) }, &serial) != 0) return error.XdgBaseAddListener;
         xdg.xdg_wm_base_pong(base, serial);
     } else {
         const shell_surface: *wl.wl_shell_surface = wl.wl_shell_get_shell_surface(shell, surface) orelse return error.ShellGetShellSurface;
-        if (wl.wl_shell_surface_add_listener(shell_surface, &wl.wl_shell_surface_listener{ .ping = ping }, &serial) != 0) return error.ShellSurfaceAddListener;
+        if (wl.wl_shell_surface_add_listener(shell_surface, &wl.wl_shell_surface_listener{ .ping = @ptrCast(&ping) }, &serial) != 0) return error.ShellSurfaceAddListener;
         wl.wl_shell_surface_pong(shell_surface, serial);
         wl.wl_shell_surface_set_title(shell_surface, config.title.ptr);
         wl.wl_shell_surface_set_toplevel(shell_surface);
@@ -93,11 +93,11 @@ pub fn open(config: root.Window.Config) !@This() {
 
     return .{
         .display = display,
-        .surface = surface,
         .compositor = compositor,
         .shell = shell,
         .seat = seat,
-        .base = base,
+        .base = base.?,
+        .surface = surface,
         .api = api: switch (config.api) {
             .opengl => {
                 const egl_window: *wl.wl_egl_window = wl.wl_egl_window_create(surface, @intCast(config.width), @intCast(config.height)) orelse return error.EglWindowCreate;
