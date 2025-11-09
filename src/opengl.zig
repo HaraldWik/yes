@@ -14,6 +14,7 @@ pub const glx = struct {
     extern fn glXSwapBuffers(display: *root.Posix.X.c.Display, drawable: Drawable) void;
 };
 pub const egl = struct {
+    pub const FALSE = 0;
     pub const getProcAddress = eglGetProcAddress;
     pub const swapBuffers = eglSwapBuffers;
     pub const getError = eglGetError;
@@ -42,7 +43,7 @@ pub fn swapBuffers(window: root.Window) !void {
         else => switch (window.handle) {
             .x => glx.swapBuffers(@ptrCast(window.handle.x.display), window.handle.x.window),
             .wayland => {
-                if (egl.swapBuffers(window.handle.wayland.api.opengl.display, window.handle.wayland.api.opengl.surface) == 0) return error.EglSwapBuffers;
+                if (egl.swapBuffers(window.handle.wayland.api.opengl.display, window.handle.wayland.api.opengl.surface) == egl.FALSE) return error.EglSwapBuffers;
                 root.Posix.Wayland.wl.wl_surface_commit(window.handle.wayland.surface);
                 if (root.Posix.Wayland.wl.wl_display_flush(window.handle.wayland.display) < 0) return error.FlushDisplay;
             },

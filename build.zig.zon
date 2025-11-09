@@ -8,15 +8,12 @@
             .url = "git+https://github.com/marlersoft/zigwin32/#5587b16fa040573846a6bf531301f6206d31a6bf",
             .hash = "zigwin32-25.0.28-preview-AAAAAICM5AMResOGQnQ85mfe60TTOQeMtt7GRATUOKoP",
         },
-        .wayland = .{
-            .url = "git+https://github.com/nobled/wayland#f5ccd7a9e670e097ff9b5faae8a26b3af4bb7b60",
-            .hash = "N-V-__8AACwsCAAIDGKG1kp0-KCtL2wz2a-dulrOlui702Jk",
-        },
     },
     .paths = .{
         "build.zig",
         "build.zig.zon",
         "src",
+        "include",
         "README.md",
     },
 }
