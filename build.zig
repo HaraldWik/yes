@@ -14,12 +14,14 @@ pub fn build(b: *std.Build) void {
     const zigwin32 = b.dependency("zigwin32", .{}).module("win32");
 
     const xdg = b.addTranslateC(.{
-        .root_source_file = b.path("include/xdg-shell-client-protocol.h"),
+        .root_source_file = if (target.result.os.tag != .windows) b.path("include/xdg-shell-client-protocol.h") else b.addWriteFiles().add("c.h", ""),
         .target = target,
         .optimize = optimize,
     }).createModule();
-    xdg.linkSystemLibrary("wayland-client", .{});
-    if (target.result.os.tag != .windows) xdg.addCSourceFile(.{ .file = b.path("include/xdg-shell-protocol.c") });
+    if (target.result.os.tag != .windows) {
+        xdg.linkSystemLibrary("wayland-client", .{});
+        xdg.addCSourceFile(.{ .file = b.path("include/xdg-shell-protocol.c") });
+    }
 
     const mod = b.addModule("yes", .{
         .root_source_file = b.path("src/root.zig"),

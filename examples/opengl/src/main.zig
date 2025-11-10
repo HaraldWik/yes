@@ -46,7 +46,7 @@ pub fn main() !void {
     });
     defer window.close();
 
-    gl.load(yes.opengl.getProcAddress, false);
+    gl.load(yes.opengl.getProcAddress, true);
     gl.debug.set(null);
 
     if (gl.String.get(.version, null)) |version| std.debug.print("GL version: {s}\n", .{version});
@@ -81,6 +81,8 @@ pub fn main() !void {
 
     vao.vertexBuffer(vbo, 0, 0, 3 * @sizeOf(f32));
     vao.elementBuffer(ebo);
+
+    try yes.opengl.swapInterval(window, 1);
 
     out: while (true) {
         while (try window.poll()) |event| {

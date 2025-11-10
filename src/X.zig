@@ -1,11 +1,6 @@
 const std = @import("std");
 const root = @import("root.zig");
-pub const c = @cImport({ // TODO: Remove c import
-    @cInclude("X11/Xlib.h");
-    @cInclude("X11/Xutil.h");
-    @cInclude("X11/Xatom.h");
-    @cInclude("GL/glx.h");
-});
+const c = @import("root.zig").native.x;
 
 window: c.Window,
 display: *c.Display,

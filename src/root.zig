@@ -1,9 +1,22 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const build_options = @import("build_options");
-pub const opengl = @import("opengl.zig");
 
-const native_os = builtin.os.tag;
+pub const opengl = @import("opengl.zig");
+pub const clipboard = @import("clipboard.zig");
+
+pub const native = struct {
+    pub const os = builtin.os.tag;
+
+    pub const win32 = @import("win32");
+    pub const x = @cImport({ // TODO: Remove c import
+        @cInclude("X11/Xlib.h");
+        @cInclude("X11/Xutil.h");
+        @cInclude("X11/Xatom.h");
+        @cInclude("GL/glx.h");
+    });
+    pub const wayland = @compileError("nothing here");
+};
 
 pub const Win32 = @import("Win32.zig");
 pub const Posix = union(Tag) {
@@ -31,7 +44,7 @@ pub const Posix = union(Tag) {
 pub const Window = struct {
     handle: Handle,
 
-    pub const Handle = switch (native_os) {
+    pub const Handle = switch (native.os) {
         .windows => Win32,
         else => Posix,
     };
@@ -53,7 +66,7 @@ pub const Window = struct {
         if (config.api == .vulkan and !build_options.vulkan) @compileError("vulkan is not enabled");
 
         return .{
-            .handle = switch (native_os) {
+            .handle = switch (native.os) {
                 .windows => try .open(config),
                 else => switch (Posix.getSessionType() orelse .x) {
                     .x, .wayland => .{ .x = try .open(config) },
@@ -64,7 +77,7 @@ pub const Window = struct {
     }
 
     pub fn close(self: @This()) void {
-        switch (native_os) {
+        switch (native.os) {
             .windows => self.handle.close(),
             else => switch (self.handle) {
                 inline else => |handle| handle.close(),
@@ -73,7 +86,7 @@ pub const Window = struct {
     }
 
     pub fn poll(self: @This()) !?Event {
-        return switch (native_os) {
+        return switch (native.os) {
             .windows => try self.handle.poll(),
             else => switch (self.handle) {
                 inline else => |handle| handle.poll(),
@@ -82,7 +95,7 @@ pub const Window = struct {
     }
 
     pub fn getSize(self: @This()) [2]usize {
-        return switch (native_os) {
+        return switch (native.os) {
             .windows => self.handle.getSize(),
             else => switch (self.handle) {
                 inline else => |handle| handle.getSize(),
@@ -91,7 +104,7 @@ pub const Window = struct {
     }
 
     pub fn isKeyDown(self: @This(), key: Key) bool {
-        return switch (native_os) {
+        return switch (native.os) {
             .windows => self.handle.isKeyDown(key),
             else => switch (self.handle) {
                 inline else => |handle| handle.isKeyDown(key),

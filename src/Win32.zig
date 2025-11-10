@@ -1,6 +1,6 @@
 const std = @import("std");
 const root = @import("root.zig");
-pub const win32 = @import("win32").everything;
+const win32 = @import("root.zig").native.win32.everything;
 // zig build -Dtarget=x86_64-windows && wine zig-out/bin/example.exe
 
 const c = @cImport(@cInclude("GL/gl.h"));
@@ -15,15 +15,15 @@ pub const GraphicsApi = union(root.GraphicsApi) {
     none: void,
 
     pub const OpenGL = struct {
-        hdc: win32.HDC,
-        hglrc: win32.HGLRC,
+        dc: win32.HDC,
+        glrc: win32.HGLRC,
 
         wgl: Wgl,
 
         pub const Wgl = struct {
-            swapIntervalEXT: ?*const fn (i32) callconv(.winapi) win32.BOOL,
-            choosePixelFormatARB: ?*const fn (win32.HDC, ?[*]const i32, ?[*:0]const f32, u32, [*:0]i32, *u32) callconv(.winapi) win32.BOOL,
-            createContextAttribsARB: ?*const fn (win32.HDC, ?win32.HGLRC, [*:0]const i32) callconv(.winapi) ?win32.HGLRC,
+            swapIntervalEXT: *const fn (i32) callconv(.winapi) win32.BOOL,
+            choosePixelFormatARB: *const fn (win32.HDC, ?[*]const i32, ?[*:0]const f32, u32, [*:0]i32, *u32) callconv(.winapi) win32.BOOL,
+            createContextAttribsARB: *const fn (win32.HDC, ?win32.HGLRC, [*:0]const i32) callconv(.winapi) ?win32.HGLRC,
         };
     };
     pub const Vulkan = struct {
@@ -42,6 +42,9 @@ pub fn open(config: root.Window.Config) !@This() {
         .lpfnWndProc = win32.DefWindowProcW,
         .hInstance = instance,
         .hCursor = win32.LoadCursorW(null, win32.IDC_ARROW),
+        .style = win32.WNDCLASS_STYLES{
+            .OWNDC = if (config.api == .opengl) 1 else 0,
+        },
     });
     _ = win32.RegisterClassExW(@ptrCast(&class));
 
@@ -68,7 +71,7 @@ pub fn open(config: root.Window.Config) !@This() {
 
     const api: GraphicsApi = switch (config.api) {
         .opengl => opengl: {
-            const hdc = win32.GetDC(hwnd) orelse return error.GetDC;
+            const dc = win32.GetDC(hwnd) orelse return error.GetDC;
 
             var pfd: win32.PIXELFORMATDESCRIPTOR = std.mem.zeroInit(win32.PIXELFORMATDESCRIPTOR, .{
                 .nSize = @sizeOf(win32.PIXELFORMATDESCRIPTOR),
@@ -84,20 +87,19 @@ pub fn open(config: root.Window.Config) !@This() {
                 .cStencilBits = 8,
                 .iLayerType = win32.PFD_MAIN_PLANE,
             });
-            _ = win32.SetPixelFormat(hdc, win32.ChoosePixelFormat(hdc, &pfd), &pfd);
 
-            const pf = win32.ChoosePixelFormat(hdc, &pfd);
+            const pf = win32.ChoosePixelFormat(dc, &pfd);
             if (pf == 0) return error.ChoosePixelFormat;
-            if (win32.SetPixelFormat(hdc, pf, &pfd) == 0) return error.SetPixelFormat;
+            if (win32.SetPixelFormat(dc, pf, &pfd) == 0) return error.SetPixelFormat;
 
-            // This hglrc is opengl 1.1, only used to load the function to load later versions of opengl
-            var hglrc: win32.HGLRC = win32.wglCreateContext(hdc) orelse return error.WglCreateContext;
-
-            if (win32.wglMakeCurrent(hdc, hglrc) == 0) return error.WglMakeCurrent;
+            var glrc = win32.wglCreateContext(dc) orelse return error.WglCreateContext;
+            if (win32.wglMakeCurrent(dc, glrc) == 0) return error.WglMakeCurrent;
 
             var wgl: GraphicsApi.OpenGL.Wgl = undefined;
-            const getExtensionsStringARB: *const fn (win32.HDC) callconv(.winapi) ?[*:0]const u8 = @ptrCast(win32.wglGetProcAddress("wglGetExtensionsStringARB") orelse return error.WglGetProcAddress);
-            if (getExtensionsStringARB(hdc)) |extensions| {
+            const getExtensionsStringARB_ptr = win32.wglGetProcAddress("wglGetExtensionsStringARB") orelse return error.WglGetProcAddress;
+            const getExtensionsStringARB: *const fn (win32.HDC) callconv(.winapi) ?[*:0]const u8 = @ptrCast(getExtensionsStringARB_ptr);
+
+            if (getExtensionsStringARB(dc)) |extensions| {
                 var it = std.mem.tokenizeScalar(u8, std.mem.sliceTo(extensions, 0), ' ');
                 while (it.next()) |name| {
                     if (std.mem.eql(u8, name, "WGL_EXT_swap_control"))
@@ -109,40 +111,26 @@ pub fn open(config: root.Window.Config) !@This() {
                 }
             }
 
-            if (wgl.createContextAttribsARB) |createContextAttribsARB| {
-                const WGL_CONTEXT_MAJOR_VERSION_ARB = 0x2091;
-                const WGL_CONTEXT_MINOR_VERSION_ARB = 0x2092;
-                // const WGL_CONTEXT_LAYER_PLANE_ARB = 0x2093;
-                // const WGL_CONTEXT_FLAGS_ARB = 0x2094;
-                const WGL_CONTEXT_PROFILE_MASK_ARB = 0x9126;
+            const WGL_CONTEXT_MAJOR_VERSION_ARB = 0x2091;
+            const WGL_CONTEXT_MINOR_VERSION_ARB = 0x2092;
+            const WGL_CONTEXT_PROFILE_MASK_ARB = 0x9126;
+            const WGL_CONTEXT_CORE_PROFILE_BIT_ARB = 0x00000001;
 
-                // const WGL_CONTEXT_DEBUG_BIT_ARB = 0x0001;
-                // const WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB = 0x0002;
+            const attribs = [_:0]i32{
+                WGL_CONTEXT_MAJOR_VERSION_ARB, 4,
+                WGL_CONTEXT_MINOR_VERSION_ARB, 5,
+                WGL_CONTEXT_PROFILE_MASK_ARB,  WGL_CONTEXT_CORE_PROFILE_BIT_ARB,
+                0,
+            };
 
-                // For the profile mask
-                const WGL_CONTEXT_CORE_PROFILE_BIT_ARB = 0x00000001;
-                // const WGL_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB = 0x00000002;
-
-                // Optional (if you want robust or reset isolation contexts)
-                // const WGL_CONTEXT_ROBUST_ACCESS_BIT_ARB = 0x00000004;
-                // const WGL_CONTEXT_RESET_ISOLATION_BIT_ARB = 0x00000008;
-
-                const attribs = [_:0]i32{
-                    WGL_CONTEXT_MAJOR_VERSION_ARB, 4,
-                    WGL_CONTEXT_MINOR_VERSION_ARB, 5,
-                    WGL_CONTEXT_PROFILE_MASK_ARB,  WGL_CONTEXT_CORE_PROFILE_BIT_ARB,
-                    0,
-                };
-
-                const ctx = createContextAttribsARB(hdc, null, &attribs) orelse return error.CreateModernOpenGL;
-                _ = win32.wglMakeCurrent(hdc, ctx);
-                _ = win32.wglDeleteContext(hglrc); // destroy the old dummy
-                hglrc = ctx;
-            }
+            const ctx = wgl.createContextAttribsARB(dc, null, &attribs) orelse return error.CreateModernOpenGL;
+            _ = win32.wglMakeCurrent(dc, ctx);
+            _ = win32.wglDeleteContext(glrc);
+            glrc = ctx;
 
             break :opengl .{ .opengl = .{
-                .hdc = hdc,
-                .hglrc = hglrc,
+                .dc = dc,
+                .glrc = glrc,
                 .wgl = wgl,
             } };
         },
@@ -167,8 +155,8 @@ pub fn open(config: root.Window.Config) !@This() {
 pub fn close(self: @This()) void {
     switch (self.api) {
         .opengl => |api| {
-            _ = win32.wglDeleteContext(api.hglrc);
-            _ = win32.ReleaseDC(self.hwnd, api.hdc);
+            _ = win32.wglDeleteContext(api.glrc);
+            _ = win32.ReleaseDC(self.hwnd, api.dc);
         },
         .vulkan => |api| {
             _ = win32.FreeLibrary(api.instance);
