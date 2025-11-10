@@ -107,20 +107,28 @@ pub fn close(self: @This()) void {
     _ = c.XCloseDisplay(self.display);
 }
 
-pub fn next(self: @This()) ?root.Event {
+pub fn poll(self: @This()) ?root.Event {
     var event: c.XEvent = undefined;
     while (c.XPending(self.display) > 0) {
         if (c.XNextEvent(self.display, &event) != c.XCSUCCESS) return null;
     }
 
     return switch (event.type) {
-        c.ClientMessage => event: {
-            if (@as(c.Atom, @intCast(event.xclient.data.l[0])) == self.wm_delete_window) break :event null;
-            break :event .none;
-        },
-        c.ConfigureNotify => .{ .resize = .{ @intCast(event.xconfigure.width), @intCast(event.xconfigure.height) } },
-        // c.Expose => return .expose,
-        else => .none,
+        c.ClientMessage => if (@as(c.Atom, @intCast(event.xclient.data.l[0])) == self.wm_delete_window) .close else null,
+        c.ConfigureNotify => .{ .resize = .{
+            @intCast(event.xconfigure.width),
+            @intCast(event.xconfigure.height),
+        } },
+        c.ButtonPress => .{ .mouse = .{
+            .right = event.xbutton.button == 3,
+            .middle = event.xbutton.button == 2,
+            .left = event.xbutton.button == 1,
+            .forward = event.xbutton.button == 9,
+            .backward = event.xbutton.button == 8,
+            .x = @intCast(event.xbutton.x),
+            .y = @intCast(event.xbutton.y),
+        } },
+        else => null,
     };
 }
 

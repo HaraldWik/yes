@@ -17,18 +17,11 @@ pub const Posix = union(Tag) {
 
     pub const session_type = "XDG_SESSION_TYPE";
 
-    pub fn getSessionType() Tag {
+    pub fn getSessionType() ?Tag {
         for (std.os.argv) |arg| {
             const identifier = "--xdg=";
             if (!std.mem.startsWith(u8, std.mem.span(arg), identifier)) continue;
-
-            const @"type" = std.mem.span(arg)[identifier.len..];
-            return if (std.mem.eql(u8, @"type", "wayland"))
-                .wayland
-            else if (std.mem.eql(u8, @"type", "x"))
-                .x
-            else
-                unreachable;
+            return std.meta.stringToEnum(Tag, std.mem.span(arg)[identifier.len..]);
         }
         const session = std.posix.getenv(Posix.session_type) orelse "x11";
         return if (std.mem.eql(u8, session, "wayland")) .wayland else .x;
@@ -61,12 +54,11 @@ pub const Window = struct {
 
         return .{
             .handle = switch (native_os) {
-                .windows => try Win32.open(config),
-                else => switch (Posix.getSessionType()) {
-                    .x, .wayland => .{ .x = try Posix.X.open(config) },
+                .windows => try .open(config),
+                else => switch (Posix.getSessionType() orelse .x) {
+                    .x, .wayland => .{ .x = try .open(config) },
                     // .wayland => .{ .wayland = try Posix.Wayland.open(config) },
                 },
-                // .{ .handle = try .open(config) },
             },
         };
     }
@@ -84,7 +76,7 @@ pub const Window = struct {
         return switch (native_os) {
             .windows => try self.handle.poll(),
             else => switch (self.handle) {
-                inline else => |handle| handle.next(),
+                inline else => |handle| handle.poll(),
             },
         };
     }
@@ -120,6 +112,8 @@ pub const Mouse = struct {
     left: bool = false,
     forward: bool = false,
     backward: bool = false,
+    x: usize = 0,
+    y: usize = 0,
 };
 
 pub const Key = enum(u8) {

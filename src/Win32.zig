@@ -183,7 +183,6 @@ pub fn poll(self: @This()) !?root.Event {
     if (win32.PeekMessageW(&msg, self.hwnd, 0, 0, .{ .REMOVE = 1 }) == 0) return null;
     _ = win32.TranslateMessage(&msg);
     _ = win32.DispatchMessageW(&msg);
-    if (msg.message != 512) std.debug.print("m: {d} w: {d}\n", .{ msg.message, msg.wParam });
 
     return switch (msg.message) {
         win32.WM_DESTROY => .close,

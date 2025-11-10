@@ -170,9 +170,9 @@ pub fn close(self: @This()) void {
     wl.wl_display_disconnect(self.display);
 }
 
-pub fn next(self: @This()) ?root.Event {
+pub fn poll(self: @This()) ?root.Event {
     _ = self;
-    return .none;
+    return null;
 }
 
 pub fn getSize(self: @This()) [2]usize {

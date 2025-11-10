@@ -82,29 +82,29 @@ pub fn main() !void {
     vao.vertexBuffer(vbo, 0, 0, 3 * @sizeOf(f32));
     vao.elementBuffer(ebo);
 
-    while (window.next()) |event| {
-        switch (event) {
-            .resize => |size| {
-                std.debug.print("New size: {any}\n", .{size});
-            },
-            else => {},
+    out: while (true) {
+        while (try window.poll()) |event| {
+            switch (event) {
+                .close => break :out,
+                .resize => |size| {
+                    const width, const height = size;
+                    gl.draw.viewport(0, 0, width, height);
+                },
+                else => {},
+            }
         }
 
-        const width: usize, const height: usize = window.getSize();
+        if (window.isKeyDown(.escape)) break;
 
         gl.clear.buffer(.{ .color = true });
+        gl.clear.color(0.1, 0.5, 0.3, 1.0);
 
         if (window.isKeyDown(.a))
             gl.clear.color(1.0, 0.4, 0.5, 1.0)
+        else if (window.isKeyDown(.w))
+            gl.clear.color(0.5, 0.1, 0.8, 1.0)
         else
             gl.clear.color(0.1, 0.4, 0.5, 1.0);
-
-        if (window.isKeyDown(.escape)) break;
-        if (window.isKeyDown(.left_ctrl)) std.debug.print("LCTRL\n", .{});
-
-        gl.clear.color(0.1, 0.5, 0.3, 1.0);
-        gl.clear.buffer(.{ .color = true });
-        gl.draw.viewport(0, 0, width, height);
 
         program.use();
         vao.bind();
