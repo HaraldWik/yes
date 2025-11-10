@@ -28,6 +28,3 @@ pub fn main() !void {
 
 Windows,
 Linux, Unix - X11 
-
-Thanks to 
-Leandros for the windows headers! [here](https://github.com/Leandros/WindowsHModular/)
