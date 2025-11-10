@@ -13,13 +13,13 @@ pub fn build(b: *std.Build) void {
 
     const zigwin32 = b.dependency("zigwin32", .{}).module("win32");
 
-    const xdg = b.addTranslateC(.{
-        .root_source_file = b.path("include/xdg-shell-client-protocol.h"),
-        .target = target,
-        .optimize = optimize,
-    }).createModule();
-    xdg.linkSystemLibrary("wayland-client", .{});
-    xdg.addCSourceFile(.{ .file = b.path("include/xdg-shell-protocol.c") });
+    // const xdg = b.addTranslateC(.{
+    //     .root_source_file = b.path("include/xdg-shell-client-protocol.h"),
+    //     .target = target,
+    //     .optimize = optimize,
+    // }).createModule();
+    // xdg.linkSystemLibrary("wayland-client", .{});
+    // xdg.addCSourceFile(.{ .file = b.path("include/xdg-shell-protocol.c") });
 
     const mod = b.addModule("yes", .{
         .root_source_file = b.path("src/root.zig"),
@@ -27,7 +27,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .imports = &.{
             .{ .name = "win32", .module = zigwin32 },
-            .{ .name = "xdg", .module = xdg },
+            // .{ .name = "xdg", .module = xdg },
         },
         .link_libc = true,
     });

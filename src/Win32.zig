@@ -5,9 +5,8 @@ pub const win32 = @import("win32").everything;
 
 const c = @cImport(@cInclude("GL/gl.h"));
 
-instance: win32.HINSTANCE = undefined,
-hwnd: win32.HWND = undefined,
-quit: bool = false,
+instance: win32.HINSTANCE,
+hwnd: win32.HWND,
 api: GraphicsApi = .none,
 
 pub const GraphicsApi = union(root.GraphicsApi) {
@@ -34,14 +33,13 @@ pub const GraphicsApi = union(root.GraphicsApi) {
     };
 };
 
-pub fn open(self: *@This(), config: root.Window.Config) !void {
+pub fn open(config: root.Window.Config) !@This() {
     const instance = win32.GetModuleHandleW(null) orelse return error.GetInstanceHandle;
-    self.instance = instance;
 
     var class: win32.WNDCLASSEXW = std.mem.zeroInit(win32.WNDCLASSEXW, .{
         .cbSize = @sizeOf(win32.WNDCLASSEXW),
         .lpszClassName = win32.L("WindowClass"),
-        .lpfnWndProc = handleMessages,
+        .lpfnWndProc = win32.DefWindowProcW,
         .hInstance = instance,
         .hCursor = win32.LoadCursorW(null, win32.IDC_ARROW),
     });
@@ -62,16 +60,14 @@ pub fn open(self: *@This(), config: root.Window.Config) !void {
         null,
         null,
         instance,
-        @ptrCast(self),
+        null,
     ) orelse return error.CreateWindowFailed;
-
-    self.hwnd = hwnd;
 
     _ = win32.ShowWindow(hwnd, .{ .SHOWNORMAL = 1 });
     _ = win32.UpdateWindow(hwnd);
 
-    self.api = api: switch (config.api) {
-        .opengl => {
+    const api: GraphicsApi = switch (config.api) {
+        .opengl => opengl: {
             const hdc = win32.GetDC(hwnd) orelse return error.GetDC;
 
             var pfd: win32.PIXELFORMATDESCRIPTOR = std.mem.zeroInit(win32.PIXELFORMATDESCRIPTOR, .{
@@ -144,21 +140,27 @@ pub fn open(self: *@This(), config: root.Window.Config) !void {
                 hglrc = ctx;
             }
 
-            break :api .{ .opengl = .{
+            break :opengl .{ .opengl = .{
                 .hdc = hdc,
                 .hglrc = hglrc,
                 .wgl = wgl,
             } };
         },
-        .vulkan => {
+        .vulkan => vulkan: {
             const vulkan: win32.HINSTANCE = win32.LoadLibraryW(win32.L("vulkan-1.dll")) orelse return error.LoadLibraryWVulkan;
             const getInstanceProcAddress: GraphicsApi.Vulkan.GetInstanceProcAddress = @ptrCast(win32.GetProcAddress(vulkan, "vkGetInstanceProcAddr") orelse return error.GetProcAddress);
-            break :api .{ .vulkan = .{
+            break :vulkan .{ .vulkan = .{
                 .instance = vulkan,
                 .getInstanceProcAddress = getInstanceProcAddress,
             } };
         },
         .none => .{ .none = undefined },
+    };
+
+    return .{
+        .instance = instance,
+        .hwnd = hwnd,
+        .api = api,
     };
 }
 
@@ -176,15 +178,37 @@ pub fn close(self: @This()) void {
     _ = win32.DestroyWindow(self.hwnd);
 }
 
-pub fn next(self: @This()) ?root.Event {
-    if (self.quit) return null;
-
+pub fn poll(self: @This()) !?root.Event {
     var msg: win32.MSG = undefined;
-    while (win32.PeekMessageW(&msg, self.hwnd, 0, 0, .{ .REMOVE = 1 }) == @intFromBool(true)) {
-        _ = win32.TranslateMessage(&msg);
-        _ = win32.DispatchMessageW(&msg);
-    }
-    return .none;
+    if (win32.PeekMessageW(&msg, self.hwnd, 0, 0, .{ .REMOVE = 1 }) == 0) return null;
+    _ = win32.TranslateMessage(&msg);
+    _ = win32.DispatchMessageW(&msg);
+    if (msg.message != 512) std.debug.print("m: {d} w: {d}\n", .{ msg.message, msg.wParam });
+
+    return switch (msg.message) {
+        win32.WM_DESTROY => .close,
+        win32.WM_SYSCOMMAND => switch (msg.wParam) {
+            win32.SC_CLOSE => .close,
+            // win32.SC_MAXIMIZE => null,
+            else => {
+                std.debug.print("unknown WM_SYSCOMMAND: {d}\n", .{msg.wParam});
+                return null;
+            },
+        },
+        win32.WM_SIZE => .{ .resize = .{
+            @intCast(@as(u16, @truncate(@as(u32, @intCast(msg.lParam))))),
+            @intCast(@as(u16, @truncate(@as(u32, @intCast(msg.lParam >> 16))))),
+        } },
+        win32.WM_RBUTTONDOWN, win32.WM_MBUTTONDOWN, win32.WM_LBUTTONDOWN, win32.WM_XBUTTONDOWN => |button| .{ .mouse = .{
+            .right = button == win32.WM_RBUTTONDOWN,
+            .middle = button == win32.WM_MBUTTONDOWN,
+            .left = button == win32.WM_LBUTTONDOWN,
+            .forward = button == win32.WM_XBUTTONDOWN and ((msg.wParam >> 16) & 0xFFFF) == @as(u32, @bitCast(win32.XBUTTON1)),
+            .backward = button == win32.WM_XBUTTONDOWN and ((msg.wParam >> 16) & 0xFFFF) == @as(u32, @bitCast(win32.XBUTTON2)),
+        } },
+
+        else => return null,
+    };
 }
 
 pub fn getSize(self: @This()) [2]usize {
@@ -198,52 +222,6 @@ pub fn isKeyDown(self: @This(), key: root.Key) bool {
     const virtual_key: win32.VIRTUAL_KEY = virtualKeyFromKey(key);
     const state = win32.GetAsyncKeyState(@intCast(@intFromEnum(virtual_key)));
     return (state & @as(i16, @bitCast(@as(u16, 0x8000)))) != 0;
-}
-
-fn handleMessages(hwnd: win32.HWND, message: u32, w_param: usize, l_param: isize) callconv(.winapi) win32.LRESULT {
-    if (message == win32.WM_NCCREATE) {
-        const cs: *const win32.CREATESTRUCTW = @ptrFromInt(@as(usize, @intCast(l_param)));
-        _ = win32.SetWindowLongPtrW(hwnd, win32.GWLP_USERDATA, @intCast(@intFromPtr(cs.lpCreateParams)));
-
-        return win32.DefWindowProcW(hwnd, message, w_param, l_param);
-    }
-
-    const self: *@This() = self: {
-        const self_ptr = win32.GetWindowLongPtrW(hwnd, win32.GWLP_USERDATA);
-        if (self_ptr == 0) return win32.DefWindowProcW(hwnd, message, w_param, l_param);
-        break :self @ptrFromInt(@as(usize, @intCast(self_ptr)));
-    };
-
-    return switch (message) {
-        // win32.WM_KEYDOWN => result: {
-        //     const vk: u32 = @intCast(w_param);
-        //     std.debug.print("Key down: {d}\n", .{vk});
-        //     break :result 0;
-        // },
-        // win32.WM_KEYUP => result: {
-        //     const vk: u32 = @intCast(w_param);
-        //     std.debug.print("Key up: {d}\n", .{vk});
-        //     break :result 0;
-        // },
-        // win32.WM_CHAR => result: {
-        //     const ch: u16 = @intCast(w_param);
-        //     std.debug.print("Char: {d} {c}\n", .{ ch, @as(u8, @intCast(ch)) });
-        //     break :result 0;
-        // },
-        // win32.WM_GETMINMAXINFO => result: {
-        //     const max: *win32.MINMAXINFO = @ptrFromInt(@as(usize, @intCast(l_param)));
-        //     max.*.ptMaxSize = .{ .x = 400, .y = 400 };
-
-        //     break :result 0; // handled
-        // },
-        win32.WM_DESTROY => result: {
-            self.quit = true;
-
-            win32.PostQuitMessage(0);
-            break :result 0;
-        },
-        else => return win32.DefWindowProcW(hwnd, message, w_param, l_param),
-    };
 }
 
 pub fn virtualKeyFromKey(key: root.Key) win32.VIRTUAL_KEY {

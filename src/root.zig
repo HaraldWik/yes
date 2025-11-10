@@ -5,7 +5,7 @@ pub const opengl = @import("opengl.zig");
 
 const native_os = builtin.os.tag;
 
-pub const Windows = @import("Windows.zig");
+pub const Win32 = @import("Win32.zig");
 pub const Posix = union(Tag) {
     x: X,
     wayland: Wayland,
@@ -39,7 +39,7 @@ pub const Window = struct {
     handle: Handle,
 
     pub const Handle = switch (native_os) {
-        .windows => *Windows,
+        .windows => Win32,
         else => Posix,
     };
 
@@ -61,11 +61,7 @@ pub const Window = struct {
 
         return .{
             .handle = switch (native_os) {
-                .windows => handle: {
-                    var window: Windows = .{};
-                    try window.open(config);
-                    break :handle &window;
-                },
+                .windows => try Win32.open(config),
                 else => switch (Posix.getSessionType()) {
                     .x, .wayland => .{ .x = try Posix.X.open(config) },
                     // .wayland => .{ .wayland = try Posix.Wayland.open(config) },
@@ -84,9 +80,9 @@ pub const Window = struct {
         }
     }
 
-    pub fn next(self: @This()) ?Event {
+    pub fn poll(self: @This()) !?Event {
         return switch (native_os) {
-            .windows => self.handle.next(),
+            .windows => try self.handle.poll(),
             else => switch (self.handle) {
                 inline else => |handle| handle.next(),
             },
@@ -113,8 +109,17 @@ pub const Window = struct {
 };
 
 pub const Event = union(enum) {
+    close: void,
     resize: [2]usize,
-    none: void,
+    mouse: Mouse,
+};
+
+pub const Mouse = struct {
+    right: bool = false,
+    middle: bool = false,
+    left: bool = false,
+    forward: bool = false,
+    backward: bool = false,
 };
 
 pub const Key = enum(u8) {
