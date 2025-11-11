@@ -5,10 +5,13 @@ pub fn main() !void {
     const window: yes.Window = try .open(.{ .title = "Title", .width = 900, .height = 600 });
     defer window.close();
 
-    try yes.clipboard.setAlloc(window, std.heap.page_allocator, "wow thats crazy!");
-    const got = yes.clipboard.getAlloc(window, std.heap.page_allocator) orelse "what";
-    std.debug.print("{s}\n", .{got});
-    std.heap.page_allocator.free(got);
+    // if (yes.file_dialog.open()) |file_path| {
+    //     try yes.clipboard.setAlloc(window, std.heap.page_allocator, file_path);
+    // }
+
+    // const got = yes.clipboard.getAlloc(window, std.heap.page_allocator) orelse "what";
+    // std.debug.print("{s}\n", .{got});
+    // std.heap.page_allocator.free(got);
 
     out: while (true) {
         while (try window.poll()) |event| {

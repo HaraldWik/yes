@@ -3,7 +3,10 @@ const builtin = @import("builtin");
 const build_options = @import("build_options");
 
 pub const opengl = @import("opengl.zig");
+/// only windows support currently (sort of)
 pub const clipboard = @import("clipboard.zig");
+/// only windows support currently
+pub const file_dialog = @import("file_dialog.zig");
 
 pub const native = struct {
     pub const os = builtin.os.tag;

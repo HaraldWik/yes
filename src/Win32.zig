@@ -66,9 +66,6 @@ pub fn open(config: root.Window.Config) !@This() {
         null,
     ) orelse return error.CreateWindowFailed;
 
-    _ = win32.ShowWindow(hwnd, .{ .SHOWNORMAL = 1 });
-    _ = win32.UpdateWindow(hwnd);
-
     const api: GraphicsApi = switch (config.api) {
         .opengl => opengl: {
             const dc = win32.GetDC(hwnd) orelse return error.GetDC;
@@ -90,10 +87,10 @@ pub fn open(config: root.Window.Config) !@This() {
 
             const pf = win32.ChoosePixelFormat(dc, &pfd);
             if (pf == 0) return error.ChoosePixelFormat;
-            if (win32.SetPixelFormat(dc, pf, &pfd) == 0) return error.SetPixelFormat;
+            if (!win32.SUCCEEDED(win32.SetPixelFormat(dc, pf, &pfd))) return error.SetPixelFormat;
 
             var glrc = win32.wglCreateContext(dc) orelse return error.WglCreateContext;
-            if (win32.wglMakeCurrent(dc, glrc) == 0) return error.WglMakeCurrent;
+            if (!win32.SUCCEEDED(win32.wglMakeCurrent(dc, glrc))) return error.WglMakeCurrent;
 
             var wgl: GraphicsApi.OpenGL.Wgl = undefined;
             const getExtensionsStringARB_ptr = win32.wglGetProcAddress("wglGetExtensionsStringARB") orelse return error.WglGetProcAddress;
@@ -145,6 +142,9 @@ pub fn open(config: root.Window.Config) !@This() {
         .none => .{ .none = undefined },
     };
 
+    _ = win32.ShowWindow(hwnd, .{ .SHOWNORMAL = 1 });
+    if (!win32.SUCCEEDED(win32.UpdateWindow(hwnd))) return error.UpdateWindow;
+
     return .{
         .instance = instance,
         .hwnd = hwnd,
@@ -154,13 +154,11 @@ pub fn open(config: root.Window.Config) !@This() {
 
 pub fn close(self: @This()) void {
     switch (self.api) {
-        .opengl => |api| {
-            _ = win32.wglDeleteContext(api.glrc);
-            _ = win32.ReleaseDC(self.hwnd, api.dc);
+        .opengl => {
+            _ = win32.wglDeleteContext(self.api.opengl.glrc);
+            _ = win32.ReleaseDC(self.hwnd, self.api.opengl.dc);
         },
-        .vulkan => |api| {
-            _ = win32.FreeLibrary(api.instance);
-        },
+        .vulkan => _ = win32.FreeLibrary(self.api.vulkan.instance),
         .none => {},
     }
     _ = win32.DestroyWindow(self.hwnd);
@@ -209,6 +207,13 @@ pub fn isKeyDown(self: @This(), key: root.Key) bool {
     const virtual_key: win32.VIRTUAL_KEY = virtualKeyFromKey(key);
     const state = win32.GetAsyncKeyState(@intCast(@intFromEnum(virtual_key)));
     return (state & @as(i16, @bitCast(@as(u16, 0x8000)))) != 0;
+}
+
+fn getLastError() ?anyerror {
+    const err = win32.GetLastError();
+    if (err == .NO_ERROR) return null;
+    std.log.err("win32: {s}", @tagName(win32.GetLastError()));
+    return error.Win32;
 }
 
 pub fn virtualKeyFromKey(key: root.Key) win32.VIRTUAL_KEY {
