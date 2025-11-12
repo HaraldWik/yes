@@ -28,9 +28,11 @@ pub fn main() !void {
                             std.debug.print("mouse {s}\n", .{field.name});
                     }
                 },
+                .key_down => |key| std.debug.print("'{t}' down\n", .{key}),
+                .key_up => |key| std.debug.print("'{t}' up\n", .{key}),
             }
         }
 
-        if (window.isKeyDown(.a)) std.debug.print("A\n", .{});
+        // if (window.isKeyDown(.a)) std.debug.print("A\n", .{});
     } else std.debug.print("Exit!\n", .{});
 }

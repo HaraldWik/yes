@@ -191,8 +191,9 @@ pub fn poll(self: @This()) !?root.Event {
             .forward = button == win32.WM_XBUTTONDOWN and ((msg.wParam >> 16) & 0xFFFF) == @as(u32, @bitCast(win32.XBUTTON1)),
             .backward = button == win32.WM_XBUTTONDOWN and ((msg.wParam >> 16) & 0xFFFF) == @as(u32, @bitCast(win32.XBUTTON2)),
         } },
-
-        else => return null,
+        win32.WM_KEYDOWN => .{ .key_down = keyFrom(std.enums.fromInt(win32.VIRTUAL_KEY, msg.wParam).?) },
+        win32.WM_KEYUP => .{ .key_up = keyFrom(std.enums.fromInt(win32.VIRTUAL_KEY, msg.wParam).?) },
+        else => null,
     };
 }
 
@@ -204,7 +205,7 @@ pub fn getSize(self: @This()) [2]usize {
 
 pub fn isKeyDown(self: @This(), key: root.Key) bool {
     _ = self;
-    const virtual_key: win32.VIRTUAL_KEY = virtualKeyFromKey(key);
+    const virtual_key: win32.VIRTUAL_KEY = keyTo(key);
     const state = win32.GetAsyncKeyState(@intCast(@intFromEnum(virtual_key)));
     return (state & @as(i16, @bitCast(@as(u16, 0x8000)))) != 0;
 }
@@ -216,69 +217,76 @@ fn getLastError() ?anyerror {
     return error.Win32;
 }
 
-pub fn virtualKeyFromKey(key: root.Key) win32.VIRTUAL_KEY {
-    return switch (key) {
-        // Control keys
-        .backspace => win32.VK_BACK,
-        .tab => win32.VK_TAB,
-        .clear => win32.VK_CLEAR,
-        .enter => win32.VK_RETURN,
-        .escape => win32.VK_ESCAPE,
-        .delete => win32.VK_DELETE,
+pub const key_map: []const struct { root.Key, win32.VIRTUAL_KEY } = &.{
+    .{ .backspace, .BACK },
+    .{ .tab, .TAB },
+    .{ .clear, .CLEAR },
+    .{ .enter, .RETURN },
+    .{ .escape, .ESCAPE },
+    .{ .delete, .DELETE },
 
-        // Modifiers
-        .left_shift => win32.VK_LSHIFT,
-        .right_shift => win32.VK_RSHIFT,
-        .left_ctrl => win32.VK_LCONTROL,
-        .right_ctrl => win32.VK_RCONTROL,
-        .left_alt => win32.VK_LMENU,
-        .right_alt => win32.VK_RMENU,
-        .left_super => win32.VK_LWIN, // Windows / Command key
-        .right_super => win32.VK_RWIN,
-        .caps_lock => win32.VK_NUMLOCK,
+    // Modifiers
+    .{ .left_shift, .LSHIFT },
+    .{ .right_shift, .RSHIFT },
+    .{ .left_ctrl, .LCONTROL },
+    .{ .right_ctrl, .RCONTROL },
+    .{ .left_alt, .LMENU },
+    .{ .right_alt, .RMENU },
+    .{ .left_super, .LWIN }, // Windows / Command key
+    .{ .right_super, .RWIN },
+    .{ .caps_lock, .NUMLOCK },
 
-        // Navigation
-        .up => win32.VK_UP,
-        .down => win32.VK_DOWN,
-        .left => win32.VK_LEFT,
-        .right => win32.VK_RIGHT,
-        .home => win32.VK_HOME,
-        .end => win32.VK_END,
-        .page_up => win32.VK_PRIOR,
-        .page_down => win32.VK_NEXT,
-        .insert => win32.VK_INSERT,
+    // Navigation
+    .{ .up, .UP },
+    .{ .down, .DOWN },
+    .{ .left, .LEFT },
+    .{ .right, .RIGHT },
+    .{ .home, .HOME },
+    .{ .end, .END },
+    .{ .page_up, .PRIOR },
+    .{ .page_down, .NEXT },
+    .{ .insert, .INSERT },
 
-        // Function keys
-        .f1 => win32.VK_F1,
-        .f2 => win32.VK_F2,
-        .f3 => win32.VK_F3,
-        .f4 => win32.VK_F4,
-        .f5 => win32.VK_F5,
-        .f6 => win32.VK_F6,
-        .f7 => win32.VK_F7,
-        .f8 => win32.VK_F8,
-        .f9 => win32.VK_F9,
-        .f10 => win32.VK_F10,
-        .f11 => win32.VK_F11,
-        .f12 => win32.VK_F12,
+    // Function keys
+    .{ .f1, .F1 },
+    .{ .f2, .F2 },
+    .{ .f3, .F3 },
+    .{ .f4, .F4 },
+    .{ .f5, .F5 },
+    .{ .f6, .F6 },
+    .{ .f7, .F7 },
+    .{ .f8, .F8 },
+    .{ .f9, .F9 },
+    .{ .f10, .F10 },
+    .{ .f11, .F11 },
+    .{ .f12, .F12 },
 
-        // Numpad
-        .numpad_0 => win32.VK_NUMPAD0,
-        .numpad_1 => win32.VK_NUMPAD1,
-        .numpad_2 => win32.VK_NUMPAD2,
-        .numpad_3 => win32.VK_NUMPAD3,
-        .numpad_4 => win32.VK_NUMPAD4,
-        .numpad_5 => win32.VK_NUMPAD5,
-        .numpad_6 => win32.VK_NUMPAD6,
-        .numpad_7 => win32.VK_NUMPAD7,
-        .numpad_8 => win32.VK_NUMPAD8,
-        .numpad_9 => win32.VK_NUMPAD9,
-        .numpad_add => win32.VK_ADD,
-        .numpad_subtract => win32.VK_SUBTRACT,
-        .numpad_multiply => win32.VK_MULTIPLY,
-        .numpad_divide => win32.VK_DIVIDE,
-        .numpad_enter => win32.VK_RETURN,
-        .numpad_decimal => win32.VK_DECIMAL,
-        else => @enumFromInt(@as(u16, @intCast(@intFromEnum(key)))),
-    };
+    // Numpad
+    .{ .numpad_0, .NUMPAD0 },
+    .{ .numpad_1, .NUMPAD1 },
+    .{ .numpad_2, .NUMPAD2 },
+    .{ .numpad_3, .NUMPAD3 },
+    .{ .numpad_4, .NUMPAD4 },
+    .{ .numpad_5, .NUMPAD5 },
+    .{ .numpad_6, .NUMPAD6 },
+    .{ .numpad_7, .NUMPAD7 },
+    .{ .numpad_8, .NUMPAD8 },
+    .{ .numpad_9, .NUMPAD9 },
+    .{ .numpad_add, .ADD },
+    .{ .numpad_subtract, .SUBTRACT },
+    .{ .numpad_multiply, .MULTIPLY },
+    .{ .numpad_divide, .DIVIDE },
+    .{ .numpad_decimal, .DECIMAL },
+};
+
+fn keyTo(key: root.Key) win32.VIRTUAL_KEY {
+    return inline for (key_map) |elem| {
+        if (elem.@"0" == key) break elem.@"1";
+    } else @enumFromInt(@as(std.meta.Tag(win32.VIRTUAL_KEY), @intCast(@intFromEnum(key))));
+}
+
+fn keyFrom(key: win32.VIRTUAL_KEY) root.Key {
+    return inline for (key_map) |elem| {
+        if (elem.@"1" == key) break elem.@"0";
+    } else @enumFromInt(@as(std.meta.Tag(root.Key), @intCast(@intFromEnum(key))));
 }

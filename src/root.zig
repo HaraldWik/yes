@@ -21,35 +21,35 @@ pub const native = struct {
     pub const wayland = @compileError("nothing here");
 };
 
-pub const Win32 = @import("Win32.zig");
-pub const Posix = union(Tag) {
-    x: X,
-    wayland: Wayland,
-
-    pub const Tag = enum { x, wayland };
-
-    pub const X = @import("X.zig");
-    pub const Wayland = @import("Wayland.zig");
-
-    pub const session_type = "XDG_SESSION_TYPE";
-
-    pub fn getSessionType() ?Tag {
-        for (std.os.argv) |arg| {
-            const identifier = "--xdg=";
-            if (!std.mem.startsWith(u8, std.mem.span(arg), identifier)) continue;
-            return std.meta.stringToEnum(Tag, std.mem.span(arg)[identifier.len..]);
-        }
-        const session = std.posix.getenv(Posix.session_type) orelse "x11";
-        return if (std.mem.eql(u8, session, "wayland")) .wayland else .x;
-    }
-};
-
 pub const Window = struct {
     handle: Handle,
 
     pub const Handle = switch (native.os) {
         .windows => Win32,
         else => Posix,
+    };
+
+    pub const Win32 = @import("Win32.zig");
+    pub const Posix = union(Tag) {
+        x: X,
+        wayland: Wayland,
+
+        pub const Tag = enum { x, wayland };
+
+        pub const X = @import("X.zig");
+        pub const Wayland = @import("Wayland.zig");
+
+        pub const session_type = "XDG_SESSION_TYPE";
+
+        pub fn getSessionType() ?Tag {
+            for (std.os.argv) |arg| {
+                const identifier = "--xdg=";
+                if (!std.mem.startsWith(u8, std.mem.span(arg), identifier)) continue;
+                return std.meta.stringToEnum(Tag, std.mem.span(arg)[identifier.len..]);
+            }
+            const session = std.posix.getenv(Posix.session_type) orelse "x11";
+            return if (std.mem.eql(u8, session, "wayland")) .wayland else .x;
+        }
     };
 
     pub const Config = struct {
@@ -120,6 +120,8 @@ pub const Event = union(enum) {
     close: void,
     resize: [2]usize,
     mouse: Mouse,
+    key_down: Key,
+    key_up: Key,
 };
 
 pub const Mouse = struct {
@@ -246,7 +248,6 @@ pub const Key = enum(u8) {
     numpad_subtract,
     numpad_multiply,
     numpad_divide,
-    numpad_enter,
     numpad_decimal,
 };
 
