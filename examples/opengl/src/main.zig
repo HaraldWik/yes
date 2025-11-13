@@ -96,17 +96,10 @@ pub fn main() !void {
             }
         }
 
-        if (window.isKeyDown(.escape)) break;
-
         gl.clear.buffer(.{ .color = true });
         gl.clear.color(0.1, 0.5, 0.3, 1.0);
 
-        if (window.isKeyDown(.a))
-            gl.clear.color(1.0, 0.4, 0.5, 1.0)
-        else if (window.isKeyDown(.w))
-            gl.clear.color(0.5, 0.1, 0.8, 1.0)
-        else
-            gl.clear.color(0.1, 0.4, 0.5, 1.0);
+        gl.clear.color(0.1, 0.4, 0.5, 1.0);
 
         program.use();
         vao.bind();

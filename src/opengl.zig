@@ -48,8 +48,8 @@ pub fn swapBuffers(window: root.Window) !void {
             .x => glx.glXSwapBuffers(@ptrCast(window.handle.x.display), window.handle.x.window),
             .wayland => {
                 if (egl.eglSwapBuffers(window.handle.wayland.api.opengl.display, window.handle.wayland.api.opengl.surface) == egl.FALSE) return error.EglSwapBuffers;
-                root.Window.Posix.Wayland.wl.wl_surface_commit(window.handle.wayland.surface);
-                if (root.Window.Posix.Wayland.wl.wl_display_flush(window.handle.wayland.display) < 0) return error.FlushDisplay;
+                root.Window.Wayland.wl.wl_surface_commit(window.handle.wayland.surface);
+                if (root.Window.Wayland.wl.wl_display_flush(window.handle.wayland.display) < 0) return error.FlushDisplay;
             },
         },
     }
