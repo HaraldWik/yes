@@ -23,7 +23,7 @@ pub fn main() !void {
                     std.debug.print("width: {d} == {d}, height: {d} == {d}\n", .{ width, width2, height, height2 });
                 },
                 .mouse => |mouse| {
-                    inline for (@typeInfo(yes.Mouse).@"struct".fields) |field| {
+                    inline for (@typeInfo(yes.Event.Mouse).@"struct".fields) |field| {
                         if (field.type == bool and @field(mouse, field.name))
                             std.debug.print("mouse {s}\n", .{field.name});
                     }
@@ -32,7 +32,5 @@ pub fn main() !void {
                 .key_up => |key| std.debug.print("'{t}' up\n", .{key}),
             }
         }
-
-        // if (window.isKeyDown(.a)) std.debug.print("A\n", .{});
     } else std.debug.print("Exit!\n", .{});
 }

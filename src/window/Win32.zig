@@ -1,9 +1,8 @@
 const std = @import("std");
-const root = @import("root.zig");
-const win32 = @import("root.zig").native.win32.everything;
+const root = @import("../root.zig");
+const win32 = @import("../root.zig").native.win32.everything;
+const Event = @import("../event.zig").Union;
 // zig build -Dtarget=x86_64-windows && wine zig-out/bin/example.exe
-
-const c = @cImport(@cInclude("GL/gl.h"));
 
 instance: win32.HINSTANCE,
 hwnd: win32.HWND,
@@ -164,7 +163,7 @@ pub fn close(self: @This()) void {
     _ = win32.DestroyWindow(self.hwnd);
 }
 
-pub fn poll(self: @This()) !?root.Event {
+pub fn poll(self: @This()) !?Event {
     var msg: win32.MSG = undefined;
     if (win32.PeekMessageW(&msg, self.hwnd, 0, 0, .{ .REMOVE = 1 }) == 0) return null;
     _ = win32.TranslateMessage(&msg);
@@ -191,8 +190,8 @@ pub fn poll(self: @This()) !?root.Event {
             .forward = button == win32.WM_XBUTTONDOWN and ((msg.wParam >> 16) & 0xFFFF) == @as(u32, @bitCast(win32.XBUTTON1)),
             .backward = button == win32.WM_XBUTTONDOWN and ((msg.wParam >> 16) & 0xFFFF) == @as(u32, @bitCast(win32.XBUTTON2)),
         } },
-        win32.WM_KEYDOWN => .{ .key_down = keyFrom(std.enums.fromInt(win32.VIRTUAL_KEY, msg.wParam).?) },
-        win32.WM_KEYUP => .{ .key_up = keyFrom(std.enums.fromInt(win32.VIRTUAL_KEY, msg.wParam).?) },
+        win32.WM_KEYDOWN => .{ .key_down = .fromWin32(std.enums.fromInt(win32.VIRTUAL_KEY, msg.wParam).?) },
+        win32.WM_KEYUP => .{ .key_up = .fromWin32(std.enums.fromInt(win32.VIRTUAL_KEY, msg.wParam).?) },
         else => null,
     };
 }
@@ -203,90 +202,9 @@ pub fn getSize(self: @This()) [2]usize {
     return .{ @intCast(rect.right - rect.left), @intCast(rect.bottom - rect.top) };
 }
 
-pub fn isKeyDown(self: @This(), key: root.Key) bool {
-    _ = self;
-    const virtual_key: win32.VIRTUAL_KEY = keyTo(key);
-    const state = win32.GetAsyncKeyState(@intCast(@intFromEnum(virtual_key)));
-    return (state & @as(i16, @bitCast(@as(u16, 0x8000)))) != 0;
-}
-
 fn getLastError() ?anyerror {
     const err = win32.GetLastError();
     if (err == .NO_ERROR) return null;
     std.log.err("win32: {s}", @tagName(win32.GetLastError()));
     return error.Win32;
-}
-
-pub const key_map: []const struct { root.Key, win32.VIRTUAL_KEY } = &.{
-    .{ .backspace, .BACK },
-    .{ .tab, .TAB },
-    .{ .clear, .CLEAR },
-    .{ .enter, .RETURN },
-    .{ .escape, .ESCAPE },
-    .{ .delete, .DELETE },
-
-    // Modifiers
-    .{ .left_shift, .LSHIFT },
-    .{ .right_shift, .RSHIFT },
-    .{ .left_ctrl, .LCONTROL },
-    .{ .right_ctrl, .RCONTROL },
-    .{ .left_alt, .LMENU },
-    .{ .right_alt, .RMENU },
-    .{ .left_super, .LWIN }, // Windows / Command key
-    .{ .right_super, .RWIN },
-    .{ .caps_lock, .NUMLOCK },
-
-    // Navigation
-    .{ .up, .UP },
-    .{ .down, .DOWN },
-    .{ .left, .LEFT },
-    .{ .right, .RIGHT },
-    .{ .home, .HOME },
-    .{ .end, .END },
-    .{ .page_up, .PRIOR },
-    .{ .page_down, .NEXT },
-    .{ .insert, .INSERT },
-
-    // Function keys
-    .{ .f1, .F1 },
-    .{ .f2, .F2 },
-    .{ .f3, .F3 },
-    .{ .f4, .F4 },
-    .{ .f5, .F5 },
-    .{ .f6, .F6 },
-    .{ .f7, .F7 },
-    .{ .f8, .F8 },
-    .{ .f9, .F9 },
-    .{ .f10, .F10 },
-    .{ .f11, .F11 },
-    .{ .f12, .F12 },
-
-    // Numpad
-    .{ .numpad_0, .NUMPAD0 },
-    .{ .numpad_1, .NUMPAD1 },
-    .{ .numpad_2, .NUMPAD2 },
-    .{ .numpad_3, .NUMPAD3 },
-    .{ .numpad_4, .NUMPAD4 },
-    .{ .numpad_5, .NUMPAD5 },
-    .{ .numpad_6, .NUMPAD6 },
-    .{ .numpad_7, .NUMPAD7 },
-    .{ .numpad_8, .NUMPAD8 },
-    .{ .numpad_9, .NUMPAD9 },
-    .{ .numpad_add, .ADD },
-    .{ .numpad_subtract, .SUBTRACT },
-    .{ .numpad_multiply, .MULTIPLY },
-    .{ .numpad_divide, .DIVIDE },
-    .{ .numpad_decimal, .DECIMAL },
-};
-
-fn keyTo(key: root.Key) win32.VIRTUAL_KEY {
-    return inline for (key_map) |elem| {
-        if (elem.@"0" == key) break elem.@"1";
-    } else @enumFromInt(@as(std.meta.Tag(win32.VIRTUAL_KEY), @intCast(@intFromEnum(key))));
-}
-
-fn keyFrom(key: win32.VIRTUAL_KEY) root.Key {
-    return inline for (key_map) |elem| {
-        if (elem.@"1" == key) break elem.@"0";
-    } else @enumFromInt(@as(std.meta.Tag(root.Key), @intCast(@intFromEnum(key))));
 }

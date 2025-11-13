@@ -1,6 +1,7 @@
 const std = @import("std");
-const root = @import("root.zig");
-const c = @import("root.zig").native.x;
+const root = @import("../root.zig");
+const c = @import("../root.zig").native.x;
+const Event = @import("../event.zig").Union;
 
 window: c.Window,
 display: *c.Display,
@@ -76,7 +77,7 @@ pub fn open(config: root.Window.Config) !@This() {
     var wm_delete_window: c.Atom = c.XInternAtom(display, "WM_DELETE_WINDOW", @intFromBool(false));
     _ = c.XSetWMProtocols(display, window, &wm_delete_window, 1);
 
-    _ = c.XSelectInput(display, window, c.ExposureMask | c.KeyPressMask | c.ButtonPressMask | c.StructureNotifyMask);
+    _ = c.XSelectInput(display, window, c.KeyPressMask | c.KeyReleaseMask | c.FocusChangeMask | c.ExposureMask | c.StructureNotifyMask);
 
     _ = c.XMapWindow(display, window);
     _ = c.XFlush(display);
@@ -102,7 +103,7 @@ pub fn close(self: @This()) void {
     _ = c.XCloseDisplay(self.display);
 }
 
-pub fn poll(self: @This()) ?root.Event {
+pub fn poll(self: @This()) ?Event {
     var event: c.XEvent = undefined;
     while (c.XPending(self.display) > 0) {
         if (c.XNextEvent(self.display, &event) != c.XCSUCCESS) return null;
@@ -123,8 +124,8 @@ pub fn poll(self: @This()) ?root.Event {
             .x = @intCast(event.xbutton.x),
             .y = @intCast(event.xbutton.y),
         } },
-        c.KeyPress => .{ .key_down = keyFrom(c.XLookupKeysym(&event.xkey, if (event.xkey.state & c.ShiftMask == 0) 1 else 0)) },
-        c.KeyRelease => .{ .key_up = keyFrom(c.XLookupKeysym(&event.xkey, if (event.xkey.state & c.ShiftMask == 0) 1 else 0)) },
+        c.KeyPress => .{ .key_down = .fromX(c.XLookupKeysym(&event.xkey, if (event.xkey.state & c.ShiftMask == 1) 1 else 0)) },
+        c.KeyRelease => .{ .key_up = .fromX(c.XLookupKeysym(&event.xkey, if (event.xkey.state & c.ShiftMask == 1) 1 else 0)) },
         else => null,
     };
 }
@@ -140,94 +141,4 @@ pub fn getSize(self: @This()) [2]usize {
 
     _ = c.XGetGeometry(self.display, self.window, &root_window, &x, &y, &width, &height, &border, &depth);
     return .{ @intCast(width), @intCast(height) };
-}
-
-pub fn isKeyDown(self: *const @This(), key: root.Key) bool {
-    const keysym: c.KeySym = keyTo(key);
-    const keycode = c.XKeysymToKeycode(self.display, keysym);
-    if (keycode == 0) return false;
-
-    _ = c.XSync(self.display, c.False);
-
-    var keys_return: [32]u8 = undefined;
-    _ = c.XQueryKeymap(self.display, &keys_return);
-
-    const byte_index: usize = @intCast(@divTrunc(keycode, 8));
-    const bit_index: usize = @intCast(keycode % 8);
-    const byte = keys_return[byte_index];
-    return (byte & (@as(u8, 1) << @intCast(bit_index))) != 0;
-}
-
-pub const key_map: []const struct { root.Key, c.KeySym } = &.{
-    .{ .backspace, c.XK_BackSpace },
-    .{ .tab, c.XK_Tab },
-    .{ .clear, c.XK_Clear },
-    .{ .enter, c.XK_Return },
-    .{ .escape, c.XK_Escape },
-    .{ .delete, c.XK_Delete },
-
-    // Modifiers
-    .{ .left_shift, c.XK_Shift_L },
-    .{ .right_shift, c.XK_Shift_R },
-    .{ .left_ctrl, c.XK_Control_L },
-    .{ .right_ctrl, c.XK_Control_R },
-    .{ .left_alt, c.XK_Alt_L },
-    .{ .right_alt, c.XK_Alt_R },
-    .{ .left_super, c.XK_Super_L }, // Windows / Command key
-    .{ .right_super, c.XK_Super_R },
-    .{ .caps_lock, c.XK_Caps_Lock },
-
-    // Navigation
-    .{ .up, c.XK_Up },
-    .{ .down, c.XK_Down },
-    .{ .left, c.XK_Left },
-    .{ .right, c.XK_Right },
-    .{ .home, c.XK_Home },
-    .{ .end, c.XK_End },
-    .{ .page_up, c.XK_Page_Up },
-    .{ .page_down, c.XK_Page_Down },
-    .{ .insert, c.XK_Insert },
-
-    // Function keys
-    .{ .f1, c.XK_F1 },
-    .{ .f2, c.XK_F2 },
-    .{ .f3, c.XK_F3 },
-    .{ .f4, c.XK_F4 },
-    .{ .f5, c.XK_F5 },
-    .{ .f6, c.XK_F6 },
-    .{ .f7, c.XK_F7 },
-    .{ .f8, c.XK_F8 },
-    .{ .f9, c.XK_F9 },
-    .{ .f10, c.XK_F10 },
-    .{ .f11, c.XK_F11 },
-    .{ .f12, c.XK_F12 },
-
-    // Numpad
-    .{ .numpad_0, c.XK_KP_0 },
-    .{ .numpad_1, c.XK_KP_1 },
-    .{ .numpad_2, c.XK_KP_2 },
-    .{ .numpad_3, c.XK_KP_3 },
-    .{ .numpad_4, c.XK_KP_4 },
-    .{ .numpad_5, c.XK_KP_5 },
-    .{ .numpad_6, c.XK_KP_6 },
-    .{ .numpad_7, c.XK_KP_7 },
-    .{ .numpad_8, c.XK_KP_8 },
-    .{ .numpad_9, c.XK_KP_9 },
-    .{ .numpad_add, c.XK_KP_Add },
-    .{ .numpad_subtract, c.XK_KP_Subtract },
-    .{ .numpad_multiply, c.XK_KP_Multiply },
-    .{ .numpad_divide, c.XK_KP_Divide },
-    .{ .numpad_decimal, c.XK_KP_Decimal },
-};
-
-fn keyTo(key: root.Key) c.KeySym {
-    return inline for (key_map) |elem| {
-        if (elem.@"0" == key) break elem.@"1";
-    } else @intFromEnum(key);
-}
-
-fn keyFrom(key: c.KeySym) root.Key {
-    return inline for (key_map) |elem| {
-        if (elem.@"1" == key) break elem.@"0";
-    } else @enumFromInt(@as(std.meta.Tag(root.Key), @intCast(key)));
 }

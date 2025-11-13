@@ -1,5 +1,5 @@
 const std = @import("std");
-const root = @import("root.zig");
+const root = @import("../root.zig");
 
 // https://nilsbrause.github.io/waylandpp_docs/egl_8cpp-example.html
 // Last supported branch https://github.com/HaraldWik/yes/tree/7699b77785f641670d1b320c3d548466a6eaa4a2 will be re implemented
@@ -32,10 +32,4 @@ pub fn poll(_: @This()) ?root.Event {
 pub fn getSize(self: @This()) [2]usize {
     _ = self;
     return .{ 0, 0 };
-}
-
-pub fn isKeyDown(self: @This(), key: root.Key) bool {
-    _ = self;
-    _ = key;
-    return false;
 }
