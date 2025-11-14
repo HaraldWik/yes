@@ -3,7 +3,7 @@ const yes = @import("yes");
 
 pub fn main() !void {
     const window: yes.Window = try .open(.{ .title = "Title", .width = 900, .height = 600 });
-    defer window.close();
+    errdefer window.close();
 
     // if (yes.file_dialog.open()) |file_path| {
     //     try yes.clipboard.setAlloc(window, std.heap.page_allocator, file_path);
@@ -13,10 +13,10 @@ pub fn main() !void {
     // std.debug.print("{s}\n", .{got});
     // std.heap.page_allocator.free(got);
 
-    out: while (true) {
+    main_loop: while (true) {
         while (try window.poll()) |event| {
             switch (event) {
-                .close => break :out,
+                .close => break :main_loop,
                 .resize => |size| {
                     const width, const height = size;
                     const width2, const height2 = window.getSize();
@@ -32,5 +32,5 @@ pub fn main() !void {
                 .key_up => |key| std.debug.print("'{t}' up\n", .{key}),
             }
         }
-    } else std.debug.print("Exit!\n", .{});
+    }
 }
