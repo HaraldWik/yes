@@ -91,6 +91,29 @@ pub fn open(config: root.Window.Config) !@This() {
         .none => {},
     }
 
+    var attrs: c.XWindowAttributes = undefined;
+    _ = c.XGetWindowAttributes(display, window, &attrs);
+
+    { // Send initial resize event
+        var event: c.XEvent = .{
+            .xconfigure = .{
+                .type = c.ConfigureNotify,
+                .display = display,
+                .event = window,
+                .window = window,
+                .x = attrs.x,
+                .y = attrs.y,
+                .width = attrs.width,
+                .height = attrs.height,
+                .border_width = attrs.border_width,
+                .above = c.None,
+                .override_redirect = c.False,
+            },
+        };
+        event.type = c.ConfigureNotify;
+        _ = c.XSendEvent(display, window, c.False, c.StructureNotifyMask, &event);
+    }
+
     return .{
         .window = window,
         .display = display,

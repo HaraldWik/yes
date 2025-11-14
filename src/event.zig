@@ -195,7 +195,7 @@ pub const Union = union(enum) {
                 .MULTIPLY => .numpad_multiply,
                 .DIVIDE => .numpad_divide,
                 .DECIMAL => .numpad_decimal,
-                else => std.enums.fromInt(@This(), key).?,
+                else => std.enums.fromInt(@This(), @intFromEnum(key)).?,
             };
         }
 
