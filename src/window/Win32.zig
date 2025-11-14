@@ -100,11 +100,11 @@ pub fn open(config: root.Window.Config) !@This() {
             if (getExtensionsStringARB(dc)) |extensions| {
                 var it = std.mem.tokenizeScalar(u8, std.mem.sliceTo(extensions, 0), ' ');
                 while (it.next()) |name| {
-                    const ext = std.meta.stringToEnum(.{
-                        .WGL_EXT_swap_control,
-                        .WGL_ARB_pixel_format,
-                        .WGL_ARB_create_context_profile,
-                    }, name);
+                    const ext = std.meta.stringToEnum(enum {
+                        WGL_EXT_swap_control,
+                        WGL_ARB_pixel_format,
+                        WGL_ARB_create_context_profile,
+                    }, name) orelse continue;
                     switch (ext) {
                         .WGL_EXT_swap_control => wgl.swapIntervalEXT = @ptrCast(win32.wglGetProcAddress("wglSwapIntervalEXT") orelse return error.WglSwapIntervalEXT),
                         .WGL_ARB_pixel_format => wgl.choosePixelFormatARB = @ptrCast(win32.wglGetProcAddress("wglChoosePixelFormatARB") orelse return error.WglChoosePixelFormatARB),
