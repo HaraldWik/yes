@@ -15,7 +15,7 @@ pub const GraphicsApi = union(root.GraphicsApi) {
 
     pub const OpenGL = struct {
         dc: win32.HDC,
-        glrc: win32.HGLRC,
+        ctx: win32.HGLRC,
 
         wgl: Wgl,
 
@@ -45,7 +45,7 @@ pub fn open(config: root.Window.Config) !@This() {
             .OWNDC = if (config.api == .opengl) 1 else 0,
         },
     });
-    _ = win32.RegisterClassExW(@ptrCast(&class));
+    if (!win32.SUCCEEDED(win32.RegisterClassExW(@ptrCast(&class)))) return reportErr(error.RegisterClass);
 
     var title_buffer: [256]u16 = undefined;
     const title = title_buffer[0..(try std.unicode.utf8ToUtf16Le(&title_buffer, config.title[0 .. config.title.len + 1]))];
@@ -63,7 +63,7 @@ pub fn open(config: root.Window.Config) !@This() {
         null,
         instance,
         null,
-    ) orelse return error.CreateWindowFailed;
+    ) orelse return reportErr(error.CreateWindowFailed);
 
     const api: GraphicsApi = switch (config.api) {
         .opengl => opengl: {
@@ -84,26 +84,32 @@ pub fn open(config: root.Window.Config) !@This() {
                 .iLayerType = win32.PFD_MAIN_PLANE,
             });
 
-            const pf = win32.ChoosePixelFormat(dc, &pfd);
-            if (pf == 0) return error.ChoosePixelFormat;
-            if (!win32.SUCCEEDED(win32.SetPixelFormat(dc, pf, &pfd))) return error.SetPixelFormat;
+            const format = win32.ChoosePixelFormat(dc, &pfd);
+            if (!win32.SUCCEEDED(format)) return reportErr(error.ChoosePixelFormat);
+            if (!win32.SUCCEEDED(win32.SetPixelFormat(dc, format, &pfd))) return reportErr(error.SetPixelFormat);
 
-            var glrc = win32.wglCreateContext(dc) orelse return error.WglCreateContext;
-            if (!win32.SUCCEEDED(win32.wglMakeCurrent(dc, glrc))) return error.WglMakeCurrent;
+            var ctx = win32.wglCreateContext(dc) orelse return reportErr(error.WglCreateContext);
+            if (!win32.SUCCEEDED(win32.wglMakeCurrent(dc, ctx))) return reportErr(error.WglMakeCurrent);
+
+            if (!win32.SUCCEEDED(win32.ReleaseDC(hwnd, dc))) return reportErr(error.WglReleaseDC);
 
             var wgl: GraphicsApi.OpenGL.Wgl = undefined;
-            const getExtensionsStringARB_ptr = win32.wglGetProcAddress("wglGetExtensionsStringARB") orelse return error.WglGetProcAddress;
+            const getExtensionsStringARB_ptr = win32.wglGetProcAddress("wglGetExtensionsStringARB") orelse return reportErr(error.WglGetProcAddress);
             const getExtensionsStringARB: *const fn (win32.HDC) callconv(.winapi) ?[*:0]const u8 = @ptrCast(getExtensionsStringARB_ptr);
 
             if (getExtensionsStringARB(dc)) |extensions| {
                 var it = std.mem.tokenizeScalar(u8, std.mem.sliceTo(extensions, 0), ' ');
                 while (it.next()) |name| {
-                    if (std.mem.eql(u8, name, "WGL_EXT_swap_control"))
-                        wgl.swapIntervalEXT = @ptrCast(win32.wglGetProcAddress("wglSwapIntervalEXT"))
-                    else if (std.mem.eql(u8, name, "WGL_ARB_pixel_format"))
-                        wgl.choosePixelFormatARB = @ptrCast(win32.wglGetProcAddress("wglChoosePixelFormatARB"))
-                    else if (std.mem.eql(u8, name, "WGL_ARB_create_context_profile"))
-                        wgl.createContextAttribsARB = @ptrCast(win32.wglGetProcAddress("wglCreateContextAttribsARB"));
+                    const ext = std.meta.stringToEnum(.{
+                        .WGL_EXT_swap_control,
+                        .WGL_ARB_pixel_format,
+                        .WGL_ARB_create_context_profile,
+                    }, name);
+                    switch (ext) {
+                        .WGL_EXT_swap_control => wgl.swapIntervalEXT = @ptrCast(win32.wglGetProcAddress("wglSwapIntervalEXT") orelse return error.WglSwapIntervalEXT),
+                        .WGL_ARB_pixel_format => wgl.choosePixelFormatARB = @ptrCast(win32.wglGetProcAddress("wglChoosePixelFormatARB") orelse return error.WglChoosePixelFormatARB),
+                        .WGL_ARB_create_context_profile => wgl.createContextAttribsARB = @ptrCast(win32.wglGetProcAddress("wglCreateContextAttribsARB") orelse return error.WglCreateContextAttribsARB),
+                    }
                 }
             }
 
@@ -119,19 +125,19 @@ pub fn open(config: root.Window.Config) !@This() {
                 0,
             };
 
-            const ctx = wgl.createContextAttribsARB(dc, null, &attribs) orelse return error.CreateModernOpenGL;
-            _ = win32.wglMakeCurrent(dc, ctx);
-            _ = win32.wglDeleteContext(glrc);
-            glrc = ctx;
+            const ctx_ = wgl.createContextAttribsARB(dc, null, &attribs) orelse return reportErr(error.CreateModernOpenGL);
+            _ = win32.wglMakeCurrent(dc, ctx_);
+            _ = win32.wglDeleteContext(ctx_);
+            ctx = ctx;
 
             break :opengl .{ .opengl = .{
                 .dc = dc,
-                .glrc = glrc,
+                .ctx = ctx,
                 .wgl = wgl,
             } };
         },
         .vulkan => vulkan: {
-            const vulkan: win32.HINSTANCE = win32.LoadLibraryW(win32.L("vulkan-1.dll")) orelse return error.LoadLibraryWVulkan;
+            const vulkan: win32.HINSTANCE = win32.LoadLibraryW(win32.L("vulkan-1.dll")) orelse return reportErr(error.LoadLibraryWVulkan);
             const getInstanceProcAddress: GraphicsApi.Vulkan.GetInstanceProcAddress = @ptrCast(win32.GetProcAddress(vulkan, "vkGetInstanceProcAddr") orelse return error.GetProcAddress);
             break :vulkan .{ .vulkan = .{
                 .instance = vulkan,
@@ -142,7 +148,7 @@ pub fn open(config: root.Window.Config) !@This() {
     };
 
     _ = win32.ShowWindow(hwnd, .{ .SHOWNORMAL = 1 });
-    if (!win32.SUCCEEDED(win32.UpdateWindow(hwnd))) return error.UpdateWindow;
+    if (!win32.SUCCEEDED(win32.UpdateWindow(hwnd))) return reportErr(error.UpdateWindow);
 
     return .{
         .instance = instance,
@@ -154,8 +160,7 @@ pub fn open(config: root.Window.Config) !@This() {
 pub fn close(self: @This()) void {
     switch (self.api) {
         .opengl => {
-            _ = win32.wglDeleteContext(self.api.opengl.glrc);
-            _ = win32.ReleaseDC(self.hwnd, self.api.opengl.dc);
+            _ = win32.wglDeleteContext(self.api.opengl.ctx);
         },
         .vulkan => _ = win32.FreeLibrary(self.api.vulkan.instance),
         .none => {},
@@ -202,9 +207,26 @@ pub fn getSize(self: @This()) [2]usize {
     return .{ @intCast(rect.right - rect.left), @intCast(rect.bottom - rect.top) };
 }
 
-fn getLastError() ?anyerror {
-    const err = win32.GetLastError();
-    if (err == .NO_ERROR) return null;
-    std.log.err("win32: {s}", @tagName(win32.GetLastError()));
-    return error.Win32;
+pub fn reportErr(err: anyerror) anyerror {
+    const code = win32.GetLastError();
+
+    var buf: [512:0]u16 = undefined;
+    const len = win32.FormatMessageW(
+        .{ .FROM_SYSTEM = 1, .IGNORE_INSERTS = 1 },
+        null,
+        @intFromEnum(code),
+        0,
+        @ptrCast(&buf),
+        buf.len,
+        null,
+    );
+
+    _ = win32.MessageBoxW(
+        null,
+        @ptrCast(buf[0..len]),
+        win32.L("Error"),
+        .{ .ICONHAND = 1 },
+    );
+
+    return err;
 }

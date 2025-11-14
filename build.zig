@@ -39,6 +39,7 @@ pub fn build(b: *std.Build) void {
         .windows => {
             mod.linkSystemLibrary("user32", .{});
             mod.linkSystemLibrary("kernel32", .{});
+            mod.linkSystemLibrary("opengl32", .{});
         },
         else => {
             mod.linkSystemLibrary("glx", .{});
