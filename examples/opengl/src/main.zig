@@ -44,7 +44,7 @@ pub fn main() !void {
         .height = 600,
         .api = .opengl, // Don't forget to set to OpenGL
     });
-    defer window.close();
+    errdefer window.close();
 
     gl.load(yes.opengl.getProcAddress, true);
     gl.debug.set(null);
@@ -84,10 +84,10 @@ pub fn main() !void {
 
     try yes.opengl.swapInterval(window, 1);
 
-    out: while (true) {
+    main_loop: while (true) {
         while (try window.poll()) |event| {
             switch (event) {
-                .close => break :out,
+                .close => break :main_loop,
                 .resize => |size| {
                     const width, const height = size;
                     gl.draw.viewport(0, 0, width, height);
@@ -107,5 +107,5 @@ pub fn main() !void {
         gl.draw.elements(.triangles, indices.len, u32, null);
 
         try yes.opengl.swapBuffers(window);
-    } else std.debug.print("Exit!\n", .{});
+    }
 }

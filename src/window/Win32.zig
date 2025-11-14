@@ -178,13 +178,12 @@ pub fn poll(self: @This()) !?Event {
         win32.WM_DESTROY => .close,
         win32.WM_SYSCOMMAND => switch (msg.wParam) {
             win32.SC_CLOSE => .close,
-            // win32.SC_MAXIMIZE => null,
             else => {
                 std.debug.print("unknown WM_SYSCOMMAND: {d}\n", .{msg.wParam});
                 return null;
             },
         },
-        win32.WM_SIZE => .{ .resize = .{
+        win32.WM_SIZE, win32.WM_WINDOWPOSCHANGED => .{ .resize = .{
             @intCast(@as(u16, @truncate(@as(u32, @intCast(msg.lParam))))),
             @intCast(@as(u16, @truncate(@as(u32, @intCast(msg.lParam >> 16))))),
         } },

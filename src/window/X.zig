@@ -77,7 +77,7 @@ pub fn open(config: root.Window.Config) !@This() {
     var wm_delete_window: c.Atom = c.XInternAtom(display, "WM_DELETE_WINDOW", @intFromBool(false));
     _ = c.XSetWMProtocols(display, window, &wm_delete_window, 1);
 
-    _ = c.XSelectInput(display, window, c.KeyPressMask | c.KeyReleaseMask | c.FocusChangeMask | c.ExposureMask | c.StructureNotifyMask);
+    _ = c.XSelectInput(display, window, c.KeyPressMask | c.KeyReleaseMask | c.ButtonPress | c.FocusChangeMask | c.ExposureMask | c.StructureNotifyMask);
 
     _ = c.XMapWindow(display, window);
     _ = c.XFlush(display);
