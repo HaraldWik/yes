@@ -60,7 +60,7 @@ pub const Position = struct {
 
 pub const Config = struct {
     title: [:0]const u8,
-    size: Size,
+    size: Size = .{ .width = 420, .height = 260 },
     min_size: ?Size = null,
     max_size: ?Size = null,
     resizable: bool = true,

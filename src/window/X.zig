@@ -74,6 +74,8 @@ pub fn open(config: root.Window.Config) !@This() {
 
     if (!config.resizable) {
         hints.flags = c.PMinSize | c.PMaxSize;
+        hints.base_width = @intCast(config.size.width);
+        hints.base_height = @intCast(config.size.height);
         hints.min_width = @intCast(config.size.width);
         hints.min_height = @intCast(config.size.height);
         hints.max_width = @intCast(config.size.width);
