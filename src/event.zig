@@ -134,7 +134,12 @@ pub const Union = union(enum) {
         numpad_divide,
         numpad_decimal,
 
-        pub fn fromWin32(key: native.win32.everything.VIRTUAL_KEY) @This() {
+        pub fn fromWin32(key: native.win32.everything.VIRTUAL_KEY, lparam: isize) ?@This() {
+            const win32 = native.win32.everything;
+
+            const scancode: u32 = (@as(u32, @intCast(lparam)) >> 16) & 0xFF;
+            const extended: bool = ((lparam >> 24) & 1) != 0;
+
             return switch (key) {
                 .BACK => .backspace,
                 .TAB => .tab,
@@ -144,15 +149,16 @@ pub const Union = union(enum) {
                 .DELETE => .delete,
 
                 // Modifiers
-                .LSHIFT => .left_shift,
-                .RSHIFT => .right_shift,
-                .LCONTROL => .left_ctrl,
-                .RCONTROL => .right_ctrl,
-                .LMENU => .left_alt,
-                .RMENU => .right_alt,
+                .SHIFT => return switch (std.enums.fromInt(win32.VIRTUAL_KEY, win32.MapVirtualKeyW(scancode, win32.MAPVK_VSC_TO_VK_EX)) orelse .LSHIFT) {
+                    .LSHIFT => .left_shift,
+                    .RSHIFT => .right_shift,
+                    else => .left_shift, // fallback
+                },
+                .CONTROL => if (extended) .right_ctrl else .left_ctrl,
+                .MENU => if (extended) .right_alt else .left_alt,
                 .LWIN => .left_super, // Windows / Command key
-                .RWIN => .right_super,
-                .NUMLOCK => .caps_lock,
+                .RWIN => .right_super, // Windows / Command key
+                .CAPITAL => .caps_lock,
 
                 // Navigation
                 .UP => .up,
@@ -195,11 +201,11 @@ pub const Union = union(enum) {
                 .MULTIPLY => .numpad_multiply,
                 .DIVIDE => .numpad_divide,
                 .DECIMAL => .numpad_decimal,
-                else => std.enums.fromInt(@This(), @intFromEnum(key)).?,
+                else => std.enums.fromInt(@This(), @intFromEnum(key)),
             };
         }
 
-        pub fn fromX(key: native.x.KeySym) @This() {
+        pub fn fromX(key: native.x.KeySym) ?@This() {
             return switch (key) {
                 native.x.XK_A, native.x.XK_a => .a,
                 native.x.XK_B, native.x.XK_b => .b,
@@ -287,7 +293,7 @@ pub const Union = union(enum) {
                 native.x.XK_KP_Multiply => .numpad_multiply,
                 native.x.XK_KP_Divide => .numpad_divide,
                 native.x.XK_KP_Decimal => .numpad_decimal,
-                else => std.enums.fromInt(@This(), key).?,
+                else => std.enums.fromInt(@This(), key),
             };
         }
     };

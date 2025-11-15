@@ -147,8 +147,8 @@ pub fn poll(self: @This()) ?Event {
             .x = @intCast(event.xbutton.x),
             .y = @intCast(event.xbutton.y),
         } },
-        c.KeyPress => .{ .key_down = .fromX(c.XLookupKeysym(&event.xkey, if (event.xkey.state & c.ShiftMask == 1) 1 else 0)) },
-        c.KeyRelease => .{ .key_up = .fromX(c.XLookupKeysym(&event.xkey, if (event.xkey.state & c.ShiftMask == 1) 1 else 0)) },
+        c.KeyPress => .{ .key_down = Event.Key.fromX(c.XLookupKeysym(&event.xkey, if (event.xkey.state & c.ShiftMask == 1) 1 else 0)) orelse return null },
+        c.KeyRelease => .{ .key_up = Event.Key.fromX(c.XLookupKeysym(&event.xkey, if (event.xkey.state & c.ShiftMask == 1) 1 else 0)) orelse return null },
         else => null,
     };
 }
