@@ -149,7 +149,7 @@ pub const Union = union(enum) {
                 .DELETE => .delete,
 
                 // Modifiers
-                .SHIFT => return switch (std.enums.fromInt(win32.VIRTUAL_KEY, win32.MapVirtualKeyW(scancode, win32.MAPVK_VSC_TO_VK_EX)) orelse .LSHIFT) {
+                .SHIFT => switch (std.enums.fromInt(win32.VIRTUAL_KEY, win32.MapVirtualKeyW(scancode, win32.MAPVK_VSC_TO_VK_EX)) orelse .LSHIFT) {
                     .LSHIFT => .left_shift,
                     .RSHIFT => .right_shift,
                     else => .left_shift, // fallback
