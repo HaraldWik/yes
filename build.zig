@@ -13,15 +13,31 @@ pub fn build(b: *std.Build) void {
 
     const zigwin32 = b.dependency("zigwin32", .{}).module("win32");
 
-    // const xdg = b.addTranslateC(.{
-    //     .root_source_file = if (target.result.os.tag != .windows) b.path("include/xdg-shell-client-protocol.h") else b.addWriteFiles().add("c.h", ""),
-    //     .target = target,
-    //     .optimize = optimize,
-    // }).createModule();
-    // if (target.result.os.tag != .windows) {
-    //     xdg.linkSystemLibrary("wayland-client", .{});
-    //     xdg.addCSourceFile(.{ .file = b.path("include/xdg-shell-protocol.c") });
-    // }
+    const wayland_headers = b.dependency("wayland", .{});
+
+    const wayland_scanner_cmd = b.addSystemCommand(&.{
+        "wayland-scanner",
+        "client-header",
+        "/usr/share/wayland-protocols/stable/xdg-shell/xdg-shell.xml",
+    });
+    const xdg_shell_client_protocol = wayland_scanner_cmd.addOutputFileArg("xdg-shell-client-protocol.h");
+
+    const wayland = b.addTranslateC(.{
+        .root_source_file = b.addWriteFiles().add("wayland.h",
+            // \\#include <wayland-client.h>
+            \\#include <wayland-client.h>
+            \\#include <wayland-egl.h>
+            \\#include <EGL/egl.h>
+            \\#include <xdg-shell-client-protocol.h>
+        ),
+        .target = target,
+        .optimize = optimize,
+    });
+    if (target.result.os.tag != .windows) {
+        wayland.step.dependOn(&wayland_scanner_cmd.step);
+        wayland.addIncludePath(xdg_shell_client_protocol.dirname());
+        wayland.addIncludePath(wayland_headers.path("src/"));
+    }
 
     const mod = b.addModule("yes", .{
         .root_source_file = b.path("src/root.zig"),
@@ -29,7 +45,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .imports = &.{
             .{ .name = "win32", .module = zigwin32 },
-            // .{ .name = "xdg", .module = xdg },
+            .{ .name = "wayland", .module = wayland.createModule() },
         },
         .link_libc = true,
     });

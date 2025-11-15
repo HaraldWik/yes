@@ -65,8 +65,8 @@ pub fn open(config: root.Window.Config) !@This() {
         null,
     ) orelse return reportErr(error.CreateWindowFailed);
 
-    const api: GraphicsApi = switch (config.api) {
-        .opengl => opengl: {
+    const api: GraphicsApi = api: switch (config.api) {
+        .opengl => {
             const dc = win32.GetDC(hwnd) orelse return error.GetDC;
 
             var pfd: win32.PIXELFORMATDESCRIPTOR = std.mem.zeroInit(win32.PIXELFORMATDESCRIPTOR, .{
@@ -130,16 +130,16 @@ pub fn open(config: root.Window.Config) !@This() {
             _ = win32.wglDeleteContext(ctx_);
             ctx = ctx;
 
-            break :opengl .{ .opengl = .{
+            break :api .{ .opengl = .{
                 .dc = dc,
                 .ctx = ctx,
                 .wgl = wgl,
             } };
         },
-        .vulkan => vulkan: {
+        .vulkan => {
             const vulkan: win32.HINSTANCE = win32.LoadLibraryW(win32.L("vulkan-1.dll")) orelse return reportErr(error.LoadLibraryWVulkan);
             const getInstanceProcAddress: GraphicsApi.Vulkan.GetInstanceProcAddress = @ptrCast(win32.GetProcAddress(vulkan, "vkGetInstanceProcAddr") orelse return error.GetProcAddress);
-            break :vulkan .{ .vulkan = .{
+            break :api .{ .vulkan = .{
                 .instance = vulkan,
                 .getInstanceProcAddress = getInstanceProcAddress,
             } };
