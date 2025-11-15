@@ -33,14 +33,36 @@ pub const Posix = union(Tag) {
     }
 };
 
-pub const Config = struct {
-    title: [:0]const u8,
+pub const Size = struct {
     width: usize,
     height: usize,
-    min_width: ?usize = null,
-    min_height: ?usize = null,
-    max_width: ?usize = null,
-    max_height: ?usize = null,
+    pub fn toArray(self: @This()) [2]usize {
+        return .{ self.width, self.height };
+    }
+    pub fn toVec(self: @This()) @Vector(2, usize) {
+        return .{ self.width, self.height };
+    }
+    pub fn aspect(self: @This()) f32 {
+        return @as(f32, @floatFromInt(self.width)) / @as(f32, @floatFromInt(self.height));
+    }
+};
+
+pub const Position = struct {
+    x: usize,
+    y: usize,
+    pub fn toArray(self: @This()) [2]usize {
+        return .{ self.x, self.y };
+    }
+    pub fn toVec(self: @This()) @Vector(2, usize) {
+        return .{ self.x, self.y };
+    }
+};
+
+pub const Config = struct {
+    title: [:0]const u8,
+    size: Size = .{ .width = 420, .height = 260 },
+    min_size: ?Size = null,
+    max_size: ?Size = null,
     resizable: bool = true,
     api: root.GraphicsApi = .none,
 };
@@ -78,7 +100,7 @@ pub fn poll(self: @This()) !?root.Event {
     };
 }
 
-pub fn getSize(self: @This()) [2]usize {
+pub fn getSize(self: @This()) Size {
     return switch (native.os) {
         .windows => self.handle.getSize(),
         else => switch (self.handle) {

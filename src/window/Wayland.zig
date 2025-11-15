@@ -123,9 +123,9 @@ pub fn poll(self: @This()) ?root.Event {
     return .{ .key_down = .a };
 }
 
-pub fn getSize(self: @This()) [2]usize {
+pub fn getSize(self: @This()) root.Window.Size {
     _ = self;
-    return .{ 0, 0 };
+    return .{ .width = 0, .height = 0 };
 }
 
 pub fn isKeyDown(self: @This(), key: root.Key) bool {
