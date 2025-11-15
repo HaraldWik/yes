@@ -1,21 +1,56 @@
 const std = @import("std");
 const native = @import("root.zig").native;
+const win32 = @import("root.zig").native.win32.everything;
+const Position = @import("root.zig").Window.Position;
 
 pub const Union = union(enum) {
     close: void,
-    resize: [2]usize,
+    resize: @import("root.zig").Window.Size,
     mouse: Mouse,
     key_down: Key,
     key_up: Key,
 
-    pub const Mouse = struct {
-        right: bool = false,
-        middle: bool = false,
-        left: bool = false,
-        forward: bool = false,
-        backward: bool = false,
-        x: usize = 0,
-        y: usize = 0,
+    pub const Mouse = union(enum) {
+        click: Click,
+        move: Position,
+
+        pub const Click = struct {
+            button: Button,
+            position: Position,
+        };
+
+        pub const Button = enum {
+            right,
+            middle,
+            left,
+            forward,
+            backward,
+
+            pub fn fromWin32(button: u32, wparam: usize) ?@This() {
+                return switch (button) {
+                    win32.WM_RBUTTONDOWN => .right,
+                    win32.WM_MBUTTONDOWN => .middle,
+                    win32.WM_LBUTTONDOWN => .left,
+                    win32.WM_XBUTTONDOWN => {
+                        const data: win32.MOUSEHOOKSTRUCTEX_MOUSE_DATA = @bitCast(@as(u32, @intCast(((wparam >> 16) & 0xFFFF))));
+                        return if (std.meta.eql(data, win32.XBUTTON1)) .backward else if (std.meta.eql(data, win32.XBUTTON2)) .forward else null;
+                    },
+
+                    else => null,
+                };
+            }
+
+            pub fn fromX(button: c_uint) ?@This() {
+                return switch (button) {
+                    3 => .right,
+                    2 => .middle,
+                    1 => .left,
+                    9 => .forward,
+                    8 => .backward,
+                    else => null,
+                };
+            }
+        };
     };
 
     pub const Key = enum(u32) {
@@ -134,9 +169,7 @@ pub const Union = union(enum) {
         numpad_divide,
         numpad_decimal,
 
-        pub fn fromWin32(key: native.win32.everything.VIRTUAL_KEY, lparam: isize) ?@This() {
-            const win32 = native.win32.everything;
-
+        pub fn fromWin32(key: win32.VIRTUAL_KEY, lparam: isize) ?@This() {
             const scancode: u32 = (@as(u32, @intCast(lparam)) >> 16) & 0xFF;
             const extended: bool = ((lparam >> 24) & 1) != 0;
 

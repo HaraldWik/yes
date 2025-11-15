@@ -57,8 +57,8 @@ pub fn open(config: root.Window.Config) !@This() {
         win32.WS_OVERLAPPEDWINDOW,
         win32.CW_USEDEFAULT,
         win32.CW_USEDEFAULT,
-        @intCast(config.width),
-        @intCast(config.height),
+        @intCast(config.size.width),
+        @intCast(config.size.height),
         null,
         null,
         instance,
@@ -184,30 +184,34 @@ pub fn poll(self: @This()) !?Event {
             },
         },
         win32.WM_SIZE, win32.WM_USER + 1 => .{ .resize = .{
-            @intCast(@as(u16, @truncate(@as(u32, @intCast(msg.lParam))))),
-            @intCast(@as(u16, @truncate(@as(u32, @intCast(msg.lParam >> 16))))),
+            .width = @intCast(@as(u16, @truncate(@as(u32, @intCast(msg.lParam))))),
+            .height = @intCast(@as(u16, @truncate(@as(u32, @intCast(msg.lParam >> 16))))),
         } },
         win32.WM_WINDOWPOSCHANGED => {
             std.debug.print("what\n", .{});
             return null;
         },
-        win32.WM_RBUTTONDOWN, win32.WM_MBUTTONDOWN, win32.WM_LBUTTONDOWN, win32.WM_XBUTTONDOWN => |button| .{ .mouse = .{
-            .right = button == win32.WM_RBUTTONDOWN,
-            .middle = button == win32.WM_MBUTTONDOWN,
-            .left = button == win32.WM_LBUTTONDOWN,
-            .forward = button == win32.WM_XBUTTONDOWN and ((msg.wParam >> 16) & 0xFFFF) == @as(u32, @bitCast(win32.XBUTTON1)),
-            .backward = button == win32.WM_XBUTTONDOWN and ((msg.wParam >> 16) & 0xFFFF) == @as(u32, @bitCast(win32.XBUTTON2)),
-        } },
+        win32.WM_RBUTTONDOWN, win32.WM_MBUTTONDOWN, win32.WM_LBUTTONDOWN, win32.WM_XBUTTONDOWN => |button| .{ .mouse = .{ .click = .{
+            .button = Event.Mouse.Button.fromWin32(button, msg.wParam) orelse return null,
+            .position = .{
+                .x = @intCast(@as(u16, @truncate(@as(usize, @intCast(msg.lParam))))),
+                .y = @intCast(@as(u16, @truncate(@as(usize, @intCast(msg.lParam >> 16))))),
+            },
+        } } },
+        win32.WM_MOUSEMOVE => .{ .mouse = .{ .move = .{
+            .x = @intCast(@as(u16, @truncate(@as(usize, @intCast(msg.lParam))))),
+            .y = @intCast(@as(u16, @truncate(@as(usize, @intCast(msg.lParam >> 16))))),
+        } } },
         win32.WM_KEYDOWN => .{ .key_down = Event.Key.fromWin32(std.enums.fromInt(win32.VIRTUAL_KEY, msg.wParam).?, msg.lParam) orelse return null },
         win32.WM_KEYUP => .{ .key_up = Event.Key.fromWin32(std.enums.fromInt(win32.VIRTUAL_KEY, msg.wParam).?, msg.lParam) orelse return null },
         else => null,
     };
 }
 
-pub fn getSize(self: @This()) [2]usize {
+pub fn getSize(self: @This()) root.Window.Size {
     var rect: win32.RECT = undefined;
     _ = win32.GetClientRect(self.hwnd, &rect);
-    return .{ @intCast(rect.right - rect.left), @intCast(rect.bottom - rect.top) };
+    return .{ .width = @intCast(rect.right - rect.left), .height = @intCast(rect.bottom - rect.top) };
 }
 
 pub fn wndProc(hwnd: win32.HWND, msg: u32, wParam: usize, lParam: isize) callconv(.winapi) isize {

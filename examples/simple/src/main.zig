@@ -2,32 +2,29 @@ const std = @import("std");
 const yes = @import("yes");
 
 pub fn main() !void {
-    const window: yes.Window = try .open(.{ .title = "Title", .width = 900, .height = 600 });
-    errdefer window.close();
-
-    // if (yes.file_dialog.open()) |file_path| {
-    //     try yes.clipboard.setAlloc(window, std.heap.page_allocator, file_path);
-    // }
-
-    // const got = yes.clipboard.getAlloc(window, std.heap.page_allocator) orelse "what";
-    // std.debug.print("{s}\n", .{got});
-    // std.heap.page_allocator.free(got);
+    const window: yes.Window = try .open(.{
+        .title = "Title",
+        .size = .{ .width = 900, .height = 600 },
+        .resizable = false,
+    });
+    defer window.close();
 
     main_loop: while (true) {
         while (try window.poll()) |event| {
             switch (event) {
                 .close => break :main_loop,
                 .resize => |size| {
-                    const width, const height = size;
-                    const width2, const height2 = window.getSize();
-                    std.debug.print("width: {d} == {d}, height: {d} == {d}\n", .{ width, width2, height, height2 });
+                    const width, const height = window.getSize().toArray();
+                    std.debug.print("width: {d} == {d}, height: {d} == {d}\n", .{ size.width, width, size.height, height });
                 },
-                .mouse => |mouse| {
-                    inline for (@typeInfo(yes.Event.Mouse).@"struct".fields) |field| {
-                        if (field.type == bool and @field(mouse, field.name))
-                            std.debug.print("mouse {s}\n", .{field.name});
-                    }
+                .mouse => |mouse| switch (mouse) {
+                    .click => |click| {
+                        std.debug.print("mouse {t}\t", .{click.button});
+                        std.debug.print("({d}, {d})\n", .{ click.position.x, click.position.y });
+                    },
+                    .move => |pos| std.debug.print("moved: ({d}, {d})\n", .{ pos.x, pos.y }),
                 },
+
                 .key_down => |key| std.debug.print("'{t}' down\n", .{key}),
                 .key_up => |key| std.debug.print("'{t}' up\n", .{key}),
             }

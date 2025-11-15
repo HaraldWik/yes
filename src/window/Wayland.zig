@@ -29,7 +29,7 @@ pub fn poll(_: @This()) ?root.Event {
     return null;
 }
 
-pub fn getSize(self: @This()) [2]usize {
+pub fn getSize(self: @This()) root.Window.Size {
     _ = self;
-    return .{ 0, 0 };
+    return .{ .width = 0, .height = 0 };
 }

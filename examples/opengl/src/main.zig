@@ -44,7 +44,7 @@ pub fn main() !void {
         .height = 600,
         .api = .opengl, // Don't forget to set to OpenGL
     });
-    errdefer window.close();
+    defer window.close();
 
     gl.load(yes.opengl.getProcAddress, true);
     gl.debug.set(null);

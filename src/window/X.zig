@@ -50,7 +50,7 @@ pub fn open(config: root.Window.Config) !@This() {
         .vulkan => return error.NotImplemented, // TODO: add vulkan window for X
         .none => c.XCreateSimpleWindow(display, c.RootWindow(display, screen), // Parent window
             0, 0, // X, Y position
-            @intCast(config.width), @intCast(config.height), // Width, Height
+            @intCast(config.size.width), @intCast(config.size.height), // Width, Height
             2, // Border width
             c.BlackPixel(display, screen), // Border color
             c.BlackPixel(display, screen) // Background color
@@ -60,16 +60,24 @@ pub fn open(config: root.Window.Config) !@This() {
     _ = c.XStoreName(display, window, config.title.ptr);
     var hints: c.XSizeHints = .{};
 
-    if (config.min_width != null and config.min_height != null) {
+    if (config.min_size) |size| {
         hints.flags |= c.PMinSize;
-        hints.min_width = @intCast(config.min_width.?);
-        hints.min_height = @intCast(config.min_height.?);
+        hints.min_width = @intCast(size.width);
+        hints.min_height = @intCast(size.height);
     }
 
-    if (config.max_width != null and config.max_height != null) {
+    if (config.max_size) |size| {
         hints.flags |= c.PMaxSize;
-        hints.max_width = @intCast(config.max_width.?);
-        hints.max_height = @intCast(config.max_height.?);
+        hints.max_width = @intCast(size.width);
+        hints.max_height = @intCast(size.height);
+    }
+
+    if (!config.resizable) {
+        hints.flags = c.PMinSize | c.PMaxSize;
+        hints.min_width = @intCast(config.size.width);
+        hints.min_height = @intCast(config.size.height);
+        hints.max_width = @intCast(config.size.width);
+        hints.max_height = @intCast(config.size.height);
     }
 
     c.XSetWMNormalHints(display, window, &hints);
@@ -77,7 +85,7 @@ pub fn open(config: root.Window.Config) !@This() {
     var wm_delete_window: c.Atom = c.XInternAtom(display, "WM_DELETE_WINDOW", @intFromBool(false));
     _ = c.XSetWMProtocols(display, window, &wm_delete_window, 1);
 
-    _ = c.XSelectInput(display, window, c.KeyPressMask | c.KeyReleaseMask | c.ButtonPress | c.FocusChangeMask | c.ExposureMask | c.StructureNotifyMask);
+    _ = c.XSelectInput(display, window, c.KeyPressMask | c.KeyReleaseMask | c.ButtonPress | c.PointerMotionMask | c.FocusChangeMask | c.ExposureMask | c.StructureNotifyMask);
 
     _ = c.XMapWindow(display, window);
     _ = c.XFlush(display);
@@ -135,25 +143,27 @@ pub fn poll(self: @This()) ?Event {
     return switch (event.type) {
         c.ClientMessage => if (@as(c.Atom, @intCast(event.xclient.data.l[0])) == self.wm_delete_window) .close else null,
         c.ConfigureNotify => .{ .resize = .{
-            @intCast(event.xconfigure.width),
-            @intCast(event.xconfigure.height),
+            .width = @intCast(event.xconfigure.width),
+            .height = @intCast(event.xconfigure.height),
         } },
-        c.ButtonPress => .{ .mouse = .{
-            .right = event.xbutton.button == 3,
-            .middle = event.xbutton.button == 2,
-            .left = event.xbutton.button == 1,
-            .forward = event.xbutton.button == 9,
-            .backward = event.xbutton.button == 8,
-            .x = @intCast(event.xbutton.x),
-            .y = @intCast(event.xbutton.y),
-        } },
+        c.ButtonPress => .{ .mouse = .{ .click = .{
+            .button = Event.Mouse.Button.fromX(event.xbutton.button) orelse return null,
+            .position = .{
+                .x = @intCast(event.xbutton.x),
+                .y = @intCast(event.xbutton.y),
+            },
+        } } },
+        c.MotionNotify => .{ .mouse = .{ .move = .{
+            .x = @intCast(event.xmotion.x),
+            .y = @intCast(event.xmotion.y),
+        } } },
         c.KeyPress => .{ .key_down = Event.Key.fromX(c.XLookupKeysym(&event.xkey, if (event.xkey.state & c.ShiftMask == 1) 1 else 0)) orelse return null },
         c.KeyRelease => .{ .key_up = Event.Key.fromX(c.XLookupKeysym(&event.xkey, if (event.xkey.state & c.ShiftMask == 1) 1 else 0)) orelse return null },
         else => null,
     };
 }
 
-pub fn getSize(self: @This()) [2]usize {
+pub fn getSize(self: @This()) root.Window.Size {
     var root_window: c.Window = undefined;
     var x: c_int = 0;
     var y: c_int = 0;
@@ -163,5 +173,5 @@ pub fn getSize(self: @This()) [2]usize {
     var depth: c_uint = 0;
 
     _ = c.XGetGeometry(self.display, self.window, &root_window, &x, &y, &width, &height, &border, &depth);
-    return .{ @intCast(width), @intCast(height) };
+    return .{ .width = @intCast(width), .height = @intCast(height) };
 }
