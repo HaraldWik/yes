@@ -5,7 +5,6 @@ pub fn main() !void {
     const window: yes.Window = try .open(.{
         .title = "Title",
         .size = .{ .width = 900, .height = 600 },
-        .resizable = false,
     });
     defer window.close();
 

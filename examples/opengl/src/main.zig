@@ -40,8 +40,8 @@ pub const fragment_source: [*:0]const u8 =
 pub fn main() !void {
     const window: yes.Window = try .open(.{
         .title = "Title",
-        .width = 900,
-        .height = 600,
+        .size = .{ .width = 900, .height = 600 },
+        .resizable = false,
         .api = .opengl, // Don't forget to set to OpenGL
     });
     defer window.close();
@@ -89,7 +89,7 @@ pub fn main() !void {
             switch (event) {
                 .close => break :main_loop,
                 .resize => |size| {
-                    const width, const height = size;
+                    const width, const height = size.toArray();
                     gl.draw.viewport(0, 0, width, height);
                 },
                 else => {},
