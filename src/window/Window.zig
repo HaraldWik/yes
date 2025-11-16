@@ -12,13 +12,13 @@ pub const Handle = switch (native.os) {
 };
 
 pub const Win32 = @import("Win32.zig");
-pub const X = @import("X.zig");
+pub const X11 = @import("X11.zig");
 pub const Wayland = @import("Wayland.zig");
 pub const Posix = union(Tag) {
-    x: X,
+    x11: X11,
     wayland: Wayland,
 
-    pub const Tag = enum { x, wayland };
+    pub const Tag = enum { x11, wayland };
 
     pub const session_type = "XDG_SESSION_TYPE";
 
@@ -29,7 +29,7 @@ pub const Posix = union(Tag) {
             return std.meta.stringToEnum(Tag, std.mem.span(arg)[identifier.len..]);
         }
         const session = std.posix.getenv(Posix.session_type) orelse "x11";
-        return if (std.mem.eql(u8, session, "wayland")) .wayland else .x;
+        return if (std.mem.eql(u8, session, "wayland")) .wayland else .x11;
     }
 };
 
@@ -74,9 +74,9 @@ pub fn open(config: Config) !@This() {
     return .{
         .handle = switch (native.os) {
             .windows => try .open(config),
-            else => switch (Posix.getSessionType() orelse .x) {
-                .x => .{ .x = try .open(config) },
-                .wayland => .{ .wayland = try .open(config) },
+            else => switch (Posix.getSessionType() orelse .x11) {
+                .x11, .wayland => .{ .x11 = try .open(config) },
+                // .wayland => .{ .wayland = try Posix.Wayland.open(config) },
             },
         },
     };

@@ -8,6 +8,10 @@
             .url = "git+https://github.com/marlersoft/zigwin32/#5587b16fa040573846a6bf531301f6206d31a6bf",
             .hash = "zigwin32-25.0.28-preview-AAAAAICM5AMResOGQnQ85mfe60TTOQeMtt7GRATUOKoP",
         },
+        .x11 = .{
+            .url = "git+https://github.com/mirror/libX11/#ff8706a5eae25b8bafce300527079f68a201d27f",
+            .hash = "N-V-__8AACyQxwDUvMZdHuuzwuP1mlGU6uroadqmQvBwevJX",
+        },
         .wayland = .{
             .url = "git+https://github.com/wayland-mirror/wayland/#1ab6b693b16e1d9734496fe60c8a6ed277e4dec3",
             .hash = "N-V-__8AACwsCAAIDGKG1kp0-KCtL2wz2a-dulrOlui702Jk",
