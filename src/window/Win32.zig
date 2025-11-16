@@ -191,7 +191,14 @@ pub fn poll(self: @This()) !?Event {
             std.debug.print("what\n", .{});
             return null;
         },
-        win32.WM_RBUTTONDOWN, win32.WM_MBUTTONDOWN, win32.WM_LBUTTONDOWN, win32.WM_XBUTTONDOWN => |button| .{ .mouse = .{ .click = .{
+        win32.WM_RBUTTONDOWN, win32.WM_MBUTTONDOWN, win32.WM_LBUTTONDOWN, win32.WM_XBUTTONDOWN => |button| .{ .mouse = .{ .click_down = .{
+            .button = Event.Mouse.Button.fromWin32(button, msg.wParam) orelse return null,
+            .position = .{
+                .x = @intCast(@as(u16, @truncate(@as(usize, @intCast(msg.lParam))))),
+                .y = @intCast(@as(u16, @truncate(@as(usize, @intCast(msg.lParam >> 16))))),
+            },
+        } } },
+        win32.WM_RBUTTONUP, win32.WM_MBUTTONUP, win32.WM_LBUTTONUP, win32.WM_XBUTTONUP => |button| .{ .mouse = .{ .click_up = .{
             .button = Event.Mouse.Button.fromWin32(button, msg.wParam) orelse return null,
             .position = .{
                 .x = @intCast(@as(u16, @truncate(@as(usize, @intCast(msg.lParam))))),

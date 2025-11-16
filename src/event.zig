@@ -1,6 +1,7 @@
 const std = @import("std");
 const native = @import("root.zig").native;
 const win32 = @import("root.zig").native.win32.everything;
+const x11 = @import("root.zig").native.x11;
 const Position = @import("root.zig").Window.Position;
 
 pub const Union = union(enum) {
@@ -11,8 +12,9 @@ pub const Union = union(enum) {
     key_up: Key,
 
     pub const Mouse = union(enum) {
-        click: Click,
         move: Position,
+        click_down: Click,
+        click_up: Click,
 
         pub const Click = struct {
             button: Button,
@@ -28,10 +30,10 @@ pub const Union = union(enum) {
 
             pub fn fromWin32(button: u32, wparam: usize) ?@This() {
                 return switch (button) {
-                    win32.WM_RBUTTONDOWN => .right,
-                    win32.WM_MBUTTONDOWN => .middle,
-                    win32.WM_LBUTTONDOWN => .left,
-                    win32.WM_XBUTTONDOWN => {
+                    win32.WM_RBUTTONDOWN, win32.WM_RBUTTONUP => .right,
+                    win32.WM_MBUTTONDOWN, win32.WM_MBUTTONUP => .middle,
+                    win32.WM_LBUTTONDOWN, win32.WM_LBUTTONUP => .left,
+                    win32.WM_XBUTTONDOWN, win32.WM_XBUTTONUP => {
                         const data: win32.MOUSEHOOKSTRUCTEX_MOUSE_DATA = @bitCast(@as(u32, @intCast(((wparam >> 16) & 0xFFFF))));
                         return if (std.meta.eql(data, win32.XBUTTON1)) .backward else if (std.meta.eql(data, win32.XBUTTON2)) .forward else null;
                     },
@@ -238,94 +240,94 @@ pub const Union = union(enum) {
             };
         }
 
-        pub fn fromX(key: native.x.KeySym) ?@This() {
+        pub fn fromX(key: x11.KeySym) ?@This() {
             return switch (key) {
-                native.x.XK_A, native.x.XK_a => .a,
-                native.x.XK_B, native.x.XK_b => .b,
-                native.x.XK_C, native.x.XK_c => .c,
-                native.x.XK_D, native.x.XK_d => .d,
-                native.x.XK_E, native.x.XK_e => .e,
-                native.x.XK_F, native.x.XK_f => .f,
-                native.x.XK_G, native.x.XK_g => .g,
-                native.x.XK_H, native.x.XK_h => .h,
-                native.x.XK_I, native.x.XK_i => .i,
-                native.x.XK_J, native.x.XK_j => .j,
-                native.x.XK_K, native.x.XK_k => .k,
-                native.x.XK_L, native.x.XK_l => .l,
-                native.x.XK_M, native.x.XK_m => .m,
-                native.x.XK_N, native.x.XK_n => .n,
-                native.x.XK_O, native.x.XK_o => .o,
-                native.x.XK_P, native.x.XK_p => .p,
-                native.x.XK_Q, native.x.XK_q => .q,
-                native.x.XK_R, native.x.XK_r => .r,
-                native.x.XK_S, native.x.XK_s => .s,
-                native.x.XK_T, native.x.XK_t => .t,
-                native.x.XK_U, native.x.XK_u => .u,
-                native.x.XK_V, native.x.XK_v => .v,
-                native.x.XK_W, native.x.XK_w => .w,
-                native.x.XK_X, native.x.XK_x => .x,
-                native.x.XK_Y, native.x.XK_y => .y,
-                native.x.XK_Z, native.x.XK_z => .z,
+                x11.XK_A, x11.XK_a => .a,
+                x11.XK_B, x11.XK_b => .b,
+                x11.XK_C, x11.XK_c => .c,
+                x11.XK_D, x11.XK_d => .d,
+                x11.XK_E, x11.XK_e => .e,
+                x11.XK_F, x11.XK_f => .f,
+                x11.XK_G, x11.XK_g => .g,
+                x11.XK_H, x11.XK_h => .h,
+                x11.XK_I, x11.XK_i => .i,
+                x11.XK_J, x11.XK_j => .j,
+                x11.XK_K, x11.XK_k => .k,
+                x11.XK_L, x11.XK_l => .l,
+                x11.XK_M, x11.XK_m => .m,
+                x11.XK_N, x11.XK_n => .n,
+                x11.XK_O, x11.XK_o => .o,
+                x11.XK_P, x11.XK_p => .p,
+                x11.XK_Q, x11.XK_q => .q,
+                x11.XK_R, x11.XK_r => .r,
+                x11.XK_S, x11.XK_s => .s,
+                x11.XK_T, x11.XK_t => .t,
+                x11.XK_U, x11.XK_u => .u,
+                x11.XK_V, x11.XK_v => .v,
+                x11.XK_W, x11.XK_w => .w,
+                x11.XK_X, x11.XK_x => .x,
+                x11.XK_Y, x11.XK_y => .y,
+                x11.XK_Z, x11.XK_z => .z,
 
-                native.x.XK_BackSpace => .backspace,
-                native.x.XK_Tab => .tab,
-                native.x.XK_Clear => .clear,
-                native.x.XK_Return => .enter,
-                native.x.XK_Escape => .escape,
-                native.x.XK_Delete => .delete,
+                x11.XK_BackSpace => .backspace,
+                x11.XK_Tab => .tab,
+                x11.XK_Clear => .clear,
+                x11.XK_Return => .enter,
+                x11.XK_Escape => .escape,
+                x11.XK_Delete => .delete,
 
                 // Modifiers
-                native.x.XK_Shift_L => .left_shift,
-                native.x.XK_Shift_R => .right_shift,
-                native.x.XK_Control_L => .left_ctrl,
-                native.x.XK_Control_R => .right_ctrl,
-                native.x.XK_Alt_L => .left_alt,
-                native.x.XK_Alt_R => .right_alt,
-                native.x.XK_Super_L => .left_super, // Windows / Command key
-                native.x.XK_Super_R => .right_super,
-                native.x.XK_Caps_Lock => .caps_lock,
+                x11.XK_Shift_L => .left_shift,
+                x11.XK_Shift_R => .right_shift,
+                x11.XK_Control_L => .left_ctrl,
+                x11.XK_Control_R => .right_ctrl,
+                x11.XK_Alt_L => .left_alt,
+                x11.XK_Alt_R => .right_alt,
+                x11.XK_Super_L => .left_super, // Windows / Command key
+                x11.XK_Super_R => .right_super,
+                x11.XK_Caps_Lock => .caps_lock,
 
                 // Navigation
-                native.x.XK_Up => .up,
-                native.x.XK_Down => .down,
-                native.x.XK_Left => .left,
-                native.x.XK_Right => .right,
-                native.x.XK_Home => .home,
-                native.x.XK_End => .end,
-                native.x.XK_Page_Up => .page_up,
-                native.x.XK_Page_Down => .page_down,
-                native.x.XK_Insert => .insert,
+                x11.XK_Up => .up,
+                x11.XK_Down => .down,
+                x11.XK_Left => .left,
+                x11.XK_Right => .right,
+                x11.XK_Home => .home,
+                x11.XK_End => .end,
+                x11.XK_Page_Up => .page_up,
+                x11.XK_Page_Down => .page_down,
+                x11.XK_Insert => .insert,
 
                 // Function keys
-                native.x.XK_F1 => .f1,
-                native.x.XK_F2 => .f2,
-                native.x.XK_F3 => .f3,
-                native.x.XK_F4 => .f4,
-                native.x.XK_F5 => .f5,
-                native.x.XK_F6 => .f6,
-                native.x.XK_F7 => .f7,
-                native.x.XK_F8 => .f8,
-                native.x.XK_F9 => .f9,
-                native.x.XK_F10 => .f10,
-                native.x.XK_F11 => .f11,
-                native.x.XK_F12 => .f12,
+                x11.XK_F1 => .f1,
+                x11.XK_F2 => .f2,
+                x11.XK_F3 => .f3,
+                x11.XK_F4 => .f4,
+                x11.XK_F5 => .f5,
+                x11.XK_F6 => .f6,
+                x11.XK_F7 => .f7,
+                x11.XK_F8 => .f8,
+                x11.XK_F9 => .f9,
+                x11.XK_F10 => .f10,
+                x11.XK_F11 => .f11,
+                x11.XK_F12 => .f12,
 
                 // Numpad
-                native.x.XK_KP_0 => .numpad_0,
-                native.x.XK_KP_1 => .numpad_1,
-                native.x.XK_KP_2 => .numpad_2,
-                native.x.XK_KP_3 => .numpad_3,
-                native.x.XK_KP_4 => .numpad_4,
-                native.x.XK_KP_5 => .numpad_5,
-                native.x.XK_KP_6 => .numpad_6,
-                native.x.XK_KP_7 => .numpad_7,
-                native.x.XK_KP_8 => .numpad_8,
-                native.x.XK_KP_9 => .numpad_9,
-                native.x.XK_KP_Add => .numpad_add,
-                native.x.XK_KP_Subtract => .numpad_subtract,
-                native.x.XK_KP_Multiply => .numpad_multiply,
-                native.x.XK_KP_Divide => .numpad_divide,
-                native.x.XK_KP_Decimal => .numpad_decimal,
+                x11.XK_KP_0 => .numpad_0,
+                x11.XK_KP_1 => .numpad_1,
+                x11.XK_KP_2 => .numpad_2,
+                x11.XK_KP_3 => .numpad_3,
+                x11.XK_KP_4 => .numpad_4,
+                x11.XK_KP_5 => .numpad_5,
+                x11.XK_KP_6 => .numpad_6,
+                x11.XK_KP_7 => .numpad_7,
+                x11.XK_KP_8 => .numpad_8,
+                x11.XK_KP_9 => .numpad_9,
+                x11.XK_KP_Add => .numpad_add,
+                x11.XK_KP_Subtract => .numpad_subtract,
+                x11.XK_KP_Multiply => .numpad_multiply,
+                x11.XK_KP_Divide => .numpad_divide,
+                x11.XK_KP_Decimal => .numpad_decimal,
                 else => std.enums.fromInt(@This(), key),
             };
         }

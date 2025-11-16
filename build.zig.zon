@@ -8,6 +8,10 @@
             .url = "git+https://github.com/marlersoft/zigwin32/#5587b16fa040573846a6bf531301f6206d31a6bf",
             .hash = "zigwin32-25.0.28-preview-AAAAAICM5AMResOGQnQ85mfe60TTOQeMtt7GRATUOKoP",
         },
+        .x11 = .{
+            .url = "git+https://github.com/mirror/libX11/#ff8706a5eae25b8bafce300527079f68a201d27f",
+            .hash = "N-V-__8AACyQxwDUvMZdHuuzwuP1mlGU6uroadqmQvBwevJX",
+        },
     },
     .paths = .{
         "build.zig",

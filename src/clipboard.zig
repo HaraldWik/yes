@@ -24,18 +24,18 @@ pub fn setAlloc(window: root.Window, allocator: std.mem.Allocator, text: []const
         },
         else => switch (window.handle) {
             .x => {
-                const clipboard = x.XInternAtom(window.handle.x.display, "CLIPBOARD", 0);
-                const utf8 = x.XInternAtom(window.handle.x.display, "UTF8_STRING", 0);
+                const clipboard = x.XInternAtom(window.handle.x11.display, "CLIPBOARD", 0);
+                const utf8 = x.XInternAtom(window.handle.x11.display, "UTF8_STRING", 0);
 
-                if (x.XSetSelectionOwner(window.handle.x.display, clipboard, window.handle.x.window, x.CurrentTime) == 0) return error.SetSelectionOwner;
+                if (x.XSetSelectionOwner(window.handle.x11.display, clipboard, window.handle.x11.window, x.CurrentTime) == 0) return error.SetSelectionOwner;
 
                 var event: x.XEvent = undefined;
                 while (true) {
-                    _ = x.XNextEvent(window.handle.x.display, &event);
+                    _ = x.XNextEvent(window.handle.x11.display, &event);
                     if (event.type == x.SelectionRequest) {
                         const request = &event.xselectionrequest;
                         _ = x.XChangeProperty(
-                            window.handle.x.display,
+                            window.handle.x11.display,
                             request.requestor,
                             request.property,
                             utf8,
@@ -55,8 +55,8 @@ pub fn setAlloc(window: root.Window, allocator: std.mem.Allocator, text: []const
                             .time = request.time,
                         };
 
-                        _ = x.XSendEvent(window.handle.x.display, request.requestor, 0, 0, @ptrCast(&selection));
-                        _ = x.XFlush(window.handle.x.display);
+                        _ = x.XSendEvent(window.handle.x11.display, request.requestor, 0, 0, @ptrCast(&selection));
+                        _ = x.XFlush(window.handle.x11.display);
                         break;
                     }
                 }
@@ -78,16 +78,16 @@ pub fn getAlloc(window: root.Window, allocator: std.mem.Allocator) ?[]u8 {
         },
         else => switch (window.handle) {
             .x => {
-                const clipboard = x.XInternAtom(window.handle.x.display, "CLIPBOARD", 0);
-                const utf8 = x.XInternAtom(window.handle.x.display, "UTF8_STRING", 0);
-                const property = x.XInternAtom(window.handle.x.display, "XSEL_DATA", 0);
+                const clipboard = x.XInternAtom(window.handle.x11.display, "CLIPBOARD", 0);
+                const utf8 = x.XInternAtom(window.handle.x11.display, "UTF8_STRING", 0);
+                const property = x.XInternAtom(window.handle.x11.display, "XSEL_DATA", 0);
 
                 // Request the selection
-                _ = x.XConvertSelection(window.handle.x.display, clipboard, utf8, property, window.handle.x.window, x.CurrentTime);
+                _ = x.XConvertSelection(window.handle.x11.display, clipboard, utf8, property, window.handle.x11.window, x.CurrentTime);
 
                 var event: x.XEvent = undefined;
                 while (true) {
-                    _ = x.XNextEvent(window.handle.x.display, &event);
+                    _ = x.XNextEvent(window.handle.x11.display, &event);
                     if (event.type == x.SelectionNotify) {
                         const sev = event.xselection;
                         if (sev.property == 0) return null; // conversion failed
@@ -98,7 +98,7 @@ pub fn getAlloc(window: root.Window, allocator: std.mem.Allocator) ?[]u8 {
                         var bytes_after: c_ulong = 0;
                         var text: ?[*]u8 = undefined;
 
-                        _ = x.XGetWindowProperty(window.handle.x.display, window.handle.x.window, property, 0, 4096, 0, utf8, &actual_type, &actual_format, &nitems, &bytes_after, &text);
+                        _ = x.XGetWindowProperty(window.handle.x11.display, window.handle.x11.window, property, 0, 4096, 0, utf8, &actual_type, &actual_format, &nitems, &bytes_after, &text);
 
                         return if (text) |t| t[0..@intCast(nitems)] else null;
                     }

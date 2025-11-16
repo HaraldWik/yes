@@ -11,12 +11,7 @@ pub const native = struct {
     pub const os = builtin.os.tag;
 
     pub const win32 = @import("win32");
-    pub const x = @cImport({ // TODO: Remove c import
-        @cInclude("X11/Xlib.h");
-        @cInclude("X11/Xutil.h");
-        @cInclude("X11/Xatom.h");
-        @cInclude("GL/glx.h");
-    });
+    pub const x11 = @import("x11");
     pub const wayland = @compileError("nothing here");
 };
 

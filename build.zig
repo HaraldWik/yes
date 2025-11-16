@@ -13,6 +13,18 @@ pub fn build(b: *std.Build) void {
 
     const zigwin32 = b.dependency("zigwin32", .{}).module("win32");
 
+    const x11 = b.addTranslateC(.{
+        .root_source_file = b.addWriteFiles().add("c.h",
+            \\#include <X11/Xlib.h>
+            \\#include <X11/Xutil.h>
+            \\#include <X11/Xatom.h>
+            \\#include <GL/glx.h>
+        ),
+        .target = target,
+        .optimize = optimize,
+    }).createModule();
+    x11.addIncludePath(b.dependency("x11", .{}).path("include/X11/"));
+
     // const xdg = b.addTranslateC(.{
     //     .root_source_file = if (target.result.os.tag != .windows) b.path("include/xdg-shell-client-protocol.h") else b.addWriteFiles().add("c.h", ""),
     //     .target = target,
@@ -29,7 +41,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .imports = &.{
             .{ .name = "win32", .module = zigwin32 },
-            // .{ .name = "xdg", .module = xdg },
+            .{ .name = "x11", .module = x11 },
         },
         .link_libc = true,
     });
