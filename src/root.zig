@@ -12,7 +12,7 @@ pub const native = struct {
 
     pub const win32 = @import("win32");
     pub const x11 = @import("x11");
-    pub const wayland = @compileError("nothing here");
+    pub const wayland = @import("wayland");
 };
 
 pub const Event = @import("event.zig").Union;

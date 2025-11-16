@@ -25,6 +25,17 @@ pub fn build(b: *std.Build) void {
     }).createModule();
     x11.addIncludePath(b.dependency("x11", .{}).path("include/X11/"));
 
+    const wayland = b.addTranslateC(.{
+        .root_source_file = b.addWriteFiles().add("c.h",
+            \\#include <wayland-client.h>
+            \\#include <wayland-egl.h>
+        ),
+        .target = target,
+        .optimize = optimize,
+    }).createModule();
+    wayland.addIncludePath(b.dependency("wayland", .{}).path("src/"));
+    wayland.addIncludePath(b.dependency("wayland", .{}).path("egl/"));
+
     // const xdg = b.addTranslateC(.{
     //     .root_source_file = if (target.result.os.tag != .windows) b.path("include/xdg-shell-client-protocol.h") else b.addWriteFiles().add("c.h", ""),
     //     .target = target,
@@ -35,6 +46,13 @@ pub fn build(b: *std.Build) void {
     //     xdg.addCSourceFile(.{ .file = b.path("include/xdg-shell-protocol.c") });
     // }
 
+    const egl = b.addTranslateC(.{
+        .root_source_file = b.dependency("egl", .{}).path("api/EGL/egl.h"),
+        .target = target,
+        .optimize = optimize,
+    }).createModule();
+    egl.addIncludePath(b.dependency("egl", .{}).path("api/"));
+
     const mod = b.addModule("yes", .{
         .root_source_file = b.path("src/root.zig"),
         .target = target,
@@ -42,6 +60,9 @@ pub fn build(b: *std.Build) void {
         .imports = &.{
             .{ .name = "win32", .module = zigwin32 },
             .{ .name = "x11", .module = x11 },
+            .{ .name = "wayland", .module = wayland },
+
+            .{ .name = "egl", .module = egl },
         },
         .link_libc = true,
     });
@@ -54,8 +75,8 @@ pub fn build(b: *std.Build) void {
             mod.linkSystemLibrary("opengl32", .{});
         },
         else => {
-            mod.linkSystemLibrary("glx", .{});
             mod.linkSystemLibrary("X11", .{});
+            mod.linkSystemLibrary("glx", .{});
 
             mod.linkSystemLibrary("wayland-client", .{});
             if (opengl) {

@@ -16,6 +16,11 @@
             .url = "git+https://github.com/wayland-mirror/wayland/#1ab6b693b16e1d9734496fe60c8a6ed277e4dec3",
             .hash = "N-V-__8AACwsCAAIDGKG1kp0-KCtL2wz2a-dulrOlui702Jk",
         },
+
+        .egl = .{
+            .url = "git+https://github.com/KhronosGroup/EGL-Registry/#3ae2b7c48690d2ce13cc6db3db02dfc0572be65e",
+            .hash = "N-V-__8AAMlebQAc6dRDTEIyEn_i5KeO8qNg3YdK_Sg1KgDT",
+        },
     },
     .paths = .{
         "build.zig",

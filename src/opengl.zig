@@ -11,13 +11,7 @@ pub const glx = struct {
     extern fn glXGetProcAddress(name: [*:0]const u8) ?Proc;
     extern fn glXSwapBuffers(display: *native.x11.Display, drawable: Drawable) void;
 };
-pub const egl = struct {
-    pub const FALSE = 0;
-    extern fn eglGetProcAddress(name: [*:0]const u8) ?Proc;
-    extern fn eglSwapBuffers(display: *anyopaque, surface: *anyopaque) c_uint;
-    extern fn eglSwapInterval(display: *anyopaque, interval: c_int) i32;
-    extern fn eglGetError() i32;
-};
+pub const egl = @import("egl");
 
 pub const APIENTRY: std.builtin.CallingConvention = if (builtin.os.tag == .windows) .winapi else .c;
 
