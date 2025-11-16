@@ -128,12 +128,6 @@ pub fn getSize(self: @This()) root.Window.Size {
     return .{ .width = 0, .height = 0 };
 }
 
-pub fn isKeyDown(self: @This(), key: root.Key) bool {
-    _ = self;
-    _ = key;
-    return false;
-}
-
 fn registryGlobal(compositor: *wl.wl_compositor, registry: *wl.wl_registry, name: u32, interface: [*:0]const u8, version: u32) callconv(.c) void {
     if (std.mem.eql(u8, interface, wl.wl_compositor_interface.name))
         compositor.* = wl.wl_registry_bind(registry, name, &wl.wl_compositor_interface, version);

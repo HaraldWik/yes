@@ -24,11 +24,10 @@ pub fn build(b: *std.Build) void {
 
     const wayland = b.addTranslateC(.{
         .root_source_file = b.addWriteFiles().add("wayland.h",
-            // \\#include <wayland-client.h>
             \\#include <wayland-client.h>
-            \\#include <wayland-egl.h>
-            \\#include <EGL/egl.h>
-            \\#include <xdg-shell-client-protocol.h>
+            // \\#include <wayland-egl.h>
+            // \\#include <EGL/egl.h>
+            // \\#include <xdg-shell-client-protocol.h>
         ),
         .target = target,
         .optimize = optimize,
