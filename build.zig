@@ -61,13 +61,16 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/root.zig"),
         .target = target,
         .optimize = optimize,
-        .imports = &.{
-            .{ .name = "win32", .module = zigwin32 },
-            .{ .name = "x11", .module = x11 },
-            .{ .name = "wayland", .module = wayland },
-            .{ .name = "xdg", .module = xdg },
-
-            .{ .name = "egl", .module = egl },
+        .imports = switch (target.result.os.tag) {
+            .windows => &.{
+                .{ .name = "win32", .module = zigwin32 },
+            },
+            else => &.{
+                .{ .name = "x11", .module = x11 },
+                .{ .name = "wayland", .module = wayland },
+                .{ .name = "xdg", .module = xdg },
+                .{ .name = "egl", .module = egl },
+            },
         },
         .link_libc = true,
     });
@@ -87,7 +90,6 @@ pub fn build(b: *std.Build) void {
             if (opengl) {
                 mod.linkSystemLibrary("wayland-egl", .{});
                 mod.linkSystemLibrary("egl", .{});
-                mod.linkSystemLibrary("GLESv2", .{});
             }
         },
     }
