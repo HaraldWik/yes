@@ -75,8 +75,8 @@ pub fn open(config: Config) !@This() {
         .handle = switch (native.os) {
             .windows => try .open(config),
             else => switch (Posix.getSessionType() orelse .x11) {
-                .x11, .wayland => .{ .x11 = try .open(config) },
-                // .wayland => .{ .wayland = try Posix.Wayland.open(config) },
+                .x11 => .{ .x11 = try .open(config) },
+                .wayland => .{ .wayland = try .open(config) },
             },
         },
     };

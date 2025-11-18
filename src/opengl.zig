@@ -30,7 +30,7 @@ pub fn swapBuffers(window: root.Window) !void {
         else => switch (window.handle) {
             .x11 => glx.glXSwapBuffers(@ptrCast(window.handle.x11.display), window.handle.x11.window),
             .wayland => {
-                if (egl.eglSwapBuffers(window.handle.wayland.api.opengl.display, window.handle.wayland.api.opengl.surface) == egl.FALSE) return error.EglSwapBuffers;
+                if (egl.eglSwapBuffers(window.handle.wayland.api.opengl.display, window.handle.wayland.api.opengl.surface) != egl.EGL_TRUE) return error.EglSwapBuffers;
                 root.Window.Wayland.wl.wl_surface_commit(window.handle.wayland.surface);
                 if (root.Window.Wayland.wl.wl_display_flush(window.handle.wayland.display) < 0) return error.FlushDisplay;
             },
@@ -46,7 +46,7 @@ pub fn swapInterval(window: root.Window, interval: i32) !void {
                 const glXSwapIntervalEXT: glx.PFNGLXSWAPINTERVALEXT = @ptrCast(glx.glXGetProcAddress("glXSwapIntervalEXT") orelse return error.SwapIntervalLoad);
                 glXSwapIntervalEXT(window.handle.x11.display, window.handle.x11.window, @intCast(interval));
             },
-            .wayland => if (egl.eglSwapInterval(window.handle.wayland.display, @intCast(interval)) == egl.FALSE) return error.SwapInterval,
+            .wayland => if (egl.eglSwapInterval(window.handle.wayland.api.opengl.display, @intCast(interval)) != egl.EGL_TRUE) return error.SwapInterval,
         },
     }
 }

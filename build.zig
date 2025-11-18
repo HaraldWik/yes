@@ -26,7 +26,7 @@ pub fn build(b: *std.Build) void {
     x11.addIncludePath(b.dependency("x11", .{}).path("include/X11/"));
 
     const wayland = b.addTranslateC(.{
-        .root_source_file = b.addWriteFiles().add("c.h",
+        .root_source_file = b.addWriteFiles().add("wayland.h",
             \\#include <wayland-client.h>
             \\#include <wayland-egl.h>
         ),
@@ -36,20 +36,24 @@ pub fn build(b: *std.Build) void {
     wayland.addIncludePath(b.dependency("wayland", .{}).path("src/"));
     wayland.addIncludePath(b.dependency("wayland", .{}).path("egl/"));
 
-    // const xdg = b.addTranslateC(.{
-    //     .root_source_file = if (target.result.os.tag != .windows) b.path("include/xdg-shell-client-protocol.h") else b.addWriteFiles().add("c.h", ""),
-    //     .target = target,
-    //     .optimize = optimize,
-    // }).createModule();
-    // if (target.result.os.tag != .windows) {
-    //     xdg.linkSystemLibrary("wayland-client", .{});
-    //     xdg.addCSourceFile(.{ .file = b.path("include/xdg-shell-protocol.c") });
-    // }
+    const xdg_scanner_h = b.addSystemCommand(&.{
+        "wayland-scanner", "client-header", "/usr/share/wayland-protocols/stable/xdg-shell/xdg-shell.xml",
+    });
+    const xdg_scanner_c = b.addSystemCommand(&.{
+        "wayland-scanner", "private-code", "/usr/share/wayland-protocols/stable/xdg-shell/xdg-shell.xml",
+    });
+    const xdg = b.addTranslateC(.{
+        .root_source_file = xdg_scanner_h.addOutputFileArg("xdg-shell-client-protocol.h"),
+        .target = target,
+        .optimize = optimize,
+    }).createModule();
+    xdg.addCSourceFile(.{ .file = xdg_scanner_c.addOutputFileArg("xdg-shell-protocol.c") });
 
     const egl = b.addTranslateC(.{
         .root_source_file = b.dependency("egl", .{}).path("api/EGL/egl.h"),
         .target = target,
         .optimize = optimize,
+        .link_libc = true,
     }).createModule();
     egl.addIncludePath(b.dependency("egl", .{}).path("api/"));
 
@@ -61,6 +65,7 @@ pub fn build(b: *std.Build) void {
             .{ .name = "win32", .module = zigwin32 },
             .{ .name = "x11", .module = x11 },
             .{ .name = "wayland", .module = wayland },
+            .{ .name = "xdg", .module = xdg },
 
             .{ .name = "egl", .module = egl },
         },
