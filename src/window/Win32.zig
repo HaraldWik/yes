@@ -1,6 +1,6 @@
 const std = @import("std");
-const root = @import("../root.zig");
 const win32 = @import("../root.zig").native.win32.everything;
+const Window = @import("Window.zig");
 const Event = @import("../event.zig").Union;
 // zig build -Dtarget=x86_64-windows && wine zig-out/bin/example.exe
 
@@ -8,7 +8,7 @@ instance: win32.HINSTANCE,
 hwnd: win32.HWND,
 api: GraphicsApi = .none,
 
-pub const GraphicsApi = union(root.GraphicsApi) {
+pub const GraphicsApi = union(Window.GraphicsApi.Tag) {
     opengl: OpenGL,
     vulkan: Vulkan,
     none: void,
@@ -32,7 +32,7 @@ pub const GraphicsApi = union(root.GraphicsApi) {
     };
 };
 
-pub fn open(config: root.Window.Config) !@This() {
+pub fn open(config: Window.Config) !@This() {
     const instance = win32.GetModuleHandleW(null) orelse return error.GetInstanceHandle;
 
     var class: win32.WNDCLASSEXW = std.mem.zeroInit(win32.WNDCLASSEXW, .{
@@ -94,8 +94,7 @@ pub fn open(config: root.Window.Config) !@This() {
             if (!win32.SUCCEEDED(win32.ReleaseDC(hwnd, dc))) return reportErr(error.WglReleaseDC);
 
             var wgl: GraphicsApi.OpenGL.Wgl = undefined;
-            const getExtensionsStringARB_ptr = win32.wglGetProcAddress("wglGetExtensionsStringARB") orelse return reportErr(error.WglGetProcAddress);
-            const getExtensionsStringARB: *const fn (win32.HDC) callconv(.winapi) ?[*:0]const u8 = @ptrCast(getExtensionsStringARB_ptr);
+            const getExtensionsStringARB: *const fn (win32.HDC) callconv(.winapi) ?[*:0]const u8 = @ptrCast(win32.wglGetProcAddress("wglGetExtensionsStringARB") orelse return reportErr(error.WglGetProcAddress));
 
             if (getExtensionsStringARB(dc)) |extensions| {
                 var it = std.mem.tokenizeScalar(u8, std.mem.sliceTo(extensions, 0), ' ');
@@ -159,10 +158,10 @@ pub fn open(config: root.Window.Config) !@This() {
 
 pub fn close(self: @This()) void {
     switch (self.api) {
-        .opengl => {
-            _ = win32.wglDeleteContext(self.api.opengl.ctx);
+        .opengl => |opengl| {
+            _ = win32.wglDeleteContext(opengl.ctx);
         },
-        .vulkan => _ = win32.FreeLibrary(self.api.vulkan.instance),
+        .vulkan => |vulkan| _ = win32.FreeLibrary(vulkan.instance),
         .none => {},
     }
     _ = win32.DestroyWindow(self.hwnd);
@@ -215,7 +214,7 @@ pub fn poll(self: @This()) !?Event {
     };
 }
 
-pub fn getSize(self: @This()) root.Window.Size {
+pub fn getSize(self: @This()) Window.Size {
     var rect: win32.RECT = undefined;
     _ = win32.GetClientRect(self.hwnd, &rect);
     return .{ .width = @intCast(rect.right - rect.left), .height = @intCast(rect.bottom - rect.top) };

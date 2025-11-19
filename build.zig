@@ -4,13 +4,6 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const opengl = b.option(bool, "opengl", "OpenGL") orelse true;
-    const vulkan = b.option(bool, "vulkan", "Vulkan") orelse true;
-
-    const options = b.addOptions();
-    options.addOption(@TypeOf(opengl), "opengl", opengl);
-    options.addOption(@TypeOf(vulkan), "vulkan", vulkan);
-
     const zigwin32 = b.dependency("zigwin32", .{}).module("win32");
 
     const x11 = b.addTranslateC(.{
@@ -49,6 +42,26 @@ pub fn build(b: *std.Build) void {
     }).createModule();
     xdg.addCSourceFile(.{ .file = xdg_scanner_c.addOutputFileArg("xdg-shell-protocol.c") });
 
+    const xkbcommon = b.dependency("xkbcommon", .{
+        .target = target,
+        .optimize = optimize,
+
+        .@"xkb-config-root" = "/usr/share/X11/xkb",
+        .@"x-locale-root" = "/usr/share/X11/locale",
+    });
+    const xkbcommon_headers = b.addTranslateC(.{
+        .root_source_file =
+        // b.dependency("xkbcommon_headers", .{}).path("include/xkbcommon/xkbcommon.h"),
+        b.addWriteFiles().add("xkb.c",
+            \\#include <xkbcommon/xkbcommon.h>
+            \\#include <xkbcommon/xkbcommon-keysyms.h>
+        ),
+        .target = target,
+        .optimize = optimize,
+    }).createModule();
+    xkbcommon_headers.addIncludePath(b.dependency("xkbcommon_headers", .{}).path("include/"));
+    xkbcommon_headers.linkLibrary(xkbcommon.artifact("xkbcommon"));
+
     const egl = b.addTranslateC(.{
         .root_source_file = b.dependency("egl", .{}).path("api/EGL/egl.h"),
         .target = target,
@@ -66,15 +79,16 @@ pub fn build(b: *std.Build) void {
                 .{ .name = "win32", .module = zigwin32 },
             },
             else => &.{
+                .{ .name = "win32", .module = zigwin32 }, // just for lsp
                 .{ .name = "x11", .module = x11 },
                 .{ .name = "wayland", .module = wayland },
                 .{ .name = "xdg", .module = xdg },
+                .{ .name = "xkb", .module = xkbcommon_headers },
                 .{ .name = "egl", .module = egl },
             },
         },
         .link_libc = true,
     });
-    mod.addOptions("build_options", options);
 
     switch (target.result.os.tag) {
         .windows => {
@@ -87,10 +101,8 @@ pub fn build(b: *std.Build) void {
             mod.linkSystemLibrary("glx", .{});
 
             mod.linkSystemLibrary("wayland-client", .{});
-            if (opengl) {
-                mod.linkSystemLibrary("wayland-egl", .{});
-                mod.linkSystemLibrary("egl", .{});
-            }
+            mod.linkSystemLibrary("wayland-egl", .{});
+            mod.linkSystemLibrary("egl", .{});
         },
     }
 }

@@ -1,13 +1,14 @@
 const std = @import("std");
 const root = @import("../root.zig");
 const x11 = @import("../root.zig").native.x11;
+const Window = @import("Window.zig");
 const Event = @import("../event.zig").Union;
 
 window: x11.Window,
 display: *x11.Display,
 wm_delete_window: x11.Atom,
 
-pub fn open(config: root.Window.Config) !@This() {
+pub fn open(config: Window.Config) !@This() {
     const display: *x11.Display = x11.XOpenDisplay(null) orelse return error.OpenDisplay;
     const screen = x11.DefaultScreen(display);
 
@@ -166,13 +167,13 @@ pub fn poll(self: @This()) ?Event {
             .x = @intCast(event.xmotion.x),
             .y = @intCast(event.xmotion.y),
         } } },
-        x11.KeyPress => .{ .key_down = Event.Key.fromX(x11.XLookupKeysym(&event.xkey, if (event.xkey.state & x11.ShiftMask == 1) 1 else 0)) orelse return null },
-        x11.KeyRelease => .{ .key_up = Event.Key.fromX(x11.XLookupKeysym(&event.xkey, if (event.xkey.state & x11.ShiftMask == 1) 1 else 0)) orelse return null },
+        x11.KeyPress => .{ .key_down = Event.Key.fromXkb(x11.XLookupKeysym(&event.xkey, if (event.xkey.state & x11.ShiftMask == 1) 1 else 0)) orelse return null },
+        x11.KeyRelease => .{ .key_up = Event.Key.fromXkb(x11.XLookupKeysym(&event.xkey, if (event.xkey.state & x11.ShiftMask == 1) 1 else 0)) orelse return null },
         else => null,
     };
 }
 
-pub fn getSize(self: @This()) root.Window.Size {
+pub fn getSize(self: @This()) Window.Size {
     var root_window: x11.Window = undefined;
     var x: c_int = 0;
     var y: c_int = 0;

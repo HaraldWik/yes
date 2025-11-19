@@ -17,9 +17,3 @@ pub const native = struct {
 
 pub const Event = @import("event.zig").Union;
 pub const Window = @import("window/Window.zig");
-
-pub const GraphicsApi = enum {
-    opengl,
-    vulkan,
-    none,
-};

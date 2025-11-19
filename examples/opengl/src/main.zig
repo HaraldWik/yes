@@ -42,7 +42,7 @@ pub fn main() !void {
         .title = "Title",
         .size = .{ .width = 900, .height = 600 },
         // .resizable = false,
-        .api = .opengl, // Don't forget to set to OpenGL
+        .api = .{ .opengl = .{} }, // Don't forget to set to OpenGL
     });
     defer window.close();
 
@@ -84,22 +84,30 @@ pub fn main() !void {
 
     try yes.opengl.swapInterval(window, 1);
 
+    var color: [4]f32 = .{ 0.1, 0.5, 0.3, 1.0 };
+    const color_step = 0.05;
+
     main_loop: while (true) {
         while (try window.poll()) |event| {
             switch (event) {
                 .close => break :main_loop,
                 .resize => |size| {
-                    const width, const height = size.toArray();
-                    gl.draw.viewport(0, 0, width, height);
+                    std.debug.print("Resize: {d}x{d}\n", .{ size.width, size.height });
+                    gl.draw.viewport(0, 0, size.width, size.height);
+                },
+                .key_up => |key| switch (key) {
+                    .a => color[1] = @mod(color[1] + color_step, 1.0),
+                    .d => color[1] = @mod(color[1] - color_step, 1.0),
+                    .w => color[2] = @mod(color[2] + color_step, 1.0),
+                    .s => color[2] = @mod(color[2] - color_step, 1.0),
+                    else => {},
                 },
                 else => {},
             }
         }
 
         gl.clear.buffer(.{ .color = true });
-        gl.clear.color(0.1, 0.5, 0.3, 1.0);
-
-        gl.clear.color(0.1, 0.4, 0.5, 1.0);
+        gl.clear.color(color[0], color[1], color[2], color[3]);
 
         program.use();
         vao.bind();

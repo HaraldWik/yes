@@ -1,8 +1,8 @@
 const std = @import("std");
 const builtin = @import("builtin");
-const build_options = @import("build_options");
 const root = @import("../root.zig");
 const native = @import("../root.zig").native;
+const Event = @import("../event.zig").Union;
 
 handle: Handle,
 
@@ -58,19 +58,35 @@ pub const Position = struct {
     }
 };
 
+pub const GraphicsApi = union(Tag) {
+    opengl: Opengl,
+    vulkan: Vulkan,
+    none: void,
+
+    pub const Tag = enum {
+        opengl,
+        vulkan,
+        none,
+    };
+
+    pub const Opengl = struct {
+        version: std.SemanticVersion = .{ .major = 4, .minor = 6, .patch = 0 },
+    };
+    pub const Vulkan = struct {
+        version: std.SemanticVersion = .{ .major = 1, .minor = 3, .patch = 0 },
+    };
+};
+
 pub const Config = struct {
     title: [:0]const u8,
     size: Size = .{ .width = 420, .height = 260 },
     min_size: ?Size = null,
     max_size: ?Size = null,
     resizable: bool = true,
-    api: root.GraphicsApi = .none,
+    api: GraphicsApi = .none,
 };
 
 pub fn open(config: Config) !@This() {
-    if (config.api == .opengl and !build_options.opengl) @compileError("opengl is not enabled");
-    if (config.api == .vulkan and !build_options.vulkan) @compileError("vulkan is not enabled");
-
     return .{
         .handle = switch (native.os) {
             .windows => try .open(config),
@@ -91,7 +107,7 @@ pub fn close(self: @This()) void {
     }
 }
 
-pub fn poll(self: @This()) !?root.Event {
+pub fn poll(self: @This()) !?Event {
     return switch (native.os) {
         .windows => try self.handle.poll(),
         else => switch (self.handle) {

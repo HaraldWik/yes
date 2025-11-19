@@ -1,9 +1,11 @@
 const std = @import("std");
 const root = @import("../root.zig");
+const Window = @import("Window.zig");
+const Event = @import("../event.zig").Union;
 pub const wl = @import("wayland");
 pub const xdg = @import("xdg");
+pub const xkb = @import("xkb");
 pub const egl = @import("egl");
-// https://nilsbrause.github.io/waylandpp_docs/egl_8cpp-example.html
 
 display: *wl.wl_display,
 compositor: *wl.wl_compositor,
@@ -14,7 +16,10 @@ xdg_surface: *xdg.xdg_surface,
 xdg_toplevel: *xdg.xdg_toplevel,
 api: GraphicsApi,
 
-pub const GraphicsApi = union(root.GraphicsApi) {
+var event_buffer: [128]Event = undefined;
+var events: std.Deque(Event) = .empty;
+
+pub const GraphicsApi = union(Window.GraphicsApi.Tag) {
     opengl: OpenGL,
     vulkan: Vulkan,
     none: void,
@@ -29,34 +34,9 @@ pub const GraphicsApi = union(root.GraphicsApi) {
     pub const Vulkan = struct {};
 };
 
-const Registry = struct {
-    compositor: ?*wl.wl_compositor,
-    xdg_wm_base: ?*xdg.xdg_wm_base,
-    seat: ?*wl.wl_seat,
+pub fn open(config: Window.Config) !@This() {
+    events = .initBuffer(&event_buffer);
 
-    fn callback(self: *@This(), registry: *wl.wl_registry, name: u32, interfacez: [*:0]const u8, version: u32) callconv(.c) void {
-        const interface = std.mem.span(interfacez);
-
-        if (std.mem.eql(u8, interface, std.mem.span(wl.wl_compositor_interface.name))) {
-            self.compositor = @ptrCast(wl.wl_registry_bind(registry, name, &wl.wl_compositor_interface, version));
-        } else if (std.mem.eql(u8, interface, std.mem.span(xdg.xdg_wm_base_interface.name))) {
-            self.xdg_wm_base = @ptrCast(wl.wl_registry_bind(registry, name, @ptrCast(&xdg.xdg_wm_base_interface), version));
-        } else if (std.mem.eql(u8, interface, std.mem.span(wl.wl_seat_interface.name))) {
-            self.seat = @ptrCast(wl.wl_registry_bind(registry, name, &wl.wl_seat_interface, version));
-        }
-    }
-};
-
-const Configure = struct {
-    done: bool = false,
-    serial: u32 = undefined,
-    fn callback(self: *@This(), xdg_surface: *xdg.xdg_surface, serial: u32) callconv(.c) void {
-        xdg.xdg_surface_ack_configure(xdg_surface, serial);
-        self.done = true;
-    }
-};
-
-pub fn open(config: root.Window.Config) !@This() {
     const display: *wl.wl_display = wl.wl_display_connect(null) orelse return error.ConnectDisplay;
     const compositor: *wl.wl_compositor, const xdg_wm_base: *xdg.xdg_wm_base, const seat: *wl.wl_seat = registry: {
         var data: Registry = undefined;
@@ -70,28 +50,26 @@ pub fn open(config: root.Window.Config) !@This() {
         };
     };
 
-    //  wl.wl_seat_get_keyboard(arg_wl_seat_1: ?*struct_wl_seat)
+    var keyboard: Keyboard = undefined;
+    try keyboard.addListener(seat);
 
     const xdg_wm_base_listener = xdg.xdg_wm_base_listener{
         .ping = xdgWmBasePing,
     };
-    _ = xdg.xdg_wm_base_add_listener(xdg_wm_base, &xdg_wm_base_listener, null);
+    if (xdg.xdg_wm_base_add_listener(xdg_wm_base, &xdg_wm_base_listener, null) != 0) return error.AddXdgBaseListener;
 
     const surface: *wl.wl_surface = wl.wl_compositor_create_surface(compositor) orelse return error.CreateSurface;
-    const xdg_surface: *xdg.xdg_surface = xdg.xdg_wm_base_get_xdg_surface(xdg_wm_base, @ptrCast(surface)) orelse return error.XdgWmBaseGetXdgSurface;
+    const xdg_surface: *xdg.xdg_surface = xdg.xdg_wm_base_get_xdg_surface(xdg_wm_base, @ptrCast(surface)) orelse return error.XdgBaseGetXdgSurface;
 
     var configure: Configure = .{};
     _ = xdg.xdg_surface_add_listener(xdg_surface, &xdg.xdg_surface_listener{ .configure = @ptrCast(&Configure.callback) }, &configure);
 
     const xdg_toplevel: *xdg.xdg_toplevel = xdg.xdg_surface_get_toplevel(xdg_surface) orelse return error.XdgSurfaceGetToplevel;
-    const nothing: *anyopaque = undefined;
-    if (xdg.xdg_toplevel_add_listener(xdg_toplevel, Toplevel.listener, nothing) != 0) return error.XdgToplevelAddListener;
+    if (xdg.xdg_toplevel_add_listener(xdg_toplevel, Toplevel.listener, null) != 0) return error.XdgToplevelAddListener;
     xdg.xdg_toplevel_set_title(xdg_toplevel, config.title.ptr);
 
     wl.wl_surface_commit(surface);
-
     while (!configure.done) _ = wl.wl_display_dispatch(display);
-
     wl.wl_surface_commit(surface);
 
     const api: GraphicsApi = api: switch (config.api) {
@@ -159,12 +137,12 @@ pub fn open(config: root.Window.Config) !@This() {
 
 pub fn close(self: @This()) void {
     switch (self.api) {
-        .opengl => |api| {
-            _ = egl.eglMakeCurrent(api.display, egl.EGL_NO_SURFACE, egl.EGL_NO_SURFACE, egl.EGL_NO_CONTEXT);
-            _ = egl.eglDestroySurface(api.display, api.surface);
-            wl.wl_egl_window_destroy(api.window);
-            _ = egl.eglDestroyContext(api.display, api.context);
-            _ = egl.eglTerminate(api.display);
+        .opengl => |opengl| {
+            _ = egl.eglMakeCurrent(opengl.display, egl.EGL_NO_SURFACE, egl.EGL_NO_SURFACE, egl.EGL_NO_CONTEXT);
+            _ = egl.eglDestroySurface(opengl.display, opengl.surface);
+            wl.wl_egl_window_destroy(opengl.window);
+            _ = egl.eglDestroyContext(opengl.display, opengl.context);
+            _ = egl.eglTerminate(opengl.display);
         },
         .vulkan => {},
         .none => {},
@@ -176,39 +154,63 @@ pub fn close(self: @This()) void {
     wl.wl_display_disconnect(self.display);
 }
 
-pub fn poll(self: @This()) ?root.Event {
-    // Dispatch any already-queued events first
-    while (wl.wl_display_prepare_read(self.display) != 0) {
-        _ = wl.wl_display_dispatch_pending(self.display);
-    }
-
+pub fn poll(self: @This()) ?Event {
+    while (wl.wl_display_prepare_read(self.display) != 0) _ = wl.wl_display_dispatch_pending(self.display);
     _ = wl.wl_display_flush(self.display);
 
-    // Use poll() with timeout=0 for non-blocking check
-    const pfd: std.posix.pollfd = .{
+    var pfd: std.posix.pollfd = .{
         .fd = wl.wl_display_get_fd(self.display),
         .events = std.posix.POLL.IN,
         .revents = 0,
     };
 
-    var fds = [_]std.posix.pollfd{pfd};
-    const ret = std.posix.poll(&fds, 0) catch 0;
-
-    if (ret > 0) {
+    if (std.posix.poll(@ptrCast(&pfd), 0) catch 0 > 0) {
         _ = wl.wl_display_read_events(self.display);
         _ = wl.wl_display_dispatch_pending(self.display);
-    } else {
-        wl.wl_display_cancel_read(self.display);
-    }
+    } else wl.wl_display_cancel_read(self.display);
 
-    if (!running) return .close;
-    return null;
+    const event = events.popFront() orelse return null;
+    switch (event) {
+        .resize => |size| switch (self.api) {
+            .opengl => |gl| wl.wl_egl_window_resize(gl.window, @intCast(size.width), @intCast(size.height), 0, 0),
+            else => {},
+        },
+        else => {},
+    }
+    return event;
 }
 
-pub fn getSize(self: @This()) root.Window.Size {
+pub fn getSize(self: @This()) Window.Size {
     _ = self;
     return .{ .width = 0, .height = 0 };
 }
+
+const Registry = struct {
+    compositor: ?*wl.wl_compositor,
+    xdg_wm_base: ?*xdg.xdg_wm_base,
+    seat: ?*wl.wl_seat,
+
+    fn callback(self: *@This(), registry: *wl.wl_registry, name: u32, interfacez: [*:0]const u8, version: u32) callconv(.c) void {
+        const interface = std.mem.span(interfacez);
+
+        if (std.mem.eql(u8, interface, std.mem.span(wl.wl_compositor_interface.name))) {
+            self.compositor = @ptrCast(wl.wl_registry_bind(registry, name, &wl.wl_compositor_interface, version));
+        } else if (std.mem.eql(u8, interface, std.mem.span(xdg.xdg_wm_base_interface.name))) {
+            self.xdg_wm_base = @ptrCast(wl.wl_registry_bind(registry, name, @ptrCast(&xdg.xdg_wm_base_interface), version));
+        } else if (std.mem.eql(u8, interface, std.mem.span(wl.wl_seat_interface.name))) {
+            self.seat = @ptrCast(wl.wl_registry_bind(registry, name, &wl.wl_seat_interface, version));
+        }
+    }
+};
+
+const Configure = struct {
+    done: bool = false,
+    serial: u32 = undefined,
+    fn callback(self: *@This(), xdg_surface: *xdg.xdg_surface, serial: u32) callconv(.c) void {
+        xdg.xdg_surface_ack_configure(xdg_surface, serial);
+        self.done = true;
+    }
+};
 
 pub const Toplevel = struct {
     pub const listener: *const xdg.xdg_toplevel_listener = &.{
@@ -218,17 +220,12 @@ pub const Toplevel = struct {
         .wm_capabilities = capabilities,
     };
 
-    pub fn configure(data: ?*anyopaque, toplevel: ?*xdg.xdg_toplevel, width: i32, height: i32, states: [*c]xdg.wl_array) callconv(.c) void {
-        _ = data;
-        _ = toplevel;
-        std.debug.print("{d}x{d}\n", .{ width, height });
-        _ = states;
+    pub fn configure(_: ?*anyopaque, _: ?*xdg.xdg_toplevel, width: i32, height: i32, _: [*c]xdg.wl_array) callconv(.c) void {
+        events.pushBackAssumeCapacity(.{ .resize = .{ .width = @intCast(width), .height = @intCast(height) } });
     }
 
-    pub fn close_(data: ?*anyopaque, toplevel: ?*xdg.xdg_toplevel) callconv(.c) void {
-        _ = data;
-        _ = toplevel;
-        running = false;
+    pub fn close_(_: ?*anyopaque, _: ?*xdg.xdg_toplevel) callconv(.c) void {
+        events.pushFrontAssumeCapacity(.close);
     }
 
     pub fn configureBounds(data: ?*anyopaque, toplevel: ?*xdg.xdg_toplevel, width: i32, height: i32) callconv(.c) void {
@@ -245,9 +242,78 @@ pub const Toplevel = struct {
     }
 };
 
-var running: bool = true; // TODO: remove
-
 fn xdgWmBasePing(data: ?*anyopaque, xdg_wm_base: ?*xdg.xdg_wm_base, serial: u32) callconv(.c) void {
     _ = data;
     xdg.xdg_wm_base_pong(xdg_wm_base, serial);
 }
+pub const Keyboard = struct {
+    handle: *wl.wl_keyboard = undefined,
+    xkb_ctx: *xkb.xkb_context = undefined,
+    xkb_keymap: ?*xkb.xkb_keymap = null,
+    xkb_state: ?*xkb.xkb_state = null,
+
+    pub const listener: *const wl.wl_keyboard_listener = &.{
+        .keymap = @ptrCast(&keymap),
+        .enter = @ptrCast(&enter),
+        .leave = @ptrCast(&leave),
+        .key = @ptrCast(&key),
+        .modifiers = @ptrCast(&modifiers),
+        .repeat_info = @ptrCast(&repeatInfo),
+    };
+
+    pub fn addListener(self: *@This(), seat: *wl.wl_seat) !void {
+        self.xkb_ctx = xkb.xkb_context_new(0) orelse return error.CreateXkbContext;
+        self.handle = wl.wl_seat_get_keyboard(seat) orelse return error.GetKeyboard;
+        if (wl.wl_keyboard_add_listener(self.handle, listener, self) != 0) return error.AddKeyboardListener;
+    }
+
+    fn keymap(self: *@This(), _: ?*wl.wl_keyboard, format: u32, fd: i32, size: u32) callconv(.c) void {
+
+        // xkbcommon expects the FD to be mmap-able or read fully, do not null-terminate
+        const buffer = std.heap.page_allocator.alloc(u8, @intCast(size)) catch return;
+        const bytes_read = std.posix.read(fd, buffer) catch return;
+        _ = std.posix.close(fd);
+        if (bytes_read != @as(usize, @intCast(size))) {
+            std.heap.page_allocator.free(buffer);
+            return;
+        }
+
+        // Create keymap from buffer
+        self.xkb_keymap = xkb.xkb_keymap_new_from_buffer(
+            self.xkb_ctx,
+            buffer.ptr,
+            @intCast(size),
+            format,
+            0, // flags
+        );
+        std.heap.page_allocator.free(buffer);
+
+        if (self.xkb_keymap == null) return;
+
+        self.xkb_state = xkb.xkb_state_new(self.xkb_keymap.?);
+    }
+
+    fn enter(_: *@This(), _: ?*wl.wl_keyboard, _: u32, _: ?*wl.wl_surface, _: [*c]wl.wl_array) callconv(.c) void {
+        std.debug.print("Keyboard focus enter\n", .{});
+    }
+
+    fn leave(_: *@This(), _: ?*wl.wl_keyboard, _: u32, _: ?*wl.wl_surface) callconv(.c) void {
+        std.debug.print("Keyboard focus leave\n", .{});
+    }
+
+    fn key(self: *@This(), _: ?*wl.wl_keyboard, _: u32, _: u32, keycode: u32, state: u32) callconv(.c) void {
+        if (self.xkb_state == null) return;
+
+        const keysym: xkb.xkb_keysym_t = xkb.xkb_state_key_get_one_sym(self.xkb_state.?, keycode + 8);
+
+        if (state == wl.WL_KEYBOARD_KEY_STATE_PRESSED) {
+            std.debug.print("Key pressed: {d}\n", .{keysym});
+        } else {
+            std.debug.print("Key released: {d}\n", .{keysym});
+        }
+    }
+
+    fn modifiers(_: *@This(), _: ?*wl.wl_keyboard, _: u32, _: u32, _: u32, _: u32, _: u32) callconv(.c) void {}
+
+    fn repeatInfo(_: *@This(), _: ?*wl.wl_keyboard, _: i32, _: i32) callconv(.c) void {}
+};
