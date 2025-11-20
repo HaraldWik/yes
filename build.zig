@@ -4,7 +4,7 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const zigwin32 = b.dependency("zigwin32", .{}).module("win32");
+    const win32 = b.dependency("win32", .{}).module("win32");
 
     const x11 = b.addTranslateC(.{
         .root_source_file = b.addWriteFiles().add("c.h",
@@ -17,6 +17,8 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     }).createModule();
     x11.addIncludePath(b.dependency("x11", .{}).path("include/X11/"));
+    x11.linkSystemLibrary("X11", .{});
+    x11.linkSystemLibrary("glx", .{});
 
     const wayland = b.addTranslateC(.{
         .root_source_file = b.addWriteFiles().add("wayland.h",
@@ -28,6 +30,8 @@ pub fn build(b: *std.Build) void {
     }).createModule();
     wayland.addIncludePath(b.dependency("wayland", .{}).path("src/"));
     wayland.addIncludePath(b.dependency("wayland", .{}).path("egl/"));
+    wayland.linkSystemLibrary("wayland-client", .{});
+    wayland.linkSystemLibrary("wayland-egl", .{});
 
     const xdg_scanner_h = b.addSystemCommand(&.{
         "wayland-scanner", "client-header", "/usr/share/wayland-protocols/stable/xdg-shell/xdg-shell.xml",
@@ -69,6 +73,7 @@ pub fn build(b: *std.Build) void {
         .link_libc = true,
     }).createModule();
     egl.addIncludePath(b.dependency("egl", .{}).path("api/"));
+    egl.linkSystemLibrary("egl", .{});
 
     const mod = b.addModule("yes", .{
         .root_source_file = b.path("src/root.zig"),
@@ -76,10 +81,9 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .imports = switch (target.result.os.tag) {
             .windows => &.{
-                .{ .name = "win32", .module = zigwin32 },
+                .{ .name = "win32", .module = win32 },
             },
             else => &.{
-                .{ .name = "win32", .module = zigwin32 }, // just for lsp
                 .{ .name = "x11", .module = x11 },
                 .{ .name = "wayland", .module = wayland },
                 .{ .name = "xdg", .module = xdg },
@@ -96,13 +100,6 @@ pub fn build(b: *std.Build) void {
             mod.linkSystemLibrary("kernel32", .{});
             mod.linkSystemLibrary("opengl32", .{});
         },
-        else => {
-            mod.linkSystemLibrary("X11", .{});
-            mod.linkSystemLibrary("glx", .{});
-
-            mod.linkSystemLibrary("wayland-client", .{});
-            mod.linkSystemLibrary("wayland-egl", .{});
-            mod.linkSystemLibrary("egl", .{});
-        },
+        else => {},
     }
 }

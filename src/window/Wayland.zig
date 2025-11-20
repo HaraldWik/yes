@@ -11,6 +11,7 @@ display: *wl.wl_display,
 compositor: *wl.wl_compositor,
 xdg_wm_base: *xdg.xdg_wm_base,
 seat: *wl.wl_seat,
+keyboard: Keyboard,
 surface: *wl.wl_surface,
 xdg_surface: *xdg.xdg_surface,
 xdg_toplevel: *xdg.xdg_toplevel,
@@ -35,6 +36,8 @@ pub const GraphicsApi = union(Window.GraphicsApi.Tag) {
 };
 
 pub fn open(config: Window.Config) !@This() {
+    if (config.api != .opengl) @panic("only opengl supported for wayland, do --xdg=x11");
+
     events = .initBuffer(&event_buffer);
 
     const display: *wl.wl_display = wl.wl_display_connect(null) orelse return error.ConnectDisplay;
@@ -50,12 +53,9 @@ pub fn open(config: Window.Config) !@This() {
         };
     };
 
-    var keyboard: Keyboard = undefined;
-    try keyboard.addListener(seat);
+    const keyboard: Keyboard = try .init(seat);
 
-    const xdg_wm_base_listener = xdg.xdg_wm_base_listener{
-        .ping = xdgWmBasePing,
-    };
+    const xdg_wm_base_listener = xdg.xdg_wm_base_listener{ .ping = xdgWmBasePing };
     if (xdg.xdg_wm_base_add_listener(xdg_wm_base, &xdg_wm_base_listener, null) != 0) return error.AddXdgBaseListener;
 
     const surface: *wl.wl_surface = wl.wl_compositor_create_surface(compositor) orelse return error.CreateSurface;
@@ -73,7 +73,7 @@ pub fn open(config: Window.Config) !@This() {
     wl.wl_surface_commit(surface);
 
     const api: GraphicsApi = api: switch (config.api) {
-        .opengl => {
+        .opengl => |opengl| {
             const egl_display = egl.eglGetDisplay(display) orelse return error.EglGetDisplay;
 
             var major: egl.EGLint = undefined;
@@ -96,8 +96,8 @@ pub fn open(config: Window.Config) !@This() {
             if (egl.eglChooseConfig(egl_display, egl_config_attribs.ptr, &egl_config, 1, &n) != egl.EGL_TRUE) return error.EglChooseConfig;
 
             const egl_context_attribs: []const egl.EGLint = &.{
-                egl.EGL_CONTEXT_MAJOR_VERSION, 4,
-                egl.EGL_CONTEXT_MINOR_VERSION,       5, // Need 4.5+ for DSA
+                egl.EGL_CONTEXT_MAJOR_VERSION,       @intCast(opengl.version.major),
+                egl.EGL_CONTEXT_MINOR_VERSION,       @intCast(opengl.version.minor),
                 egl.EGL_CONTEXT_OPENGL_PROFILE_MASK, egl.EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT,
                 egl.EGL_NONE,
             };
@@ -117,7 +117,8 @@ pub fn open(config: Window.Config) !@This() {
                 .surface = egl_surface,
             } };
         },
-        else => undefined,
+        .vulkan => @panic("vulkan"),
+        .none => @panic("none"),
     };
 
     wl.wl_surface_commit(surface);
@@ -131,6 +132,7 @@ pub fn open(config: Window.Config) !@This() {
         .surface = surface,
         .xdg_surface = xdg_surface,
         .xdg_toplevel = xdg_toplevel,
+        .keyboard = keyboard,
         .api = api,
     };
 }
@@ -151,6 +153,7 @@ pub fn close(self: @This()) void {
     xdg.xdg_toplevel_destroy(self.xdg_toplevel);
     xdg.xdg_surface_destroy(self.xdg_surface);
     wl.wl_surface_destroy(self.surface);
+    self.keyboard.deinit();
     wl.wl_display_disconnect(self.display);
 }
 
@@ -172,8 +175,9 @@ pub fn poll(self: @This()) ?Event {
     const event = events.popFront() orelse return null;
     switch (event) {
         .resize => |size| switch (self.api) {
-            .opengl => |gl| wl.wl_egl_window_resize(gl.window, @intCast(size.width), @intCast(size.height), 0, 0),
-            else => {},
+            .opengl => |opengl| wl.wl_egl_window_resize(opengl.window, @intCast(size.width), @intCast(size.height), 0, 0),
+            .vulkan => @panic("vulkan"),
+            .none => @panic("none"),
         },
         else => {},
     }
@@ -228,24 +232,15 @@ pub const Toplevel = struct {
         events.pushFrontAssumeCapacity(.close);
     }
 
-    pub fn configureBounds(data: ?*anyopaque, toplevel: ?*xdg.xdg_toplevel, width: i32, height: i32) callconv(.c) void {
-        _ = data;
-        _ = toplevel;
-        _ = width;
-        _ = height;
-    }
+    pub fn configureBounds(_: ?*anyopaque, _: ?*xdg.xdg_toplevel, _: i32, _: i32) callconv(.c) void {}
 
-    pub fn capabilities(data: ?*anyopaque, toplevel: ?*xdg.xdg_toplevel, states: [*c]xdg.struct_wl_array) callconv(.c) void {
-        _ = data;
-        _ = toplevel;
-        _ = states;
-    }
+    pub fn capabilities(_: ?*anyopaque, _: ?*xdg.xdg_toplevel, _: [*c]xdg.struct_wl_array) callconv(.c) void {}
 };
 
-fn xdgWmBasePing(data: ?*anyopaque, xdg_wm_base: ?*xdg.xdg_wm_base, serial: u32) callconv(.c) void {
-    _ = data;
+fn xdgWmBasePing(_: ?*anyopaque, xdg_wm_base: ?*xdg.xdg_wm_base, serial: u32) callconv(.c) void {
     xdg.xdg_wm_base_pong(xdg_wm_base, serial);
 }
+
 pub const Keyboard = struct {
     handle: *wl.wl_keyboard = undefined,
     xkb_ctx: *xkb.xkb_context = undefined,
@@ -261,36 +256,67 @@ pub const Keyboard = struct {
         .repeat_info = @ptrCast(&repeatInfo),
     };
 
-    pub fn addListener(self: *@This(), seat: *wl.wl_seat) !void {
-        self.xkb_ctx = xkb.xkb_context_new(0) orelse return error.CreateXkbContext;
+    pub fn init(seat: *wl.wl_seat) !@This() {
+        var self: @This() = undefined;
+        self.xkb_ctx = xkb.xkb_context_new(xkb.XKB_CONTEXT_NO_FLAGS) orelse return error.CreateXkbContext;
         self.handle = wl.wl_seat_get_keyboard(seat) orelse return error.GetKeyboard;
-        if (wl.wl_keyboard_add_listener(self.handle, listener, self) != 0) return error.AddKeyboardListener;
+        if (wl.wl_keyboard_add_listener(self.handle, listener, &self) != 0) return error.AddKeyboardListener;
+        return self;
     }
 
-    fn keymap(self: *@This(), _: ?*wl.wl_keyboard, format: u32, fd: i32, size: u32) callconv(.c) void {
+    pub fn deinit(self: @This()) void {
+        if (self.xkb_state != null) xkb.xkb_state_unref(self.xkb_state);
+        if (self.xkb_keymap != null) xkb.xkb_keymap_unref(self.xkb_keymap);
 
-        // xkbcommon expects the FD to be mmap-able or read fully, do not null-terminate
-        const buffer = std.heap.page_allocator.alloc(u8, @intCast(size)) catch return;
-        const bytes_read = std.posix.read(fd, buffer) catch return;
-        _ = std.posix.close(fd);
-        if (bytes_read != @as(usize, @intCast(size))) {
-            std.heap.page_allocator.free(buffer);
+        xkb.xkb_context_unref(self.xkb_ctx);
+    }
+
+    fn keymap(self: *@This(), _: ?*wl.wl_keyboard, format: u32, fd: std.posix.fd_t, size: u32) callconv(.c) void {
+        const buf = std.posix.mmap(
+            null,
+            size,
+            std.posix.PROT.READ,
+            .{ .TYPE = .SHARED },
+            fd,
+            0,
+        ) catch {
+            std.posix.close(fd);
+            return;
+        };
+        defer std.posix.munmap(buf);
+        defer std.posix.close(fd);
+
+        // Unref old state first, then keymap
+        if (self.xkb_state) |old_state| {
+            xkb.xkb_state_unref(old_state);
+            self.xkb_state = null;
+        }
+        if (self.xkb_keymap) |old_keymap| {
+            xkb.xkb_keymap_unref(old_keymap);
+            self.xkb_keymap = null;
+        }
+
+        // Pass size - 1 to exclude null terminator
+        self.xkb_keymap = xkb.xkb_keymap_new_from_buffer(
+            self.xkb_ctx,
+            buf.ptr,
+            size - 1,
+            @intCast(format),
+            xkb.XKB_KEYMAP_COMPILE_NO_FLAGS, // Use the proper enum
+        );
+
+        if (self.xkb_keymap == null) {
+            std.debug.print("Failed to create keymap\n", .{});
             return;
         }
 
-        // Create keymap from buffer
-        self.xkb_keymap = xkb.xkb_keymap_new_from_buffer(
-            self.xkb_ctx,
-            buffer.ptr,
-            @intCast(size),
-            format,
-            0, // flags
-        );
-        std.heap.page_allocator.free(buffer);
-
-        if (self.xkb_keymap == null) return;
-
         self.xkb_state = xkb.xkb_state_new(self.xkb_keymap.?);
+        if (self.xkb_state == null) {
+            std.debug.print("Failed to create state\n", .{});
+            xkb.xkb_keymap_unref(self.xkb_keymap.?);
+            self.xkb_keymap = null;
+            return;
+        }
     }
 
     fn enter(_: *@This(), _: ?*wl.wl_keyboard, _: u32, _: ?*wl.wl_surface, _: [*c]wl.wl_array) callconv(.c) void {
@@ -301,7 +327,7 @@ pub const Keyboard = struct {
         std.debug.print("Keyboard focus leave\n", .{});
     }
 
-    fn key(self: *@This(), _: ?*wl.wl_keyboard, _: u32, _: u32, keycode: u32, state: u32) callconv(.c) void {
+    fn key(self: *@This(), _: ?*wl.wl_keyboard, _: u32, _: u32, keycode: xkb.xkb_keycode_t, state: u32) callconv(.c) void {
         if (self.xkb_state == null) return;
 
         const keysym: xkb.xkb_keysym_t = xkb.xkb_state_key_get_one_sym(self.xkb_state.?, keycode + 8);
@@ -313,7 +339,12 @@ pub const Keyboard = struct {
         }
     }
 
-    fn modifiers(_: *@This(), _: ?*wl.wl_keyboard, _: u32, _: u32, _: u32, _: u32, _: u32) callconv(.c) void {}
+    fn modifiers(self: *@This(), _: ?*wl.wl_keyboard, _: u32, mods_depressed: u32, mods_latched: u32, mods_locked: u32, group: u32) callconv(.c) void {
+        // Check BOTH state and keymap exist
+        if (self.xkb_state == null or self.xkb_keymap == null) return;
+
+        _ = xkb.xkb_state_update_mask(self.xkb_state.?, mods_depressed, mods_latched, mods_locked, 0, 0, group);
+    }
 
     fn repeatInfo(_: *@This(), _: ?*wl.wl_keyboard, _: i32, _: i32) callconv(.c) void {}
 };
