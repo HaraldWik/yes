@@ -84,6 +84,7 @@ pub fn build(b: *std.Build) void {
                 .{ .name = "win32", .module = win32 },
             },
             else => &.{
+                .{ .name = "win32", .module = win32 },
                 .{ .name = "x11", .module = x11 },
                 .{ .name = "wayland", .module = wayland },
                 .{ .name = "xdg", .module = xdg },

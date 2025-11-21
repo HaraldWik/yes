@@ -247,7 +247,7 @@ pub const Keyboard = struct {
     xkb_keymap: ?*xkb.xkb_keymap = null,
     xkb_state: ?*xkb.xkb_state = null,
 
-    pub const listener: *const wl.wl_keyboard_listener = &.{
+    pub const listener: wl.wl_keyboard_listener = wl.wl_keyboard_listener{
         .keymap = @ptrCast(&keymap),
         .enter = @ptrCast(&enter),
         .leave = @ptrCast(&leave),
@@ -260,22 +260,29 @@ pub const Keyboard = struct {
         var self: @This() = undefined;
         self.xkb_ctx = xkb.xkb_context_new(xkb.XKB_CONTEXT_NO_FLAGS) orelse return error.CreateXkbContext;
         self.handle = wl.wl_seat_get_keyboard(seat) orelse return error.GetKeyboard;
-        if (wl.wl_keyboard_add_listener(self.handle, listener, &self) != 0) return error.AddKeyboardListener;
+        if (wl.wl_keyboard_add_listener(self.handle, &listener, &self) != 0) return error.AddKeyboardListener;
         return self;
     }
 
     pub fn deinit(self: @This()) void {
-        if (self.xkb_state != null) xkb.xkb_state_unref(self.xkb_state);
-        if (self.xkb_keymap != null) xkb.xkb_keymap_unref(self.xkb_keymap);
-
+        if (self.xkb_state) |st| xkb.xkb_state_unref(st);
+        if (self.xkb_keymap) |km| xkb.xkb_keymap_unref(km);
         xkb.xkb_context_unref(self.xkb_ctx);
     }
 
-    fn keymap(self: *@This(), _: ?*wl.wl_keyboard, format: u32, fd: std.posix.fd_t, size: u32) callconv(.c) void {
+    fn keymap(
+        self: *@This(),
+        _: *wl.wl_keyboard,
+        format: u32,
+        fd: i32,
+        size: u32,
+    ) callconv(.c) void {
+        if (format != wl.WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1) return;
+
         const buf = std.posix.mmap(
             null,
             size,
-            std.posix.PROT.READ,
+            std.posix.PROT.READ | std.posix.PROT.WRITE,
             .{ .TYPE = .SHARED },
             fd,
             0,
@@ -286,65 +293,54 @@ pub const Keyboard = struct {
         defer std.posix.munmap(buf);
         defer std.posix.close(fd);
 
-        // Unref old state first, then keymap
-        if (self.xkb_state) |old_state| {
-            xkb.xkb_state_unref(old_state);
-            self.xkb_state = null;
-        }
-        if (self.xkb_keymap) |old_keymap| {
-            xkb.xkb_keymap_unref(old_keymap);
-            self.xkb_keymap = null;
-        }
+        if (self.xkb_state) |old| xkb.xkb_state_unref(old);
+        if (self.xkb_keymap) |old| xkb.xkb_keymap_unref(old);
 
-        // Pass size - 1 to exclude null terminator
         self.xkb_keymap = xkb.xkb_keymap_new_from_buffer(
             self.xkb_ctx,
             buf.ptr,
-            size - 1,
+            size,
             @intCast(format),
-            xkb.XKB_KEYMAP_COMPILE_NO_FLAGS, // Use the proper enum
+            xkb.XKB_KEYMAP_COMPILE_NO_FLAGS,
         );
-
         if (self.xkb_keymap == null) {
-            std.debug.print("Failed to create keymap\n", .{});
+            std.debug.print("Failed to create xkb_keymap\n", .{});
             return;
         }
 
         self.xkb_state = xkb.xkb_state_new(self.xkb_keymap.?);
         if (self.xkb_state == null) {
-            std.debug.print("Failed to create state\n", .{});
             xkb.xkb_keymap_unref(self.xkb_keymap.?);
             self.xkb_keymap = null;
+            std.debug.print("Failed to create xkb_state\n", .{});
             return;
         }
     }
 
-    fn enter(_: *@This(), _: ?*wl.wl_keyboard, _: u32, _: ?*wl.wl_surface, _: [*c]wl.wl_array) callconv(.c) void {
+    fn enter(_: *@This(), _: *wl.wl_keyboard, _: u32, _: ?*wl.wl_surface, _: [*c]wl.wl_array) callconv(.c) void {
         std.debug.print("Keyboard focus enter\n", .{});
     }
 
-    fn leave(_: *@This(), _: ?*wl.wl_keyboard, _: u32, _: ?*wl.wl_surface) callconv(.c) void {
+    fn leave(_: *@This(), _: *wl.wl_keyboard, _: u32, _: ?*wl.wl_surface) callconv(.c) void {
         std.debug.print("Keyboard focus leave\n", .{});
     }
 
-    fn key(self: *@This(), _: ?*wl.wl_keyboard, _: u32, _: u32, keycode: xkb.xkb_keycode_t, state: u32) callconv(.c) void {
+    fn key(self: *@This(), _: *wl.wl_keyboard, _: u32, _: u32, keycode: u32, state: u32) callconv(.c) void {
         if (self.xkb_state == null) return;
 
-        const keysym: xkb.xkb_keysym_t = xkb.xkb_state_key_get_one_sym(self.xkb_state.?, keycode + 8);
-
+        const sym = xkb.xkb_state_key_get_one_sym(self.xkb_state.?, keycode + 8);
         if (state == wl.WL_KEYBOARD_KEY_STATE_PRESSED) {
-            std.debug.print("Key pressed: {d}\n", .{keysym});
+            std.debug.print("Key pressed: {d}\n", .{sym});
         } else {
-            std.debug.print("Key released: {d}\n", .{keysym});
+            std.debug.print("Key released: {d}\n", .{sym});
         }
     }
 
-    fn modifiers(self: *@This(), _: ?*wl.wl_keyboard, _: u32, mods_depressed: u32, mods_latched: u32, mods_locked: u32, group: u32) callconv(.c) void {
-        // Check BOTH state and keymap exist
+    fn modifiers(self: *@This(), _: *wl.wl_keyboard, _: u32, mods_depressed: u32, mods_latched: u32, mods_locked: u32, group: u32) callconv(.c) void {
         if (self.xkb_state == null or self.xkb_keymap == null) return;
 
         _ = xkb.xkb_state_update_mask(self.xkb_state.?, mods_depressed, mods_latched, mods_locked, 0, 0, group);
     }
 
-    fn repeatInfo(_: *@This(), _: ?*wl.wl_keyboard, _: i32, _: i32) callconv(.c) void {}
+    fn repeatInfo(_: ?*anyopaque, _: ?*wl.wl_keyboard, _: i32, _: i32) callconv(.c) void {}
 };
