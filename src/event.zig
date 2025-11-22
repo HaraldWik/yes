@@ -1,7 +1,7 @@
 const std = @import("std");
 const native = @import("root.zig").native;
 const win32 = @import("root.zig").native.win32.everything;
-const xkb = @import("xkb");
+const xkb = @import("root.zig").native.posix.xkb;
 const Position = @import("root.zig").Window.Position;
 
 pub const Union = union(enum) {

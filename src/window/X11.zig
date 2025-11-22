@@ -1,6 +1,6 @@
 const std = @import("std");
 const root = @import("../root.zig");
-const x11 = @import("../root.zig").native.x11;
+const x11 = @import("../root.zig").native.posix.x11;
 const Window = @import("Window.zig");
 const Event = @import("../event.zig").Union;
 

@@ -46,6 +46,25 @@ pub fn build(b: *std.Build) void {
     }).createModule();
     xdg.addCSourceFile(.{ .file = xdg_scanner_c.addOutputFileArg("xdg-shell-protocol.c") });
 
+    const decor_scanner_h = b.addSystemCommand(&.{
+        "wayland-scanner",
+        "client-header",
+        "/usr/share/wayland-protocols/unstable/xdg-decoration/xdg-decoration-unstable-v1.xml",
+    });
+
+    const decor_scanner_c = b.addSystemCommand(&.{
+        "wayland-scanner",
+        "private-code",
+        "/usr/share/wayland-protocols/unstable/xdg-decoration/xdg-decoration-unstable-v1.xml",
+    });
+
+    const decor = b.addTranslateC(.{
+        .root_source_file = decor_scanner_h.addOutputFileArg("xdg-decoration-client-protocol.h"),
+        .target = target,
+        .optimize = optimize,
+    }).createModule();
+    decor.addCSourceFile(.{ .file = decor_scanner_c.addOutputFileArg("xdg-decoration-protocol.c") });
+
     const xkbcommon = b.dependency("xkbcommon", .{
         .target = target,
         .optimize = optimize,
@@ -84,11 +103,13 @@ pub fn build(b: *std.Build) void {
                 .{ .name = "win32", .module = win32 },
             },
             else => &.{
-                .{ .name = "win32", .module = win32 },
+                .{ .name = "xkb", .module = xkbcommon_headers },
+
                 .{ .name = "x11", .module = x11 },
+
                 .{ .name = "wayland", .module = wayland },
                 .{ .name = "xdg", .module = xdg },
-                .{ .name = "xkb", .module = xkbcommon_headers },
+                .{ .name = "decor", .module = xdg },
                 .{ .name = "egl", .module = egl },
             },
         },

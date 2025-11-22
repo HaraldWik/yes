@@ -102,6 +102,7 @@ pub fn main() !void {
                     .s => color[2] = @mod(color[2] - color_step, 1.0),
                     else => {},
                 },
+                .key_down => |key| std.debug.print("{t}\n", .{key}),
                 else => {},
             }
         }

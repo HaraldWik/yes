@@ -6,10 +6,10 @@ const native = @import("root.zig").native;
 pub const wgl = @import("root.zig").native.win32.graphics.open_gl;
 pub const glx = struct {
     pub const Drawable = c_ulong;
-    pub const PFNGLXSWAPINTERVALEXT = *const fn (display: *native.x11.Display, drawable: Drawable, interval: c_int) callconv(.c) void;
+    pub const PFNGLXSWAPINTERVALEXT = *const fn (display: *native.posix.x11.Display, drawable: Drawable, interval: c_int) callconv(.c) void;
 
     extern fn glXGetProcAddress(name: [*:0]const u8) ?Proc;
-    extern fn glXSwapBuffers(display: *native.x11.Display, drawable: Drawable) void;
+    extern fn glXSwapBuffers(display: *native.posix.x11.Display, drawable: Drawable) void;
 };
 pub const egl = @import("egl");
 
@@ -31,8 +31,8 @@ pub fn swapBuffers(window: root.Window) !void {
             .x11 => glx.glXSwapBuffers(@ptrCast(window.handle.x11.display), window.handle.x11.window),
             .wayland => {
                 if (egl.eglSwapBuffers(window.handle.wayland.api.opengl.display, window.handle.wayland.api.opengl.surface) != egl.EGL_TRUE) return error.EglSwapBuffers;
-                root.Window.Wayland.wl.wl_surface_commit(window.handle.wayland.surface);
-                if (root.Window.Wayland.wl.wl_display_flush(window.handle.wayland.display) < 0) return error.FlushDisplay;
+                native.posix.wayland.client.wl_surface_commit(window.handle.wayland.surface);
+                if (native.posix.wayland.client.wl_display_flush(window.handle.wayland.display) < 0) return error.FlushDisplay;
             },
         },
     }

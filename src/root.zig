@@ -11,8 +11,15 @@ pub const native = struct {
     pub const os = builtin.os.tag;
 
     pub const win32 = @import("win32");
-    pub const x11 = @import("x11");
-    pub const wayland = @import("wayland");
+    pub const posix = struct {
+        pub const xkb = @import("xkb");
+        pub const x11 = @import("x11");
+        pub const wayland = struct {
+            pub const client = @import("wayland");
+            pub const xkg = @import("xdg");
+            pub const decor = @import("decor");
+        };
+    };
 };
 
 pub const Event = @import("event.zig").Union;
