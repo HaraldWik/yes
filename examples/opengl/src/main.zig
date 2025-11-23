@@ -95,14 +95,13 @@ pub fn main() !void {
                     std.debug.print("Resize: {d}x{d}\n", .{ size.width, size.height });
                     gl.draw.viewport(0, 0, size.width, size.height);
                 },
-                .key_up => |key| switch (key) {
+                .key => |key| switch (key.sym) {
                     .a => color[1] = @mod(color[1] + color_step, 1.0),
                     .d => color[1] = @mod(color[1] - color_step, 1.0),
                     .w => color[2] = @mod(color[2] + color_step, 1.0),
                     .s => color[2] = @mod(color[2] - color_step, 1.0),
                     else => {},
                 },
-                .key_down => |key| std.debug.print("{t}\n", .{key}),
                 else => {},
             }
         }

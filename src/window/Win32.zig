@@ -1,7 +1,6 @@
 const std = @import("std");
 const win32 = @import("../root.zig").native.win32.everything;
 const Window = @import("Window.zig");
-const Event = @import("../event.zig").Union;
 // zig build -Dtarget=x86_64-windows && wine zig-out/bin/example.exe
 
 instance: win32.HINSTANCE,
@@ -167,7 +166,7 @@ pub fn close(self: @This()) void {
     _ = win32.DestroyWindow(self.hwnd);
 }
 
-pub fn poll(self: @This()) !?Event {
+pub fn poll(self: @This()) !?Window.Event {
     var msg: win32.MSG = undefined;
     if (win32.PeekMessageW(&msg, self.hwnd, 0, 0, .{ .REMOVE = 1 }) == 0) return null;
     _ = win32.TranslateMessage(&msg);
@@ -190,26 +189,46 @@ pub fn poll(self: @This()) !?Event {
             std.debug.print("what\n", .{});
             return null;
         },
-        win32.WM_RBUTTONDOWN, win32.WM_MBUTTONDOWN, win32.WM_LBUTTONDOWN, win32.WM_XBUTTONDOWN => |button| .{ .mouse = .{ .click_down = .{
-            .button = Event.Mouse.Button.fromWin32(button, msg.wParam) orelse return null,
-            .position = .{
-                .x = @intCast(@as(u16, @truncate(@as(usize, @intCast(msg.lParam))))),
-                .y = @intCast(@as(u16, @truncate(@as(usize, @intCast(msg.lParam >> 16))))),
-            },
-        } } },
-        win32.WM_RBUTTONUP, win32.WM_MBUTTONUP, win32.WM_LBUTTONUP, win32.WM_XBUTTONUP => |button| .{ .mouse = .{ .click_up = .{
-            .button = Event.Mouse.Button.fromWin32(button, msg.wParam) orelse return null,
-            .position = .{
-                .x = @intCast(@as(u16, @truncate(@as(usize, @intCast(msg.lParam))))),
-                .y = @intCast(@as(u16, @truncate(@as(usize, @intCast(msg.lParam >> 16))))),
-            },
-        } } },
+        // Mouse
         win32.WM_MOUSEMOVE => .{ .mouse = .{ .move = .{
             .x = @intCast(@as(u16, @truncate(@as(usize, @intCast(msg.lParam))))),
             .y = @intCast(@as(u16, @truncate(@as(usize, @intCast(msg.lParam >> 16))))),
         } } },
-        win32.WM_KEYDOWN => .{ .key_down = Event.Key.fromWin32(std.enums.fromInt(win32.VIRTUAL_KEY, msg.wParam).?, msg.lParam) orelse return null },
-        win32.WM_KEYUP => .{ .key_up = Event.Key.fromWin32(std.enums.fromInt(win32.VIRTUAL_KEY, msg.wParam).?, msg.lParam) orelse return null },
+        win32.WM_MOUSEWHEEL, win32.WM_MOUSEHWHEEL => {
+            const delta: isize = @intCast((msg.wParam >> 16) & 0xFFFF);
+            var lines: isize = @intCast(@divTrunc(delta, @as(isize, @intCast(win32.WHEEL_DELTA)))); // lines > 0 -> scroll right, lines < 0 -> left
+            if (lines == 545) lines = -1;
+            return Window.Event{ .mouse = .{
+                .scroll = switch (msg.message) {
+                    win32.WM_MOUSEWHEEL => .{ .x = -lines },
+                    win32.WM_MOUSEHWHEEL => .{ .y = lines },
+                    else => unreachable,
+                },
+            } };
+        },
+        win32.WM_RBUTTONDOWN, win32.WM_MBUTTONDOWN, win32.WM_LBUTTONDOWN, win32.WM_XBUTTONDOWN, win32.WM_RBUTTONUP, win32.WM_MBUTTONUP, win32.WM_LBUTTONUP, win32.WM_XBUTTONUP => |button| .{ .mouse = .{ .button = .{
+            .state = switch (msg.message) {
+                win32.WM_RBUTTONDOWN, win32.WM_MBUTTONDOWN, win32.WM_LBUTTONDOWN, win32.WM_XBUTTONDOWN => .press,
+                win32.WM_RBUTTONUP, win32.WM_MBUTTONUP, win32.WM_LBUTTONUP, win32.WM_XBUTTONUP => .release,
+                else => unreachable,
+            },
+            .code = Window.Event.Mouse.Button.Code.fromWin32(button, msg.wParam) orelse return null,
+            .position = .{
+                .x = @intCast(@as(u16, @truncate(@as(usize, @intCast(msg.lParam))))),
+                .y = @intCast(@as(u16, @truncate(@as(usize, @intCast(msg.lParam >> 16))))),
+            },
+        } } },
+
+        // Key
+        win32.WM_KEYDOWN, win32.WM_KEYUP => .{ .key = .{
+            .state = switch (msg.message) {
+                win32.WM_KEYDOWN => .press,
+                win32.WM_KEYUP => .release,
+                else => unreachable,
+            },
+            .code = @intCast((msg.lParam >> @intCast(16)) & 0xFF),
+            .sym = Window.Event.Key.Sym.fromWin32(std.enums.fromInt(win32.VIRTUAL_KEY, msg.wParam).?, msg.lParam) orelse return null,
+        } },
         else => null,
     };
 }

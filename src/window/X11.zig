@@ -2,7 +2,6 @@ const std = @import("std");
 const root = @import("../root.zig");
 const x11 = @import("../root.zig").native.posix.x11;
 const Window = @import("Window.zig");
-const Event = @import("../event.zig").Union;
 
 window: x11.Window,
 display: *x11.Display,
@@ -137,7 +136,7 @@ pub fn close(self: @This()) void {
     _ = x11.XCloseDisplay(self.display);
 }
 
-pub fn poll(self: @This()) ?Event {
+pub fn poll(self: @This()) ?Window.Event {
     var event: x11.XEvent = undefined;
     while (x11.XPending(self.display) > 0) {
         if (x11.XNextEvent(self.display, &event) != x11.XCSUCCESS) return null;
@@ -149,26 +148,42 @@ pub fn poll(self: @This()) ?Event {
             .width = @intCast(event.xconfigure.width),
             .height = @intCast(event.xconfigure.height),
         } },
-        x11.ButtonPress => .{ .mouse = .{ .click_down = .{
-            .button = Event.Mouse.Button.fromX(event.xbutton.button) orelse return null,
-            .position = .{
-                .x = @intCast(event.xbutton.x),
-                .y = @intCast(event.xbutton.y),
-            },
-        } } },
-        x11.ButtonRelease => .{ .mouse = .{ .click_up = .{
-            .button = Event.Mouse.Button.fromX(event.xbutton.button) orelse return null,
-            .position = .{
-                .x = @intCast(event.xbutton.x),
-                .y = @intCast(event.xbutton.y),
-            },
-        } } },
+        x11.ButtonPress, x11.ButtonRelease => switch (event.xbutton.button) {
+            4...7 => |scroll| Window.Event{ .mouse = .{
+                .scroll = switch (scroll) {
+                    6 => .{ .x = 1 },
+                    7 => .{ .x = -1 },
+                    4 => .{ .y = 1 },
+                    5 => .{ .y = -1 },
+                    else => unreachable,
+                },
+            } },
+            else => .{ .mouse = .{ .button = .{
+                .state = switch (event.type) {
+                    x11.ButtonPress => .press,
+                    x11.ButtonRelease => .release,
+                    else => unreachable,
+                },
+                .code = Window.Event.Mouse.Button.Code.fromX11(event.xbutton.button) orelse return null,
+                .position = .{
+                    .x = @intCast(event.xbutton.x),
+                    .y = @intCast(event.xbutton.y),
+                },
+            } } },
+        },
         x11.MotionNotify => .{ .mouse = .{ .move = .{
             .x = @intCast(event.xmotion.x),
             .y = @intCast(event.xmotion.y),
         } } },
-        x11.KeyPress => .{ .key_down = Event.Key.fromXkb(x11.XLookupKeysym(&event.xkey, if (event.xkey.state & x11.ShiftMask == 1) 1 else 0)) orelse return null },
-        x11.KeyRelease => .{ .key_up = Event.Key.fromXkb(x11.XLookupKeysym(&event.xkey, if (event.xkey.state & x11.ShiftMask == 1) 1 else 0)) orelse return null },
+        x11.KeyPress, x11.KeyRelease => .{ .key = .{
+            .state = switch (event.type) {
+                x11.KeyPress => .press,
+                x11.KeyRelease => .release,
+                else => unreachable,
+            },
+            .code = @intCast(event.xkey.keycode),
+            .sym = Window.Event.Key.Sym.fromXkb(x11.XLookupKeysym(&event.xkey, @intCast(event.xkey.state & x11.ShiftMask))) orelse return null,
+        } },
         else => null,
     };
 }

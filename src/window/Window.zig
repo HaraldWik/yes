@@ -2,7 +2,6 @@ const std = @import("std");
 const builtin = @import("builtin");
 const root = @import("../root.zig");
 const native = @import("../root.zig").native;
-const Event = @import("../event.zig").Union;
 
 handle: Handle,
 
@@ -20,7 +19,7 @@ pub const Posix = union(Tag) {
 
     pub const Tag = enum { x11, wayland };
 
-    pub const session_type = "XDG_SESSION_TYPE";
+    pub const session_env = "XDG_SESSION_TYPE";
 
     pub fn getSessionType() ?Tag {
         for (std.os.argv) |arg| {
@@ -28,10 +27,12 @@ pub const Posix = union(Tag) {
             if (!std.mem.startsWith(u8, std.mem.span(arg), identifier)) continue;
             return std.meta.stringToEnum(Tag, std.mem.span(arg)[identifier.len..]);
         }
-        const session = std.posix.getenv(Posix.session_type) orelse "x11";
+        const session = std.posix.getenv(session_env) orelse "x11";
         return if (std.mem.eql(u8, session, "wayland")) .wayland else .x11;
     }
 };
+
+pub const Event = @import("event.zig").Union;
 
 pub const Size = struct {
     width: usize,

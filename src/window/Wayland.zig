@@ -1,7 +1,6 @@
 const std = @import("std");
 const root = @import("../root.zig");
 const Window = @import("Window.zig");
-const Event = @import("../event.zig").Union;
 const wl = @import("wayland");
 const xdg = @import("xdg");
 const xkb = @import("xkb");
@@ -18,8 +17,8 @@ xdg_surface: *xdg.xdg_surface,
 xdg_toplevel: *xdg.xdg_toplevel,
 api: GraphicsApi,
 
-var event_buffer: [128]Event = undefined;
-var events: std.Deque(Event) = .empty;
+var event_buffer: [128]Window.Event = undefined;
+var events: std.Deque(Window.Event) = .empty;
 
 pub const GraphicsApi = union(Window.GraphicsApi.Tag) {
     opengl: OpenGL,
@@ -161,7 +160,7 @@ pub fn close(self: @This()) void {
     wl.wl_display_disconnect(self.display);
 }
 
-pub fn poll(self: @This()) ?Event {
+pub fn poll(self: @This()) ?Window.Event {
     while (wl.wl_display_prepare_read(self.display) != 0) _ = wl.wl_display_dispatch_pending(self.display);
     _ = wl.wl_display_flush(self.display);
 
@@ -320,13 +319,14 @@ pub const Keyboard = struct {
     fn key(self: *@This(), _: *wl.wl_keyboard, _: u32, _: u32, keycode: u32, state: u32) callconv(.c) void {
         if (self.xkb_state == null) return;
 
-        const sym = keycode;
+        _ = keycode;
+        _ = state;
         //xkb.xkb_state_key_get_one_sym(self.xkb_state.?, keycode + 8);
-        if (state == wl.WL_KEYBOARD_KEY_STATE_PRESSED) {
-            events.pushBackAssumeCapacity(.{ .key_down = Event.Key.fromXkb(sym) orelse return });
-        } else {
-            events.pushBackAssumeCapacity(.{ .key_up = Event.Key.fromXkb(sym) orelse return });
-        }
+        // if (state == wl.WL_KEYBOARD_KEY_STATE_PRESSED) {
+        //     events.pushBackAssumeCapacity(.{ .key_down = Event.Key.fromXkb(sym) orelse return });
+        // } else {
+        //     events.pushBackAssumeCapacity(.{ .key_up = Event.Key.fromXkb(sym) orelse return });
+        // }
     }
 
     fn modifiers(self: *@This(), _: *wl.wl_keyboard, _: u32, mods_depressed: u32, mods_latched: u32, mods_locked: u32, group: u32) callconv(.c) void {
