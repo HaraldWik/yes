@@ -267,14 +267,14 @@ pub fn reportErr(err: anyerror) anyerror {
         text_buffer.len,
         null,
     );
-    var title_buffer: [512:0]u16 = undefined;
-    const title_len = try std.unicode.utf8ToUtf16Le(&title_buffer, @errorName(err));
-    title_buffer[title_len] = 0;
+    const error_name = @errorName(err);
+    var title_buffer: [256]u16 = undefined;
+    const title = title_buffer[0..(try std.unicode.utf8ToUtf16Le(&title_buffer, error_name[0 .. error_name.len + 1]))];
 
     _ = win32.MessageBoxW(
         null,
         @ptrCast(text_buffer[0..text_len]),
-        @ptrCast(title_buffer[0..].ptr),
+        @ptrCast(title),
         .{ .ICONHAND = 1 },
     );
 
