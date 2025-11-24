@@ -2,7 +2,7 @@ const std = @import("std");
 const yes = @import("yes");
 
 pub fn main() !void {
-    const window: yes.Window = try .open(.{
+    var window: yes.Window = try .open(.{
         .title = "Title",
         .size = .{ .width = 900, .height = 600 },
     });
@@ -10,6 +10,8 @@ pub fn main() !void {
 
     const start_timestamp: std.time.Instant = try .now();
 
+    var is_fullscreen: bool = false;
+    var is_maximize: bool = false;
     main_loop: while (true) {
         while (try window.poll()) |event| {
             switch (event) {
@@ -34,6 +36,19 @@ pub fn main() !void {
                         key.code,
                         @as(f32, @floatFromInt(@divTrunc((try std.time.Instant.now()).since(start_timestamp), std.time.ns_per_s / 10))) / 10.0,
                     });
+
+                    if (key.state == .release) switch (key.sym) {
+                        .f => {
+                            is_fullscreen = !is_fullscreen;
+                            window.fullscreen(is_fullscreen);
+                        },
+                        .m => {
+                            is_maximize = !is_maximize;
+                            window.maximize(is_maximize);
+                        },
+                        .n => window.minimize(),
+                        else => {},
+                    };
                 },
             }
         }

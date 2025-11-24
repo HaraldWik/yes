@@ -38,13 +38,14 @@ pub const fragment_source: [*:0]const u8 =
 ;
 
 pub fn main() !void {
-    const window: yes.Window = try .open(.{
+    var window: yes.Window = try .open(.{
         .title = "Title",
         .size = .{ .width = 900, .height = 600 },
         // .resizable = false,
         .api = .{ .opengl = .{} }, // Don't forget to set to OpenGL
     });
     defer window.close();
+    try yes.opengl.swapInterval(window, 1);
 
     gl.load(yes.opengl.getProcAddress, true);
     gl.debug.set(null);
@@ -82,11 +83,8 @@ pub fn main() !void {
     vao.vertexBuffer(vbo, 0, 0, 3 * @sizeOf(f32));
     vao.elementBuffer(ebo);
 
-    try yes.opengl.swapInterval(window, 1);
-
     var color: [4]f32 = .{ 0.1, 0.5, 0.3, 1.0 };
     const color_step = 0.05;
-
     main_loop: while (true) {
         while (try window.poll()) |event| {
             switch (event) {

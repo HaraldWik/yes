@@ -17,6 +17,9 @@ xdg_surface: *xdg.xdg_surface,
 xdg_toplevel: *xdg.xdg_toplevel,
 api: GraphicsApi,
 
+// Data
+size: Window.Size = undefined,
+
 var event_buffer: [128]Window.Event = undefined;
 var events: std.Deque(Window.Event) = .empty;
 
@@ -160,7 +163,7 @@ pub fn close(self: @This()) void {
     wl.wl_display_disconnect(self.display);
 }
 
-pub fn poll(self: @This()) ?Window.Event {
+pub fn poll(self: *@This()) ?Window.Event {
     while (wl.wl_display_prepare_read(self.display) != 0) _ = wl.wl_display_dispatch_pending(self.display);
     _ = wl.wl_display_flush(self.display);
 
@@ -177,10 +180,13 @@ pub fn poll(self: @This()) ?Window.Event {
 
     const event = events.popFront() orelse return null;
     switch (event) {
-        .resize => |size| switch (self.api) {
-            .opengl => |opengl| wl.wl_egl_window_resize(opengl.window, @intCast(size.width), @intCast(size.height), 0, 0),
-            .vulkan => @panic("vulkan"),
-            .none => @panic("none"),
+        .resize => |size| {
+            self.size = size;
+            switch (self.api) {
+                .opengl => |opengl| wl.wl_egl_window_resize(opengl.window, @intCast(size.width), @intCast(size.height), 0, 0),
+                .vulkan => @panic("vulkan"),
+                .none => @panic("none"),
+            }
         },
         else => {},
     }
@@ -188,8 +194,25 @@ pub fn poll(self: @This()) ?Window.Event {
 }
 
 pub fn getSize(self: @This()) Window.Size {
-    _ = self;
-    return .{ .width = 0, .height = 0 };
+    return self.size;
+}
+
+pub fn fullscreen(self: @This(), state: bool) void {
+    if (state)
+        xdg.xdg_toplevel_set_fullscreen(self.xdg_toplevel, null)
+    else
+        xdg.xdg_toplevel_unset_fullscreen(self.xdg_toplevel);
+}
+
+pub fn maximize(self: @This(), state: bool) void {
+    if (state)
+        xdg.xdg_toplevel_set_maximized(self.xdg_toplevel)
+    else
+        xdg.xdg_toplevel_unset_maximized(self.xdg_toplevel);
+}
+
+pub fn minimize(self: @This()) void {
+    xdg.xdg_toplevel_set_minimized(self.xdg_toplevel);
 }
 
 const Registry = struct {

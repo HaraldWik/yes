@@ -108,11 +108,11 @@ pub fn close(self: @This()) void {
     }
 }
 
-pub fn poll(self: @This()) !?Event {
+pub fn poll(self: *@This()) !?Event {
     return switch (native.os) {
         .windows => try self.handle.poll(),
         else => switch (self.handle) {
-            inline else => |handle| handle.poll(),
+            inline else => |*handle| handle.poll(),
         },
     };
 }
@@ -124,4 +124,31 @@ pub fn getSize(self: @This()) Size {
             inline else => |handle| handle.getSize(),
         },
     };
+}
+
+pub fn fullscreen(self: *@This(), state: bool) void {
+    switch (native.os) {
+        .windows => Win32.fullscreen(self.handle, state),
+        else => switch (self.handle) {
+            inline else => |*handle| handle.fullscreen(state),
+        },
+    }
+}
+
+pub fn maximize(self: @This(), state: bool) void {
+    switch (native.os) {
+        .windows => self.handle.maximize(state),
+        else => switch (self.handle) {
+            inline else => |handle| handle.maximize(state),
+        },
+    }
+}
+
+pub fn minimize(self: @This()) void {
+    switch (native.os) {
+        .windows => self.handle.minimize(),
+        else => switch (self.handle) {
+            inline else => |handle| handle.minimize(),
+        },
+    }
 }

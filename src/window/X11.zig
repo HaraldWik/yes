@@ -200,3 +200,84 @@ pub fn getSize(self: @This()) Window.Size {
     _ = x11.XGetGeometry(self.display, self.window, &root_window, &x, &y, &width, &height, &border, &depth);
     return .{ .width = @intCast(width), .height = @intCast(height) };
 }
+
+pub fn fullscreen(self: @This(), state: bool) void {
+    const wm_state: x11.Atom = x11.XInternAtom(self.display, "_NET_WM_STATE", x11.False);
+    const fs_state: x11.Atom = x11.XInternAtom(self.display, "_NET_WM_STATE_FULLSCREEN", x11.False);
+
+    var event: x11.XEvent = .{ .xclient = .{
+        .type = x11.ClientMessage,
+        .message_type = wm_state,
+        .display = self.display,
+        .window = self.window,
+        .format = 32,
+        .data = .{ .l = .{ @intFromBool(state), @intCast(fs_state), 0, 1, 0 } },
+    } };
+
+    _ = x11.XSendEvent(self.display, x11.DefaultRootWindow(self.display), x11.False, x11.SubstructureRedirectMask | x11.SubstructureNotifyMask, &event);
+    _ = x11.XFlush(self.display);
+}
+
+pub fn maximize(self: @This(), state: bool) void {
+    const horiz = x11.XInternAtom(self.display, "_NET_WM_STATE_MAXIMIZED_HORZ", x11.False);
+    const vert = x11.XInternAtom(self.display, "_NET_WM_STATE_MAXIMIZED_VERT", x11.False);
+
+    const action: c_long = if (state) 1 else 0; // 1 = add, 0 = remove
+
+    self.sendWmState(action, horiz);
+    self.sendWmState(action, vert);
+}
+
+pub fn minimize(self: @This()) void {
+    const wm_change_state = x11.XInternAtom(self.display, "WM_CHANGE_STATE", x11.False);
+
+    var event: x11.XEvent = .{ .xclient = .{
+        .type = x11.ClientMessage,
+        .message_type = wm_change_state,
+        .display = self.display,
+        .window = self.window,
+        .format = 32,
+        .data = .{ .l = .{ x11.IconicState, 0, 0, 0, 0 } },
+    } };
+    _ = x11.XSendEvent(
+        self.display,
+        self.window,
+        x11.False,
+        0,
+        &event,
+    );
+    _ = x11.XFlush(self.display);
+}
+
+fn sendWmState(self: @This(), action: c_long, prop: x11.Atom) void {
+    const wm_state = x11.XInternAtom(self.display, "_NET_WM_STATE", x11.False);
+
+    var event: x11.XEvent = .{
+        .xclient = .{
+            .type = x11.ClientMessage,
+            .message_type = wm_state,
+            .display = self.display,
+            .window = self.window,
+            .format = 32,
+            .data = .{
+                .l = .{
+                    action, // 0=remove, 1=add, 2=toggle
+                    @intCast(prop),
+                    0,
+                    1, // normal client source
+                    0,
+                },
+            },
+        },
+    };
+
+    _ = x11.XSendEvent(
+        self.display,
+        x11.DefaultRootWindow(self.display),
+        x11.False,
+        x11.SubstructureRedirectMask | x11.SubstructureNotifyMask,
+        &event,
+    );
+
+    _ = x11.XFlush(self.display);
+}

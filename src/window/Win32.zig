@@ -7,6 +7,9 @@ instance: win32.HINSTANCE,
 hwnd: win32.HWND,
 api: GraphicsApi = .none,
 
+previous_style: i32 = 0,
+previous_placement: win32.WINDOWPLACEMENT = std.mem.zeroInit(win32.WINDOWPLACEMENT, .{ .length = @sizeOf(win32.WINDOWPLACEMENT) }),
+
 pub const GraphicsApi = union(Window.GraphicsApi.Tag) {
     opengl: OpenGL,
     vulkan: Vulkan,
@@ -181,7 +184,7 @@ pub fn poll(self: @This()) !?Window.Event {
                 return null;
             },
         },
-        win32.WM_SIZE, win32.WM_USER + 1 => .{ .resize = .{
+        win32.WM_USER + win32.WM_SIZE => .{ .resize = .{
             .width = @intCast(@as(u16, @truncate(@as(u32, @intCast(msg.lParam))))),
             .height = @intCast(@as(u16, @truncate(@as(u32, @intCast(msg.lParam >> 16))))),
         } },
@@ -239,15 +242,53 @@ pub fn getSize(self: @This()) Window.Size {
     return .{ .width = @intCast(rect.right - rect.left), .height = @intCast(rect.bottom - rect.top) };
 }
 
+pub fn fullscreen(self: *@This(), state: bool) void {
+    if (state) {
+        _ = win32.GetWindowPlacement(self.hwnd, &self.previous_placement);
+
+        const style = win32.GetWindowLongW(self.hwnd, win32.GWL_STYLE);
+        self.previous_style = style;
+        const new_style = (style & ~@as(i32, @bitCast(win32.WS_OVERLAPPEDWINDOW))) | @as(i32, @bitCast(win32.WS_POPUP));
+
+        _ = win32.SetWindowLongW(self.hwnd, win32.GWL_STYLE, new_style);
+
+        const monitor = win32.MonitorFromWindow(self.hwnd, win32.MONITOR_DEFAULTTOPRIMARY);
+        var mi: win32.MONITORINFO = std.mem.zeroInit(win32.MONITORINFO, .{
+            .cbSize = @sizeOf(win32.MONITORINFO),
+        });
+        _ = win32.GetMonitorInfoW(monitor, &mi);
+
+        _ = win32.SetWindowPos(
+            self.hwnd,
+            null,
+            mi.rcMonitor.left,
+            mi.rcMonitor.top,
+            mi.rcMonitor.right - mi.rcMonitor.left,
+            mi.rcMonitor.bottom - mi.rcMonitor.top,
+            .{ .DRAWFRAME = 1, .NOOWNERZORDER = 1 },
+        );
+    } else {
+        _ = win32.SetWindowLongW(self.hwnd, win32.GWL_STYLE, self.previous_style);
+        _ = win32.SetWindowPos(self.hwnd, null, 0, 0, 0, 0, .{ .DRAWFRAME = 1, .NOMOVE = 1, .NOSIZE = 1, .NOZORDER = 1, .NOOWNERZORDER = 1 });
+        _ = win32.SetWindowPlacement(self.hwnd, &self.previous_placement);
+    }
+}
+
+pub fn maximize(self: @This(), state: bool) void {
+    if (state)
+        _ = win32.ShowWindow(self.hwnd, win32.SW_MAXIMIZE)
+    else
+        _ = win32.ShowWindow(self.hwnd, win32.SW_RESTORE);
+}
+
+pub fn minimize(self: @This()) void {
+    _ = win32.ShowWindow(self.hwnd, win32.SW_MINIMIZE);
+}
+
 pub fn wndProc(hwnd: win32.HWND, msg: u32, wParam: usize, lParam: isize) callconv(.winapi) isize {
     return switch (msg) {
-        win32.WM_DESTROY => {
-            win32.PostQuitMessage(0);
-            _ = win32.MessageBoxA(hwnd, "Hello", "Title", .{});
-            return 0;
-        },
         win32.WM_SIZE => {
-            if (!win32.SUCCEEDED(win32.PostMessageW(hwnd, win32.WM_USER + 1, wParam, lParam))) reportErr(error.PostMessage) catch {};
+            if (!win32.SUCCEEDED(win32.PostMessageW(hwnd, win32.WM_USER + win32.WM_SIZE, wParam, lParam))) reportErr(error.PostMessage) catch {};
             return 0;
         },
         else => win32.DefWindowProcW(hwnd, msg, wParam, lParam),
