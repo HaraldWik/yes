@@ -257,21 +257,24 @@ pub fn wndProc(hwnd: win32.HWND, msg: u32, wParam: usize, lParam: isize) callcon
 pub fn reportErr(err: anyerror) anyerror {
     const code = win32.GetLastError();
 
-    var buf: [512:0]u16 = undefined;
-    const len = win32.FormatMessageW(
+    var text_buffer: [512:0]u16 = undefined;
+    const text_len = win32.FormatMessageW(
         .{ .FROM_SYSTEM = 1, .IGNORE_INSERTS = 1 },
         null,
         @intFromEnum(code),
         0,
-        @ptrCast(&buf),
-        buf.len,
+        @ptrCast(&text_buffer),
+        text_buffer.len,
         null,
     );
+    var title_buffer: [512:0]u16 = undefined;
+    const title_len = try std.unicode.utf8ToUtf16Le(&title_buffer, @errorName(err));
+    title_buffer[title_len] = 0;
 
     _ = win32.MessageBoxW(
         null,
-        @ptrCast(buf[0..len]),
-        win32.L("Error"),
+        @ptrCast(text_buffer[0..text_len]),
+        @ptrCast(title_buffer[0..].ptr),
         .{ .ICONHAND = 1 },
     );
 
