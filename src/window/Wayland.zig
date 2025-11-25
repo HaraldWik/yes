@@ -112,8 +112,6 @@ pub fn open(config: Window.Config) !@This() {
             const window: *wl.wl_egl_window = wl.wl_egl_window_create(surface, @intCast(config.size.width), @intCast(config.size.height)) orelse return error.CreateWindow;
             const egl_surface = egl.eglCreateWindowSurface(egl_display, egl_config, @intFromPtr(window), null) orelse return error.EglCreateWindowSurface;
 
-            if (egl.eglMakeCurrent(egl_display, egl_surface, egl_surface, egl_context) != egl.EGL_TRUE) return error.EglMakeCurrent;
-
             break :api .{ .opengl = .{
                 .display = egl_display,
                 .config = egl_config.?,
@@ -145,7 +143,6 @@ pub fn open(config: Window.Config) !@This() {
 pub fn close(self: @This()) void {
     switch (self.api) {
         .opengl => |opengl| {
-            _ = egl.eglMakeCurrent(opengl.display, egl.EGL_NO_SURFACE, egl.EGL_NO_SURFACE, egl.EGL_NO_CONTEXT);
             _ = egl.eglDestroySurface(opengl.display, opengl.surface);
             wl.wl_egl_window_destroy(opengl.window);
             _ = egl.eglDestroyContext(opengl.display, opengl.context);

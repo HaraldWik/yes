@@ -5,6 +5,15 @@ const Window = @import("Window.zig");
 window: x11.Window,
 display: *x11.Display,
 wm_delete_window: x11.Atom,
+api: GraphicsApi,
+
+pub const GraphicsApi = union(Window.GraphicsApi.Tag) {
+    opengl: struct {
+        context: @typeInfo(x11.GLXContext).optional.child,
+    },
+    vulkan: struct {},
+    none,
+};
 
 pub fn open(config: Window.Config) !@This() {
     const display: *x11.Display = x11.XOpenDisplay(null) orelse return error.OpenDisplay;
@@ -92,14 +101,13 @@ pub fn open(config: Window.Config) !@This() {
     _ = x11.XMapWindow(display, window);
     _ = x11.XFlush(display);
 
-    switch (config.api) {
-        .opengl => {
-            const ctx: x11.GLXContext = x11.glXCreateContext(display, visual, null, @intFromBool(true));
-            _ = x11.glXMakeCurrent(display, window, ctx);
-        },
-        .vulkan => {},
-        .none => {},
-    }
+    const api: GraphicsApi = switch (config.api) {
+        .opengl => .{ .opengl = .{
+            .context = x11.glXCreateContext(display, visual, null, @intFromBool(true)) orelse return error.CreateGlxContext,
+        } },
+        .vulkan => .{ .vulkan = .{} },
+        .none => .none,
+    };
 
     var attrs: x11.XWindowAttributes = undefined;
     _ = x11.XGetWindowAttributes(display, window, &attrs);
@@ -128,6 +136,7 @@ pub fn open(config: Window.Config) !@This() {
         .window = window,
         .display = display,
         .wm_delete_window = wm_delete_window,
+        .api = api,
     };
 }
 

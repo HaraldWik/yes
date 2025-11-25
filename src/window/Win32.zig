@@ -91,7 +91,6 @@ pub fn open(config: Window.Config) !@This() {
             if (!win32.SUCCEEDED(win32.SetPixelFormat(dc, format, &pfd))) return reportErr(error.SetPixelFormat);
 
             var ctx = win32.wglCreateContext(dc) orelse return reportErr(error.WglCreateContext);
-            if (!win32.SUCCEEDED(win32.wglMakeCurrent(dc, ctx))) return reportErr(error.WglMakeCurrent);
 
             if (!win32.SUCCEEDED(win32.ReleaseDC(hwnd, dc))) return reportErr(error.WglReleaseDC);
 
