@@ -47,6 +47,7 @@ pub fn main() !void {
                             window.maximize(is_maximize);
                         },
                         .n => window.minimize(),
+                        .t => window.setTitle("You pressed T!"),
                         else => {},
                     };
                 },

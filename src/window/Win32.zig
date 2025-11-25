@@ -242,6 +242,12 @@ pub fn getSize(self: @This()) Window.Size {
     return .{ .width = @intCast(rect.right - rect.left), .height = @intCast(rect.bottom - rect.top) };
 }
 
+pub fn setTitle(self: @This(), title: [:0]const u8) void {
+    var title_buffer: [256]u16 = @splat(0);
+    const title_utf16 = title_buffer[0..(std.unicode.utf8ToUtf16Le(&title_buffer, title[0..title.len]) catch title.len)];
+    _ = win32.SetWindowTextW(self.hwnd, @ptrCast(title_utf16));
+}
+
 pub fn fullscreen(self: *@This(), state: bool) void {
     if (state) {
         _ = win32.GetWindowPlacement(self.hwnd, &self.previous_placement);

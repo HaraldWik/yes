@@ -88,7 +88,7 @@ pub const Config = struct {
 };
 
 pub fn open(config: Config) !@This() {
-    return .{
+    const window: @This() = .{
         .handle = switch (native.os) {
             .windows => try .open(config),
             else => switch (Posix.getSessionType() orelse .x11) {
@@ -97,6 +97,8 @@ pub fn open(config: Config) !@This() {
             },
         },
     };
+    if (native.os != .windows) window.setTitle(config.title);
+    return window;
 }
 
 pub fn close(self: @This()) void {
@@ -126,9 +128,18 @@ pub fn getSize(self: @This()) Size {
     };
 }
 
+pub fn setTitle(self: @This(), title: [:0]const u8) void {
+    switch (native.os) {
+        .windows => self.handle.setTitle(title),
+        else => switch (self.handle) {
+            inline else => |handle| handle.setTitle(title),
+        },
+    }
+}
+
 pub fn fullscreen(self: *@This(), state: bool) void {
     switch (native.os) {
-        .windows => Win32.fullscreen(self.handle, state),
+        .windows => (&self.handle).fullscreen(state),
         else => switch (self.handle) {
             inline else => |*handle| handle.fullscreen(state),
         },

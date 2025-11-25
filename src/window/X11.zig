@@ -1,5 +1,4 @@
 const std = @import("std");
-const root = @import("../root.zig");
 const x11 = @import("../root.zig").native.posix.x11;
 const Window = @import("Window.zig");
 
@@ -10,6 +9,7 @@ wm_delete_window: x11.Atom,
 pub fn open(config: Window.Config) !@This() {
     const display: *x11.Display = x11.XOpenDisplay(null) orelse return error.OpenDisplay;
     const screen = x11.DefaultScreen(display);
+    const root = x11.RootWindow(display, screen);
 
     var visual: *x11.XVisualInfo = undefined;
     const window: x11.Window = window: switch (config.api) {
@@ -27,13 +27,13 @@ pub fn open(config: Window.Config) !@This() {
             visual = x11.glXChooseVisual(display, screen, &visual_attribs);
 
             var swa: x11.XSetWindowAttributes = .{
-                .colormap = x11.XCreateColormap(display, x11.RootWindow(display, screen), visual.visual, x11.AllocNone),
+                .colormap = x11.XCreateColormap(display, root, visual.visual, x11.AllocNone),
                 .event_mask = x11.ExposureMask | x11.KeyPressMask | x11.StructureNotifyMask,
             };
 
             const window: x11.Window = x11.XCreateWindow(
                 display,
-                x11.RootWindow(display, screen),
+                root,
                 0,
                 0,
                 800,
@@ -48,7 +48,7 @@ pub fn open(config: Window.Config) !@This() {
             break :window window;
         },
         .vulkan => return error.NotImplemented, // TODO: add vulkan window for X
-        .none => x11.XCreateSimpleWindow(display, x11.RootWindow(display, screen), // Parent window
+        .none => x11.XCreateSimpleWindow(display, root, // Parent window
             0, 0, // X, Y position
             @intCast(config.size.width), @intCast(config.size.height), // Width, Height
             2, // Border width
@@ -57,7 +57,7 @@ pub fn open(config: Window.Config) !@This() {
         ),
     };
 
-    _ = x11.XStoreName(display, window, config.title.ptr);
+    // _ = x11.XStoreName(display, window, config.title.ptr);
     var hints: x11.XSizeHints = .{};
 
     if (config.min_size) |size| {
@@ -189,7 +189,7 @@ pub fn poll(self: @This()) ?Window.Event {
 }
 
 pub fn getSize(self: @This()) Window.Size {
-    var root_window: x11.Window = undefined;
+    var root: x11.Window = undefined;
     var x: c_int = 0;
     var y: c_int = 0;
     var width: c_uint = 0;
@@ -197,8 +197,37 @@ pub fn getSize(self: @This()) Window.Size {
     var border: c_uint = 0;
     var depth: c_uint = 0;
 
-    _ = x11.XGetGeometry(self.display, self.window, &root_window, &x, &y, &width, &height, &border, &depth);
+    _ = x11.XGetGeometry(self.display, self.window, &root, &x, &y, &width, &height, &border, &depth);
     return .{ .width = @intCast(width), .height = @intCast(height) };
+}
+
+pub fn setTitle(self: @This(), title: [:0]const u8) void {
+    const UTF8_STRING = x11.XInternAtom(self.display, "UTF8_STRING", 0);
+    const NET_WM_NAME = x11.XInternAtom(self.display, "_NET_WM_NAME", 0);
+
+    // Set UTF-8 version (required by modern WMs)
+    _ = x11.XChangeProperty(
+        self.display,
+        self.window,
+        NET_WM_NAME,
+        UTF8_STRING,
+        8,
+        x11.PropModeReplace,
+        @ptrCast(title.ptr),
+        @intCast(title.len),
+    );
+
+    // Set legacy WM_NAME for older clients
+    _ = x11.XChangeProperty(
+        self.display,
+        self.window,
+        x11.XA_WM_NAME,
+        x11.XA_STRING,
+        8,
+        x11.PropModeReplace,
+        @ptrCast(title.ptr),
+        @intCast(title.len),
+    );
 }
 
 pub fn fullscreen(self: @This(), state: bool) void {
@@ -229,24 +258,29 @@ pub fn maximize(self: @This(), state: bool) void {
 }
 
 pub fn minimize(self: @This()) void {
-    const wm_change_state = x11.XInternAtom(self.display, "WM_CHANGE_STATE", x11.False);
+    const display = self.display;
+    const root = x11.XDefaultRootWindow(display);
 
-    var event: x11.XEvent = .{ .xclient = .{
-        .type = x11.ClientMessage,
-        .message_type = wm_change_state,
-        .display = self.display,
-        .window = self.window,
-        .format = 32,
-        .data = .{ .l = .{ x11.IconicState, 0, 0, 0, 0 } },
-    } };
-    _ = x11.XSendEvent(
-        self.display,
-        self.window,
-        x11.False,
-        0,
-        &event,
-    );
-    _ = x11.XFlush(self.display);
+    const net_wm_state = x11.XInternAtom(display, "_NET_WM_STATE", x11.False);
+    const hidden = x11.XInternAtom(display, "_NET_WM_STATE_HIDDEN", x11.False);
+
+    var event: x11.XEvent = .{
+        .xclient = .{
+            .type = x11.ClientMessage,
+            .serial = 0,
+            .send_event = x11.True,
+            .message_type = net_wm_state,
+            .window = self.window,
+            .format = 32,
+            .data = .{
+                .l = .{ 1, @intCast(hidden), 0, 0, 0 },
+            },
+        },
+    };
+
+    _ = x11.XSendEvent(display, root, x11.False, x11.SubstructureRedirectMask | x11.SubstructureNotifyMask, &event);
+
+    _ = x11.XFlush(display);
 }
 
 fn sendWmState(self: @This(), action: c_long, prop: x11.Atom) void {

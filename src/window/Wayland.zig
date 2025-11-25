@@ -70,7 +70,6 @@ pub fn open(config: Window.Config) !@This() {
 
     const xdg_toplevel: *xdg.xdg_toplevel = xdg.xdg_surface_get_toplevel(xdg_surface) orelse return error.XdgSurfaceGetToplevel;
     if (xdg.xdg_toplevel_add_listener(xdg_toplevel, Toplevel.listener, null) != 0) return error.XdgToplevelAddListener;
-    xdg.xdg_toplevel_set_title(xdg_toplevel, config.title.ptr);
     if (config.min_size) |size| xdg.xdg_toplevel_set_min_size(xdg_toplevel, @intCast(size.width), @intCast(size.height));
     if (config.max_size) |size| xdg.xdg_toplevel_set_max_size(xdg_toplevel, @intCast(size.width), @intCast(size.height));
 
@@ -195,6 +194,10 @@ pub fn poll(self: *@This()) ?Window.Event {
 
 pub fn getSize(self: @This()) Window.Size {
     return self.size;
+}
+
+pub fn setTitle(self: @This(), title: [:0]const u8) void {
+    xdg.xdg_toplevel_set_title(self.xdg_toplevel, title);
 }
 
 pub fn fullscreen(self: @This(), state: bool) void {
