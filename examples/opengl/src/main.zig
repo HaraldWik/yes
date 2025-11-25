@@ -46,7 +46,6 @@ pub fn main() !void {
     });
     defer window.close();
     try yes.opengl.makeCurrent(window);
-    defer yes.opengl.makeCurrent(null) catch {};
     try yes.opengl.swapInterval(window, 1);
 
     gl.load(yes.opengl.getProcAddress, true);

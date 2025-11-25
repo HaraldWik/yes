@@ -18,19 +18,12 @@ pub fn getProcAddress(name: [*:0]const u8) ?Proc {
     };
 }
 
-/// set to null to remove the context
-pub fn makeCurrent(window: ?Window) !void {
-    if (window != null) switch (native.os) {
-        .windows => if (wgl.wglMakeCurrent(window.?.handle.api.opengl.dc, window.?.handle.api.opengl.ctx) == wgl.GL_FALSE) return error.WglMakeCurrent,
-        else => switch (window.?.handle) {
+pub fn makeCurrent(window: Window) !void {
+    switch (native.os) {
+        .windows => if (wgl.wglMakeCurrent(window.handle.api.opengl.dc, window.handle.api.opengl.ctx) == wgl.GL_FALSE) return error.WglMakeCurrent,
+        else => switch (window.handle) {
             .x11 => |handle| if (glx.glXMakeCurrent(handle.display, handle.window, handle.api.opengl.context) == glx.False) return error.GlxMakeCurrent,
             .wayland => |handle| if (egl.eglMakeCurrent(handle.api.opengl.display, handle.api.opengl.surface, handle.api.opengl.surface, handle.api.opengl.context) != egl.EGL_TRUE) return error.EglMakeCurrent,
-        },
-    } else switch (native.os) {
-        .windows => _ = wgl.wglMakeCurrent(null, null),
-        else => switch (window.?.handle) {
-            .x11 => _ = glx.glXMakeCurrent(null, glx.None, null),
-            .wayland => _ = egl.eglMakeCurrent(null, null, null, null),
         },
     }
 }
