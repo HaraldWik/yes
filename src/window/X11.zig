@@ -45,8 +45,8 @@ pub fn open(config: Window.Config) !@This() {
                 root,
                 0,
                 0,
-                800,
-                600,
+                @intCast(config.size.width),
+                @intCast(config.size.height),
                 0,
                 visual.depth,
                 x11.InputOutput,
@@ -109,10 +109,10 @@ pub fn open(config: Window.Config) !@This() {
         .none => .none,
     };
 
-    var attrs: x11.XWindowAttributes = undefined;
-    _ = x11.XGetWindowAttributes(display, window, &attrs);
-
     { // Send initial resize event
+        var attrs: x11.XWindowAttributes = undefined;
+        _ = x11.XGetWindowAttributes(display, window, &attrs);
+
         var event: x11.XEvent = .{
             .xconfigure = .{
                 .type = x11.ConfigureNotify,

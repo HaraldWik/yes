@@ -48,7 +48,7 @@ pub fn main() !void {
     try yes.opengl.makeCurrent(window);
     try yes.opengl.swapInterval(window, 1);
 
-    gl.load(yes.opengl.getProcAddress, true);
+    gl.load(yes.opengl.getProcAddress, false);
     gl.debug.set(null);
 
     if (gl.String.get(.version, null)) |version| std.debug.print("GL version: {s}\n", .{version});

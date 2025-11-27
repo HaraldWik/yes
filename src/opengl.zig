@@ -13,14 +13,20 @@ pub const Proc = *const fn () callconv(APIENTRY) void;
 
 pub fn getProcAddress(name: [*:0]const u8) ?Proc {
     return switch (native.os) {
-        .windows => @ptrCast(wgl.wglGetProcAddress(name)),
+        .windows => proc: {
+            const win32 = @import("win32").everything;
+            if (wgl.wglGetProcAddress(name)) |proc| break :proc @ptrCast(proc);
+            const gl = win32.LoadLibraryA("opengl32.dll") orelse return null;
+            if (win32.GetProcAddress(gl, name)) |proc| break :proc @ptrCast(proc);
+            break :proc null;
+        },
         else => glx.glXGetProcAddress(name) orelse egl.eglGetProcAddress(name),
     };
 }
 
 pub fn makeCurrent(window: Window) !void {
     switch (native.os) {
-        .windows => if (wgl.wglMakeCurrent(window.handle.api.opengl.dc, window.handle.api.opengl.ctx) == wgl.GL_FALSE) return error.WglMakeCurrent,
+        .windows => if (wgl.wglMakeCurrent(window.handle.api.opengl.dc, window.handle.api.opengl.rc) == wgl.GL_FALSE) return error.WglMakeCurrent,
         else => switch (window.handle) {
             .x11 => |handle| if (glx.glXMakeCurrent(handle.display, handle.window, handle.api.opengl.context) == glx.False) return error.GlxMakeCurrent,
             .wayland => |handle| if (egl.eglMakeCurrent(handle.api.opengl.display, handle.api.opengl.surface, handle.api.opengl.surface, handle.api.opengl.context) != egl.EGL_TRUE) return error.EglMakeCurrent,

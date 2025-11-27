@@ -7,9 +7,12 @@
         .yes = .{
             .path = "../../",
         },
+        // .zig_opengl = .{
+        // .url = "git+https://github.com/HaraldWik/zig-opengl#db3053f383c7728e601feb57bb4c50394ef45592",
+        // .hash = "zig_opengl-0.0.0-WXQ8jwhOCAAmeK7ZjGFKn7lH3BWhNMaawSBImwAH-D6l",
+        // },
         .zig_opengl = .{
-            .url = "git+https://github.com/HaraldWik/zig-opengl#db3053f383c7728e601feb57bb4c50394ef45592",
-            .hash = "zig_opengl-0.0.0-WXQ8jwhOCAAmeK7ZjGFKn7lH3BWhNMaawSBImwAH-D6l",
+            .path = "../../../zig-opengl",
         },
     },
     .paths = .{
