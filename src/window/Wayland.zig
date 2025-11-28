@@ -39,8 +39,6 @@ pub const GraphicsApi = union(Window.GraphicsApi.Tag) {
 };
 
 pub fn open(config: Window.Config) !@This() {
-    if (config.api != .opengl) @panic("only opengl supported for wayland, do --xdg=x11");
-
     events = .initBuffer(&event_buffer);
 
     const display: *wl.wl_display = wl.wl_display_connect(null) orelse return error.ConnectDisplay;

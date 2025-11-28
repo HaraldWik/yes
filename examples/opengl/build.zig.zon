@@ -2,17 +2,14 @@
     .name = .example,
     .version = "0.0.0",
     .fingerprint = 0x6eec9b9fbc9ab86c,
-    .minimum_zig_version = "0.16.0-dev.253+4314c9653",
+    .minimum_zig_version = "0.16.0-dev.1484+d0ba6642b",
     .dependencies = .{
         .yes = .{
             .path = "../../",
         },
-        // .zig_opengl = .{
-        // .url = "git+https://github.com/HaraldWik/zig-opengl#db3053f383c7728e601feb57bb4c50394ef45592",
-        // .hash = "zig_opengl-0.0.0-WXQ8jwhOCAAmeK7ZjGFKn7lH3BWhNMaawSBImwAH-D6l",
-        // },
         .zig_opengl = .{
-            .path = "../../../zig-opengl",
+            .url = "git+https://github.com/HaraldWik/zig-opengl#cae404109bed7ec092aa8ce4690d082008913b25",
+            .hash = "zig_opengl-0.0.0-WXQ8jyZOCAB25kjOfvn_RqVDGJ2RzfoRx5MNFWArzzVM",
         },
     },
     .paths = .{

@@ -23,8 +23,7 @@ pub const GraphicsApi = union(Window.GraphicsApi.Tag) {
 
         pub const Wgl = struct {
             swapIntervalEXT: *const fn (i32) callconv(.winapi) win32.BOOL,
-            choosePixelFormatARB: *const fn (win32.HDC, ?[*]const i32, ?[*:0]const f32, u32, [*:0]i32, *u32) callconv(.winapi) win32.BOOL,
-            createContextAttribsARB: *const fn (win32.HDC, ?win32.HGLRC, [*:0]const i32) callconv(.winapi) ?win32.HGLRC,
+            // choosePixelFormatARB: *const fn (win32.HDC, ?[*]const i32, ?[*:0]const f32, u32, [*:0]i32, *u32) callconv(.winapi) win32.BOOL,
         };
     };
     pub const Vulkan = struct {
@@ -108,19 +107,17 @@ pub fn open(config: Window.Config) !@This() {
             var wgl: GraphicsApi.OpenGL.Wgl = undefined;
             const getExtensionsStringARB: *const fn (win32.HDC) callconv(.winapi) ?[*:0]const u8 = @ptrCast(win32.wglGetProcAddress("wglGetExtensionsStringARB") orelse return reportErr(error.WglGetProcAddress));
 
+            var createContextAttribsARB: ?*const fn (win32.HDC, ?win32.HGLRC, [*:0]const i32) callconv(.winapi) ?win32.HGLRC = null;
+
             if (getExtensionsStringARB(dc)) |extensions| {
                 var it = std.mem.tokenizeScalar(u8, std.mem.sliceTo(extensions, 0), ' ');
                 while (it.next()) |name| {
-                    const ext = std.meta.stringToEnum(enum {
-                        WGL_EXT_swap_control,
-                        WGL_ARB_pixel_format,
-                        WGL_ARB_create_context_profile,
-                    }, name) orelse continue;
-                    switch (ext) {
-                        .WGL_EXT_swap_control => wgl.swapIntervalEXT = @ptrCast(win32.wglGetProcAddress("wglSwapIntervalEXT") orelse return error.WglSwapIntervalEXT),
-                        .WGL_ARB_pixel_format => wgl.choosePixelFormatARB = @ptrCast(win32.wglGetProcAddress("wglChoosePixelFormatARB") orelse return error.WglChoosePixelFormatARB),
-                        .WGL_ARB_create_context_profile => wgl.createContextAttribsARB = @ptrCast(win32.wglGetProcAddress("wglCreateContextAttribsARB") orelse return error.WglCreateContextAttribsARB),
-                    }
+                    if (std.mem.eql(u8, name, "WGL_EXT_swap_control"))
+                        wgl.swapIntervalEXT = @ptrCast(win32.wglGetProcAddress("wglSwapIntervalEXT") orelse return reportErr(error.WglSwapIntervalEXT));
+                    // if (std.mem.eql(u8, name, "WGL_ARB_pixel_format"))
+                    // wgl.choosePixelFormatARB = @ptrCast(win32.wglGetProcAddress("wglChoosePixelFormatARB") orelse return reportErr(error.WglChoosePixelFormatARB));
+                    if (std.mem.eql(u8, name, "WGL_ARB_create_context_profile"))
+                        createContextAttribsARB = @ptrCast(win32.wglGetProcAddress("wglCreateContextAttribsARB") orelse return reportErr(error.WglCreateContextAttribsARB));
                 }
             }
 
@@ -130,13 +127,16 @@ pub fn open(config: Window.Config) !@This() {
             const WGL_CONTEXT_CORE_PROFILE_BIT_ARB = 0x00000001;
 
             const attributes: [:0]const i32 = &.{
-                WGL_CONTEXT_MAJOR_VERSION_ARB, 4,
-                WGL_CONTEXT_MINOR_VERSION_ARB, 5,
+                WGL_CONTEXT_MAJOR_VERSION_ARB, @intCast(config.api.opengl.version.major),
+                WGL_CONTEXT_MINOR_VERSION_ARB, @intCast(config.api.opengl.version.minor),
                 WGL_CONTEXT_PROFILE_MASK_ARB,  WGL_CONTEXT_CORE_PROFILE_BIT_ARB,
             };
 
             _ = win32.wglDeleteContext(rc);
-            rc = wgl.createContextAttribsARB(dc, null, attributes) orelse return reportErr(error.CreateModernOpenGL);
+            rc = try if (createContextAttribsARB) |createContextAttribs|
+                createContextAttribs(dc, null, attributes) orelse return reportErr(error.CreateModernOpenGL)
+            else
+                error.NoCreateContextAttribs;
             _ = win32.wglMakeCurrent(dc, rc);
 
             break :api .{
