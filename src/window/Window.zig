@@ -112,7 +112,7 @@ pub fn close(self: @This()) void {
 
 pub fn poll(self: *@This()) !?Event {
     return switch (native.os) {
-        .windows => try self.handle.poll(),
+        .windows => self.handle.poll(),
         else => switch (self.handle) {
             inline else => |*handle| handle.poll(),
         },

@@ -4,6 +4,7 @@ const Window = @import("Window.zig");
 // zig build -Dtarget=x86_64-windows && wine zig-out/bin/example.exe
 
 instance: win32.HINSTANCE,
+class: win32.WNDCLASSEXW,
 hwnd: win32.HWND,
 api: GraphicsApi = .none,
 
@@ -47,7 +48,6 @@ pub fn open(config: Window.Config) !@This() {
         },
     });
     if (!win32.SUCCEEDED(win32.RegisterClassExW(@ptrCast(&class)))) return reportErr(error.RegisterClass);
-
     var title_buffer: [256]u16 = undefined;
     const title = title_buffer[0..(try std.unicode.utf8ToUtf16Le(&title_buffer, config.title[0 .. config.title.len + 1]))];
 
@@ -163,6 +163,7 @@ pub fn open(config: Window.Config) !@This() {
 
     return .{
         .instance = instance,
+        .class = class,
         .hwnd = hwnd,
         .api = api,
     };
@@ -177,6 +178,7 @@ pub fn close(self: @This()) void {
         .none => {},
     }
     _ = win32.DestroyWindow(self.hwnd);
+    _ = win32.UnregisterClassW(self.class.lpszClassName, self.instance);
 }
 
 pub fn poll(self: @This()) !?Window.Event {

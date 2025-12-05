@@ -26,7 +26,7 @@ var events: std.Deque(Window.Event) = .empty;
 pub const GraphicsApi = union(Window.GraphicsApi.Tag) {
     opengl: OpenGL,
     vulkan: Vulkan,
-    none: void,
+    none: None,
 
     pub const OpenGL = struct {
         display: @typeInfo(egl.EGLDisplay).optional.child,
@@ -36,13 +36,19 @@ pub const GraphicsApi = union(Window.GraphicsApi.Tag) {
         surface: @typeInfo(egl.EGLSurface).optional.child,
     };
     pub const Vulkan = struct {};
+    pub const None = struct {
+        shm: *wl.wl_shm,
+        buffer: *wl.wl_buffer,
+        pixels: []u8,
+    };
 };
 
 pub fn open(config: Window.Config) !@This() {
     events = .initBuffer(&event_buffer);
 
     const display: *wl.wl_display = wl.wl_display_connect(null) orelse return error.ConnectDisplay;
-    const compositor: *wl.wl_compositor, const xdg_wm_base: *xdg.xdg_wm_base, const seat: *wl.wl_seat = registry: {
+    errdefer wl.wl_display_disconnect(display);
+    const compositor: *wl.wl_compositor, const xdg_wm_base: *xdg.xdg_wm_base, const seat: *wl.wl_seat, const shm: ?*wl.wl_shm = registry: {
         var data: Registry = undefined;
         const registry: *wl.wl_registry = wl.wl_display_get_registry(display) orelse return error.GetDisplayRegistry;
         if (wl.wl_registry_add_listener(registry, &wl.wl_registry_listener{ .global = @ptrCast(&Registry.callback) }, @ptrCast(&data)) != 0) return error.RegistryAddListener;
@@ -51,20 +57,21 @@ pub fn open(config: Window.Config) !@This() {
             data.compositor orelse return error.Compositor,
             data.xdg_wm_base orelse return error.XdgWmBase,
             data.seat orelse return error.Seat,
+            data.shm,
         };
     };
 
     var keyboard: Keyboard = undefined;
     try keyboard.get(seat);
+    // errdefer keyboard.deinit();
 
-    const xdg_wm_base_listener = xdg.xdg_wm_base_listener{ .ping = xdgWmBasePing };
-    if (xdg.xdg_wm_base_add_listener(xdg_wm_base, &xdg_wm_base_listener, null) != 0) return error.AddXdgBaseListener;
+    if (xdg.xdg_wm_base_add_listener(xdg_wm_base, &xdg.xdg_wm_base_listener{ .ping = callback.xdgBasePing }, null) != 0) return error.AddXdgBaseListener;
 
     const surface: *wl.wl_surface = wl.wl_compositor_create_surface(compositor) orelse return error.CreateSurface;
     const xdg_surface: *xdg.xdg_surface = xdg.xdg_wm_base_get_xdg_surface(xdg_wm_base, @ptrCast(surface)) orelse return error.XdgBaseGetXdgSurface;
 
-    var configure: Configure = .{};
-    _ = xdg.xdg_surface_add_listener(xdg_surface, &xdg.xdg_surface_listener{ .configure = @ptrCast(&Configure.callback) }, &configure);
+    var configuration_done: bool = false;
+    _ = xdg.xdg_surface_add_listener(xdg_surface, &xdg.xdg_surface_listener{ .configure = @ptrCast(&callback.configure) }, &configuration_done);
 
     const xdg_toplevel: *xdg.xdg_toplevel = xdg.xdg_surface_get_toplevel(xdg_surface) orelse return error.XdgSurfaceGetToplevel;
     if (xdg.xdg_toplevel_add_listener(xdg_toplevel, Toplevel.listener, null) != 0) return error.XdgToplevelAddListener;
@@ -72,12 +79,12 @@ pub fn open(config: Window.Config) !@This() {
     if (config.max_size) |size| xdg.xdg_toplevel_set_max_size(xdg_toplevel, @intCast(size.width), @intCast(size.height));
 
     wl.wl_surface_commit(surface);
-    while (!configure.done) _ = wl.wl_display_dispatch(display);
+    while (!configuration_done) _ = wl.wl_display_dispatch(display);
     wl.wl_surface_commit(surface);
 
     const api: GraphicsApi = api: switch (config.api) {
         .opengl => |opengl| {
-            const egl_display = egl.eglGetDisplay(display) orelse return error.EglGetDisplay;
+            const egl_display = egl.eglGetDisplay(display) orelse return error.GetDisplay;
 
             var major: egl.EGLint = undefined;
             var minor: egl.EGLint = undefined;
@@ -96,7 +103,7 @@ pub fn open(config: Window.Config) !@This() {
 
             var egl_config: egl.EGLConfig = undefined;
             var n: egl.EGLint = undefined;
-            if (egl.eglChooseConfig(egl_display, egl_config_attribs.ptr, &egl_config, 1, &n) != egl.EGL_TRUE) return error.EglChooseConfig;
+            if (egl.eglChooseConfig(egl_display, egl_config_attribs.ptr, &egl_config, 1, &n) != egl.EGL_TRUE) return error.ChooseConfig;
 
             const egl_context_attribs: []const egl.EGLint = &.{
                 egl.EGL_CONTEXT_MAJOR_VERSION,       @intCast(opengl.version.major),
@@ -108,7 +115,7 @@ pub fn open(config: Window.Config) !@This() {
             const egl_context = egl.eglCreateContext(egl_display, egl_config, egl.EGL_NO_CONTEXT, egl_context_attribs.ptr) orelse return error.CreateContext;
 
             const window: *wl.wl_egl_window = wl.wl_egl_window_create(surface, @intCast(config.size.width), @intCast(config.size.height)) orelse return error.CreateWindow;
-            const egl_surface = egl.eglCreateWindowSurface(egl_display, egl_config, @intFromPtr(window), null) orelse return error.EglCreateWindowSurface;
+            const egl_surface = egl.eglCreateWindowSurface(egl_display, egl_config, @intFromPtr(window), null) orelse return error.CreateWindowSurface;
 
             break :api .{ .opengl = .{
                 .display = egl_display,
@@ -119,7 +126,18 @@ pub fn open(config: Window.Config) !@This() {
             } };
         },
         .vulkan => @panic("vulkan"),
-        .none => @panic("none"),
+        .none => {
+            const buffer, const pixels = try Shm.resize(shm orelse return error.NoShm, config.size.width, config.size.height);
+            wl.wl_surface_attach(surface, buffer, 0, 0);
+            wl.wl_surface_damage(surface, 0, 0, @intCast(config.size.width), @intCast(config.size.height));
+
+            @memset(pixels, 255);
+            break :api .{ .none = .{
+                .shm = shm.?,
+                .buffer = buffer,
+                .pixels = pixels,
+            } };
+        },
     };
 
     wl.wl_surface_commit(surface);
@@ -147,17 +165,17 @@ pub fn close(self: @This()) void {
             _ = egl.eglTerminate(opengl.display);
         },
         .vulkan => {},
-        .none => {},
+        .none => |none| wl.wl_buffer_destroy(none.buffer),
     }
 
     xdg.xdg_toplevel_destroy(self.xdg_toplevel);
     xdg.xdg_surface_destroy(self.xdg_surface);
     wl.wl_surface_destroy(self.surface);
-    self.keyboard.deinit();
+    // self.keyboard.deinit();
     wl.wl_display_disconnect(self.display);
 }
 
-pub fn poll(self: *@This()) ?Window.Event {
+pub fn poll(self: *@This()) !?Window.Event {
     while (wl.wl_display_prepare_read(self.display) != 0) _ = wl.wl_display_dispatch_pending(self.display);
     _ = wl.wl_display_flush(self.display);
 
@@ -179,7 +197,13 @@ pub fn poll(self: *@This()) ?Window.Event {
             switch (self.api) {
                 .opengl => |opengl| wl.wl_egl_window_resize(opengl.window, @intCast(size.width), @intCast(size.height), 0, 0),
                 .vulkan => @panic("vulkan"),
-                .none => @panic("none"),
+                .none => if (size.width != 0 and size.height != 0) {
+                    self.api.none.buffer, self.api.none.pixels = try Shm.resize(self.api.none.shm, size.width, size.height);
+                    @memset(self.api.none.pixels, 255);
+                    wl.wl_surface_attach(self.surface, self.api.none.buffer, 0, 0);
+                    wl.wl_surface_damage(self.surface, 0, 0, @intCast(size.width), @intCast(size.height));
+                    wl.wl_surface_commit(self.surface);
+                } else return null,
             }
         },
         else => {},
@@ -217,6 +241,7 @@ const Registry = struct {
     compositor: ?*wl.wl_compositor,
     xdg_wm_base: ?*xdg.xdg_wm_base,
     seat: ?*wl.wl_seat,
+    shm: ?*wl.wl_shm,
 
     fn callback(self: *@This(), registry: *wl.wl_registry, name: u32, interfacez: [*:0]const u8, version: u32) callconv(.c) void {
         const interface = std.mem.span(interfacez);
@@ -227,16 +252,20 @@ const Registry = struct {
             self.xdg_wm_base = @ptrCast(wl.wl_registry_bind(registry, name, @ptrCast(&xdg.xdg_wm_base_interface), version));
         } else if (std.mem.eql(u8, interface, std.mem.span(wl.wl_seat_interface.name))) {
             self.seat = @ptrCast(wl.wl_registry_bind(registry, name, &wl.wl_seat_interface, version));
+        } else if (std.mem.eql(u8, interface, std.mem.span(wl.wl_shm_interface.name))) {
+            self.shm = @ptrCast(wl.wl_registry_bind(registry, name, &wl.wl_shm_interface, version));
         }
     }
 };
 
-const Configure = struct {
-    done: bool = false,
-    serial: u32 = undefined,
-    fn callback(self: *@This(), xdg_surface: *xdg.xdg_surface, serial: u32) callconv(.c) void {
+pub const callback = struct {
+    fn configure(done: *bool, xdg_surface: *xdg.xdg_surface, serial: u32) callconv(.c) void {
         xdg.xdg_surface_ack_configure(xdg_surface, serial);
-        self.done = true;
+        done.* = true;
+    }
+
+    fn xdgBasePing(_: ?*anyopaque, xdg_wm_base: ?*xdg.xdg_wm_base, serial: u32) callconv(.c) void {
+        xdg.xdg_wm_base_pong(xdg_wm_base, serial);
     }
 };
 
@@ -260,10 +289,6 @@ pub const Toplevel = struct {
 
     pub fn capabilities(_: ?*anyopaque, _: ?*xdg.xdg_toplevel, _: [*c]xdg.struct_wl_array) callconv(.c) void {}
 };
-
-fn xdgWmBasePing(_: ?*anyopaque, xdg_wm_base: ?*xdg.xdg_wm_base, serial: u32) callconv(.c) void {
-    xdg.xdg_wm_base_pong(xdg_wm_base, serial);
-}
 
 pub const Keyboard = struct {
     handle: *wl.wl_keyboard = undefined,
@@ -361,4 +386,44 @@ pub const Keyboard = struct {
     }
 
     fn repeatInfo(_: ?*anyopaque, _: *wl.wl_keyboard, _: i32, _: i32) callconv(.c) void {}
+};
+
+pub const Shm = struct {
+    pub fn alloc(size: usize) !std.posix.fd_t {
+        var name: *const [8:0]u8 = "wl_shm__";
+        const fd: std.posix.fd_t = @intCast(std.c.shm_open(
+            name[0..].ptr,
+            @bitCast(std.posix.O{
+                .ACCMODE = .RDWR,
+                .CREAT = true,
+                .EXCL = true,
+            }),
+            std.posix.S.IWUSR | std.posix.S.IRUSR | std.posix.S.IWOTH | std.posix.S.IROTH,
+        ));
+
+        _ = std.c.shm_unlink(name[0..].ptr);
+
+        try std.posix.ftruncate(fd, @intCast(size));
+
+        return fd;
+    }
+
+    pub fn resize(shm: *wl.wl_shm, width: usize, height: usize) !struct { *wl.wl_buffer, []u8 } {
+        const stride = 4;
+        const size = width * height * stride;
+        const fd: std.posix.fd_t = try alloc(size);
+        defer std.posix.close(fd);
+        const pixels = try std.posix.mmap(
+            null,
+            size,
+            std.posix.PROT.READ | std.posix.PROT.WRITE,
+            .{ .TYPE = .SHARED },
+            fd,
+            0,
+        );
+        const pool: *wl.wl_shm_pool = wl.wl_shm_create_pool(shm, fd, @intCast(size)) orelse return error.CreateShmPool;
+        const buffer = wl.wl_shm_pool_create_buffer(pool, 0, @intCast(width), @intCast(height), @intCast(width * stride), wl.WL_SHM_FORMAT_ARGB8888) orelse return error.CreateShmPoolBuffer;
+        wl.wl_shm_pool_destroy(pool);
+        return .{ buffer, pixels[0..size] };
+    }
 };

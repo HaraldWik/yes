@@ -17,6 +17,7 @@ pub const GraphicsApi = union(Window.GraphicsApi.Tag) {
 
 pub fn open(config: Window.Config) !@This() {
     const display: *x11.Display = x11.XOpenDisplay(null) orelse return error.OpenDisplay;
+    errdefer _ = x11.XCloseDisplay(display);
     const screen = x11.DefaultScreen(display);
     const root = x11.RootWindow(display, screen);
 
@@ -65,6 +66,7 @@ pub fn open(config: Window.Config) !@This() {
             x11.BlackPixel(display, screen) // Background color
         ),
     };
+    errdefer _ = x11.XDestroyWindow(display, window);
 
     // _ = x11.XStoreName(display, window, config.title.ptr);
     var hints: x11.XSizeHints = .{};
@@ -94,12 +96,23 @@ pub fn open(config: Window.Config) !@This() {
     x11.XSetWMNormalHints(display, window, &hints);
 
     var wm_delete_window: x11.Atom = x11.XInternAtom(display, "WM_DELETE_WINDOW", @intFromBool(false));
-    _ = x11.XSetWMProtocols(display, window, &wm_delete_window, 1);
+    if (x11.XSetWMProtocols(display, window, &wm_delete_window, 1) == x11.False) return error.SetWMProtocols;
 
-    _ = x11.XSelectInput(display, window, x11.KeyPressMask | x11.KeyReleaseMask | x11.ButtonPressMask | x11.ButtonReleaseMask | x11.PointerMotionMask | x11.FocusChangeMask | x11.ExposureMask | x11.StructureNotifyMask);
+    if (x11.XSelectInput(
+        display,
+        window,
+        // zig fmt: off
+        x11.KeyPressMask | x11.KeyReleaseMask |
+        x11.ButtonPressMask | x11.ButtonReleaseMask |
+        x11.PointerMotionMask |
+        x11.FocusChangeMask |
+        x11.ExposureMask |
+        x11.StructureNotifyMask,
+        // zig fmt: on
+    ) == x11.False) return error.SelectInput;
 
-    _ = x11.XMapWindow(display, window);
-    _ = x11.XFlush(display);
+    if (x11.XMapWindow(display, window) == x11.False) return error.MapWindow;
+    if (x11.XFlush(display) == x11.False) return error.Flush;
 
     const api: GraphicsApi = switch (config.api) {
         .opengl => .{ .opengl = .{
@@ -111,7 +124,7 @@ pub fn open(config: Window.Config) !@This() {
 
     { // Send initial resize event
         var attrs: x11.XWindowAttributes = undefined;
-        _ = x11.XGetWindowAttributes(display, window, &attrs);
+        if (x11.XGetWindowAttributes(display, window, &attrs) == x11.False) return error.GetWindowAttributes;
 
         var event: x11.XEvent = .{
             .xconfigure = .{
@@ -145,7 +158,7 @@ pub fn close(self: @This()) void {
     _ = x11.XCloseDisplay(self.display);
 }
 
-pub fn poll(self: @This()) ?Window.Event {
+pub fn poll(self: @This()) !?Window.Event {
     var event: x11.XEvent = undefined;
     while (x11.XPending(self.display) > 0) {
         if (x11.XNextEvent(self.display, &event) != x11.XCSUCCESS) return null;
@@ -260,7 +273,7 @@ pub fn maximize(self: @This(), state: bool) void {
     const horiz = x11.XInternAtom(self.display, "_NET_WM_STATE_MAXIMIZED_HORZ", x11.False);
     const vert = x11.XInternAtom(self.display, "_NET_WM_STATE_MAXIMIZED_VERT", x11.False);
 
-    const action: c_long = if (state) 1 else 0; // 1 = add, 0 = remove
+    const action: c_long = @intFromBool(state); // 1 = add, 0 = remove
 
     self.sendWmState(action, horiz);
     self.sendWmState(action, vert);

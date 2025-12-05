@@ -13,45 +13,43 @@ pub fn main() !void {
     var is_fullscreen: bool = false;
     var is_maximize: bool = false;
     main_loop: while (true) {
-        while (try window.poll()) |event| {
-            switch (event) {
-                .close => break :main_loop,
-                .resize => |size| {
-                    const width, const height = window.getSize().toArray();
-                    std.debug.print("width: {d} == {d}, height: {d} == {d}\n", .{ size.width, width, size.height, height });
+        while (try window.poll()) |event| switch (event) {
+            .close => break :main_loop,
+            .resize => |size| {
+                const width, const height = window.getSize().toArray();
+                std.debug.print("width: {d} == {d}, height: {d} == {d}\n", .{ size.width, width, size.height, height });
+            },
+            .mouse => |mouse| switch (mouse) {
+                .button => |button| {
+                    std.debug.print("'mouse button {t} {t}'\t", .{ button.code, button.state });
+                    std.debug.print("({d}, {d})\n", .{ button.position.x, button.position.y });
                 },
-                .mouse => |mouse| switch (mouse) {
-                    .button => |button| {
-                        std.debug.print("'mouse button {t} {t}'\t", .{ button.code, button.state });
-                        std.debug.print("({d}, {d})\n", .{ button.position.x, button.position.y });
+                .move => |pos| std.debug.print("moved: ({d}, {d})\n", .{ pos.x, pos.y }),
+                .scroll => |scroll| std.debug.print("scroll: {any}\n", .{scroll}),
+            },
+
+            .key => |key| {
+                std.debug.print("{t:<7} {t:<10} {d:3} {d:.3}\n", .{
+                    key.state,
+                    key.sym,
+                    key.code,
+                    @as(f32, @floatFromInt(@divTrunc((try std.time.Instant.now()).since(start_timestamp), std.time.ns_per_s / 10))) / 10.0,
+                });
+
+                if (key.state == .release) switch (key.sym) {
+                    .f => {
+                        is_fullscreen = !is_fullscreen;
+                        window.fullscreen(is_fullscreen);
                     },
-                    .move => |pos| std.debug.print("moved: ({d}, {d})\n", .{ pos.x, pos.y }),
-                    .scroll => |scroll| std.debug.print("scroll: {any}\n", .{scroll}),
-                },
-
-                .key => |key| {
-                    std.debug.print("{t:<7} {t:<10} {d:3} {d:.3}\n", .{
-                        key.state,
-                        key.sym,
-                        key.code,
-                        @as(f32, @floatFromInt(@divTrunc((try std.time.Instant.now()).since(start_timestamp), std.time.ns_per_s / 10))) / 10.0,
-                    });
-
-                    if (key.state == .release) switch (key.sym) {
-                        .f => {
-                            is_fullscreen = !is_fullscreen;
-                            window.fullscreen(is_fullscreen);
-                        },
-                        .m => {
-                            is_maximize = !is_maximize;
-                            window.maximize(is_maximize);
-                        },
-                        .n => window.minimize(),
-                        .t => window.setTitle("You pressed T!"),
-                        else => {},
-                    };
-                },
-            }
-        }
+                    .m => {
+                        is_maximize = !is_maximize;
+                        window.maximize(is_maximize);
+                    },
+                    .n => window.minimize(),
+                    .t => window.setTitle("You pressed T!"),
+                    else => {},
+                };
+            },
+        };
     }
 }
