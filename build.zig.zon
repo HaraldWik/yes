@@ -22,7 +22,7 @@
         },
         .wayland = .{
             .url = "git+https://github.com/wayland-mirror/wayland/#1ab6b693b16e1d9734496fe60c8a6ed277e4dec3",
-            .hash = "N-V-__8AACwsCAAIDGKG1kp0-KCtL2wz2a-dulrOlui702Jk",
+            .hash = "N-V-__8AAFL0GACxHb3Q_xuatHOFPnAcgBEdNcfE1vcr-iT2",
         },
 
         .egl = .{

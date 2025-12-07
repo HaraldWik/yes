@@ -103,7 +103,7 @@ pub fn build(b: *std.Build) void {
                 .{ .name = "win32", .module = win32 },
             },
             else => &.{
-                .{ .name = "win32", .module = win32 }, // JUST FOR LSP
+                // .{ .name = "win32", .module = win32 }, // JUST FOR LSP
 
                 .{ .name = "xkb", .module = xkbcommon_headers },
 
