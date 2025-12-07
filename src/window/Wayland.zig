@@ -61,8 +61,8 @@ pub fn open(config: Window.Config) !@This() {
         };
     };
 
-    var keyboard: Keyboard = undefined;
-    try keyboard.get(seat);
+    // var keyboard: Keyboard = undefined;
+    // try keyboard.get(seat);
     // errdefer keyboard.deinit();
 
     if (xdg.xdg_wm_base_add_listener(xdg_wm_base, &xdg.xdg_wm_base_listener{ .ping = callback.xdgBasePing }, null) != 0) return error.AddXdgBaseListener;
@@ -151,7 +151,7 @@ pub fn open(config: Window.Config) !@This() {
         .surface = surface,
         .xdg_surface = xdg_surface,
         .xdg_toplevel = xdg_toplevel,
-        .keyboard = keyboard,
+        .keyboard = undefined, // keyboard,
         .api = api,
     };
 }
