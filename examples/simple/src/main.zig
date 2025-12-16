@@ -7,6 +7,7 @@ pub fn main() !void {
         .size = .{ .width = 900, .height = 600 },
     });
     defer window.close();
+    window.callbacks.key = keyCallback;
 
     const start_timestamp: std.time.Instant = try .now();
 
@@ -52,4 +53,8 @@ pub fn main() !void {
             },
         };
     }
+}
+
+pub fn keyCallback(key: yes.Window.Event.Key) !void {
+    std.debug.print("AA: {t}\n", .{key.sym});
 }
