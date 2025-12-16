@@ -3,16 +3,22 @@ const builtin = @import("builtin");
 const root = @import("../root.zig");
 const native = @import("../root.zig").native;
 
+pub const Event = @import("event.zig").Union;
+pub const Win32 = @import("Win32.zig");
+pub const X11 = @import("X11.zig");
+pub const Wayland = @import("Wayland.zig");
+
 handle: Handle,
+callbacks: struct {
+    key: ?*const fn (Event.Key) anyerror!void = null,
+    mouse: ?*const fn (Event.Mouse) anyerror!void = null,
+} = .{},
 
 pub const Handle = switch (native.os) {
     .windows => Win32,
     else => Posix,
 };
 
-pub const Win32 = @import("Win32.zig");
-pub const X11 = @import("X11.zig");
-pub const Wayland = @import("Wayland.zig");
 pub const Posix = union(Tag) {
     x11: X11,
     wayland: Wayland,
@@ -31,8 +37,6 @@ pub const Posix = union(Tag) {
         return if (std.mem.eql(u8, session, "wayland")) .wayland else .x11;
     }
 };
-
-pub const Event = @import("event.zig").Union;
 
 pub const Size = struct {
     width: usize,
@@ -111,12 +115,23 @@ pub fn close(self: @This()) void {
 }
 
 pub fn poll(self: *@This()) !?Event {
-    return switch (native.os) {
+    const event = try switch (native.os) {
         .windows => self.handle.poll(),
         else => switch (self.handle) {
             inline else => |*handle| handle.poll(),
         },
-    };
+    } orelse return null;
+
+    switch (event) {
+        .key => if (self.callbacks.key) |callback| {
+            try @call(.auto, callback, .{event.key});
+        },
+        .mouse => if (self.callbacks.mouse) |callback| {
+            try @call(.auto, callback, .{event.mouse});
+        },
+        else => {},
+    }
+    return event;
 }
 
 pub fn getSize(self: @This()) Size {

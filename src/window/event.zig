@@ -8,60 +8,8 @@ const Position = @import("Window.zig").Position;
 pub const Union = union(enum) {
     close: void,
     resize: Size,
-    mouse: Mouse,
     key: Key,
-
-    pub const Mouse = union(enum) {
-        move: Position,
-        scroll: Scroll,
-        button: Button,
-
-        pub const Scroll = union(enum) {
-            x: isize, // horizontal
-            y: isize, // vertical
-        };
-
-        pub const Button = struct {
-            state: State,
-            code: Code,
-            position: Position,
-
-            pub const State = Key.State;
-
-            pub const Code = enum {
-                right,
-                middle,
-                left,
-                forward,
-                backward,
-
-                pub fn fromWin32(button: u32, wparam: usize) ?@This() {
-                    return switch (button) {
-                        win32.WM_RBUTTONDOWN, win32.WM_RBUTTONUP => .right,
-                        win32.WM_MBUTTONDOWN, win32.WM_MBUTTONUP => .middle,
-                        win32.WM_LBUTTONDOWN, win32.WM_LBUTTONUP => .left,
-                        win32.WM_XBUTTONDOWN, win32.WM_XBUTTONUP => {
-                            const data: win32.MOUSEHOOKSTRUCTEX_MOUSE_DATA = @bitCast(@as(u32, @intCast(((wparam >> 16) & 0xFFFF))));
-                            return if (std.meta.eql(data, win32.XBUTTON1)) .backward else if (std.meta.eql(data, win32.XBUTTON2)) .forward else null;
-                        },
-
-                        else => null,
-                    };
-                }
-
-                pub fn fromX11(button: c_uint) ?@This() {
-                    return switch (button) {
-                        3 => .right,
-                        2 => .middle,
-                        1 => .left,
-                        9 => .forward,
-                        8 => .backward,
-                        else => null,
-                    };
-                }
-            };
-        };
-    };
+    mouse: Mouse,
 
     pub const Key = struct {
         state: State,
@@ -351,6 +299,58 @@ pub const Union = union(enum) {
                     else => std.enums.fromInt(@This(), key),
                 };
             }
+        };
+    };
+
+    pub const Mouse = union(enum) {
+        move: Position,
+        scroll: Scroll,
+        button: Button,
+
+        pub const Scroll = union(enum) {
+            x: isize, // horizontal
+            y: isize, // vertical
+        };
+
+        pub const Button = struct {
+            state: State,
+            code: Code,
+            position: Position,
+
+            pub const State = Key.State;
+
+            pub const Code = enum {
+                right,
+                middle,
+                left,
+                forward,
+                backward,
+
+                pub fn fromWin32(button: u32, wparam: usize) ?@This() {
+                    return switch (button) {
+                        win32.WM_RBUTTONDOWN, win32.WM_RBUTTONUP => .right,
+                        win32.WM_MBUTTONDOWN, win32.WM_MBUTTONUP => .middle,
+                        win32.WM_LBUTTONDOWN, win32.WM_LBUTTONUP => .left,
+                        win32.WM_XBUTTONDOWN, win32.WM_XBUTTONUP => {
+                            const data: win32.MOUSEHOOKSTRUCTEX_MOUSE_DATA = @bitCast(@as(u32, @intCast(((wparam >> 16) & 0xFFFF))));
+                            return if (std.meta.eql(data, win32.XBUTTON1)) .backward else if (std.meta.eql(data, win32.XBUTTON2)) .forward else null;
+                        },
+
+                        else => null,
+                    };
+                }
+
+                pub fn fromX11(button: c_uint) ?@This() {
+                    return switch (button) {
+                        3 => .right,
+                        2 => .middle,
+                        1 => .left,
+                        9 => .forward,
+                        8 => .backward,
+                        else => null,
+                    };
+                }
+            };
         };
     };
 };
