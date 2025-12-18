@@ -350,6 +350,17 @@ pub const Union = union(enum) {
                         else => null,
                     };
                 }
+
+                pub fn fromWayland(button: u32) ?@This() {
+                    return switch (button) {
+                        272 => .left,
+                        274 => .middle,
+                        273 => .right,
+                        276 => .forward,
+                        275 => .backward,
+                        else => null,
+                    };
+                }
             };
         };
     };

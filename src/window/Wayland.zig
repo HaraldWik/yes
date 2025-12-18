@@ -12,6 +12,7 @@ compositor: *wl.wl_compositor,
 xdg_wm_base: *xdg.xdg_wm_base,
 seat: *wl.wl_seat,
 keyboard: Keyboard,
+mouse: Mouse,
 surface: *wl.wl_surface,
 xdg_surface: *xdg.xdg_surface,
 xdg_toplevel: *xdg.xdg_toplevel,
@@ -64,6 +65,9 @@ pub fn open(config: Window.Config) !@This() {
     var keyboard: Keyboard = .{};
     try keyboard.get(seat);
     errdefer keyboard.deinit();
+    var mouse: Mouse = .{};
+    try mouse.get(seat);
+    errdefer mouse.deinit();
 
     if (xdg.xdg_wm_base_add_listener(xdg_wm_base, &xdg.xdg_wm_base_listener{ .ping = callback.xdgBasePing }, null) != 0) return error.AddXdgBaseListener;
 
@@ -151,7 +155,8 @@ pub fn open(config: Window.Config) !@This() {
         .surface = surface,
         .xdg_surface = xdg_surface,
         .xdg_toplevel = xdg_toplevel,
-        .keyboard = undefined, // keyboard,
+        .keyboard = keyboard,
+        .mouse = mouse,
         .api = api,
     };
 }
@@ -171,6 +176,7 @@ pub fn close(self: @This()) void {
     xdg.xdg_toplevel_destroy(self.xdg_toplevel);
     xdg.xdg_surface_destroy(self.xdg_surface);
     wl.wl_surface_destroy(self.surface);
+    self.mouse.deinit();
     self.keyboard.deinit();
     wl.wl_display_disconnect(self.display);
 }
@@ -296,9 +302,13 @@ pub const Keyboard = struct {
     xkb_state: ?*xkb.xkb_state = null,
     xkb_keymap: ?*xkb.xkb_keymap = null,
     keymap_data: []align(std.heap.page_size_min) u8 = undefined,
+    mods_depressed: u32 = 0,
+    mods_latched: u32 = 0,
+    mods_locked: u32 = 0,
+    group: u32 = 0,
     focused: bool = true,
 
-    pub const listener: wl.wl_keyboard_listener = wl.wl_keyboard_listener{
+    pub const listener: *const wl.wl_keyboard_listener = &.{
         .keymap = @ptrCast(&keymap),
         .enter = @ptrCast(&enter),
         .leave = @ptrCast(&leave),
@@ -310,29 +320,30 @@ pub const Keyboard = struct {
     pub fn get(self: *@This(), seat: *wl.wl_seat) !void {
         self.xkb_ctx = xkb.xkb_context_new(xkb.XKB_CONTEXT_NO_FLAGS) orelse return error.CreateXkbContext;
         self.handle = wl.wl_seat_get_keyboard(seat) orelse return error.GetKeyboard;
-        if (wl.wl_keyboard_add_listener(self.handle, &listener, self) != 0) return error.AddKeyboardListener;
+        if (wl.wl_keyboard_add_listener(self.handle, listener, self) != 0) return error.AddKeyboardListener;
     }
 
     pub fn deinit(self: @This()) void {
-        if (self.handle != null) wl.wl_keyboard_destroy(self.handle);
-        if (self.xkb_state != null) xkb.xkb_state_unref(self.xkb_state);
-        if (self.xkb_keymap != null) xkb.xkb_keymap_unref(self.xkb_keymap);
-        if (self.xkb_ctx != null) xkb.xkb_context_unref(self.xkb_ctx);
+        if (self.xkb_state) |s| xkb.xkb_state_unref(s);
+        if (self.xkb_keymap) |k| xkb.xkb_keymap_unref(k);
+        if (self.xkb_ctx) |c| xkb.xkb_context_unref(c);
+        if (self.handle) |h| wl.wl_keyboard_destroy(h);
     }
 
     fn keymap(self: *@This(), _: *wl.wl_keyboard, format: u32, fd: std.posix.fd_t, size: u32) callconv(.c) void {
         if (format != wl.WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1) return;
         defer std.posix.close(fd);
 
-        if (self.xkb_state) |st| xkb.xkb_state_unref(st);
-        if (self.xkb_keymap) |km| {
-            xkb.xkb_keymap_unref(km);
+        if (self.xkb_state != null) xkb.xkb_state_unref(self.xkb_state);
+        if (self.xkb_keymap != null) {
+            xkb.xkb_keymap_unref(self.xkb_keymap);
             std.posix.munmap(self.keymap_data);
         }
 
         self.keymap_data = std.posix.mmap(null, size, std.c.PROT.READ, .{ .TYPE = .PRIVATE }, fd, 0) catch return;
-        self.xkb_keymap = xkb.xkb_keymap_new_from_string(self.xkb_ctx, self.keymap_data.ptr, xkb.XKB_KEYMAP_FORMAT_TEXT_V1, xkb.XKB_KEYMAP_COMPILE_NO_FLAGS) orelse return;
+        self.xkb_keymap = xkb.xkb_keymap_new_from_buffer(self.xkb_ctx, self.keymap_data.ptr, self.keymap_data.len, xkb.XKB_KEYMAP_FORMAT_TEXT_V1, xkb.XKB_KEYMAP_COMPILE_NO_FLAGS) orelse return;
         self.xkb_state = xkb.xkb_state_new(self.xkb_keymap) orelse return;
+        _ = xkb.xkb_state_update_mask(self.xkb_state, self.mods_depressed, self.mods_latched, self.mods_locked, self.group, 0, 0);
     }
 
     fn enter(self: *@This(), _: *wl.wl_keyboard, _: u32, _: ?*wl.wl_surface, _: [*c]wl.wl_array) callconv(.c) void {
@@ -345,14 +356,14 @@ pub const Keyboard = struct {
 
     fn key(self: *@This(), _: *wl.wl_keyboard, _: u32, _: u32, keycode: u32, state: u32) callconv(.c) void {
         if (!self.focused) return;
-        if (self.xkb_state == null) return;
+        if (self.xkb_state == null or self.xkb_keymap == null) return;
 
         const sym = xkb.xkb_state_key_get_one_sym(self.xkb_state.?, keycode + 8);
 
         events.pushBackAssumeCapacity(.{ .key = .{
             .state = switch (state) {
-                wl.WL_KEYBOARD_KEY_STATE_PRESSED => Window.Event.Key.State.press,
-                wl.WL_KEYBOARD_KEY_STATE_RELEASED => Window.Event.Key.State.release,
+                wl.WL_KEYBOARD_KEY_STATE_PRESSED => .press,
+                wl.WL_KEYBOARD_KEY_STATE_RELEASED => .release,
                 else => unreachable,
             },
             .code = @intCast(keycode),
@@ -361,13 +372,86 @@ pub const Keyboard = struct {
     }
 
     fn modifiers(self: *@This(), _: *wl.wl_keyboard, _: u32, mods_depressed: u32, mods_latched: u32, mods_locked: u32, group: u32) callconv(.c) void {
-        if (!self.focused) return;
+        self.mods_depressed = mods_depressed;
+        self.mods_latched = mods_latched;
+        self.mods_locked = mods_locked;
+        self.group = group;
         if (self.xkb_state == null or self.xkb_keymap == null) return;
 
-        _ = xkb.xkb_state_update_mask(self.xkb_state.?, mods_depressed, mods_latched, mods_locked, group, 0, 0);
+        _ = xkb.xkb_state_update_mask(self.xkb_state, mods_depressed, mods_latched, mods_locked, group, 0, 0);
     }
 
     fn repeatInfo(_: ?*anyopaque, _: *wl.wl_keyboard, _: i32, _: i32) callconv(.c) void {}
+};
+
+pub const Mouse = struct {
+    handle: *wl.wl_pointer = undefined,
+    last_position: Window.Position = .{ .x = 0, .y = 0 },
+    focused: bool = true,
+
+    pub const listener: *const wl.wl_pointer_listener = &.{
+        .enter = @ptrCast(&enter),
+        .leave = @ptrCast(&leave),
+        .motion = @ptrCast(&motion),
+        .button = @ptrCast(&button),
+        .axis = @ptrCast(&axisCallback),
+        .frame = @ptrCast(&frame),
+        .axis_source = @ptrCast(&axis_source),
+        .axis_stop = @ptrCast(&axis_stop),
+        .axis_discrete = @ptrCast(&axis_discrete),
+        .axis_value120 = @ptrCast(&axis_value120),
+        .axis_relative_direction = @ptrCast(&axis_relative_direction),
+    };
+
+    pub fn get(self: *@This(), seat: *wl.wl_seat) !void {
+        self.handle = wl.wl_seat_get_pointer(seat) orelse return error.GetPointer;
+        if (wl.wl_pointer_add_listener(self.handle, listener, self) != 0) return error.AddPointerListener;
+    }
+
+    pub fn deinit(self: @This()) void {
+        wl.wl_pointer_destroy(self.handle);
+    }
+
+    fn enter(self: *@This(), _: *wl.wl_pointer, _: u32, _: *wl.wl_surface, _: wl.wl_fixed_t, _: wl.wl_fixed_t) callconv(.c) void {
+        self.focused = true;
+    }
+    fn leave(self: *@This(), _: *wl.wl_pointer, _: u32, _: *wl.wl_surface) callconv(.c) void {
+        self.focused = false;
+    }
+    fn motion(self: *@This(), _: *wl.wl_pointer, _: u32, x: wl.wl_fixed_t, y: wl.wl_fixed_t) callconv(.c) void {
+        if (x < 0 or y < 0) return;
+        if (!self.focused) return;
+        @setRuntimeSafety(false);
+        self.last_position = .{ .x = @intFromFloat(wl.wl_fixed_to_double(x)), .y = @intFromFloat(wl.wl_fixed_to_double(y)) };
+        events.pushBackAssumeCapacity(.{ .mouse = .{ .move = .{ .x = @intFromFloat(wl.wl_fixed_to_double(x)), .y = @intFromFloat(wl.wl_fixed_to_double(y)) } } });
+    }
+    fn button(self: *@This(), _: *wl.wl_pointer, _: u32, _: u32, code: u32, state: u32) callconv(.c) void {
+        if (!self.focused) return;
+        events.pushBackAssumeCapacity(.{ .mouse = .{ .button = .{
+            .state = switch (state) {
+                wl.WL_POINTER_BUTTON_STATE_PRESSED => .press,
+                wl.WL_POINTER_BUTTON_STATE_RELEASED => .release,
+                else => unreachable,
+            },
+            .code = Window.Event.Mouse.Button.Code.fromWayland(code) orelse return,
+            .position = self.last_position,
+        } } });
+    }
+    fn axisCallback(self: *@This(), _: *wl.wl_pointer, _: u32, axis: u32, value: wl.wl_fixed_t) callconv(.c) void {
+        if (!self.focused) return;
+        const delta = wl.wl_fixed_to_double(value);
+        events.pushBackAssumeCapacity(.{ .mouse = .{ .scroll = switch (axis) {
+            wl.WL_POINTER_AXIS_VERTICAL_SCROLL => .{ .y = @intFromFloat(delta) },
+            wl.WL_POINTER_AXIS_HORIZONTAL_SCROLL => .{ .x = @intFromFloat(delta) },
+            else => unreachable,
+        } } });
+    }
+    fn frame(_: *@This(), _: *wl.wl_pointer) callconv(.c) void {}
+    fn axis_source(_: *@This(), _: *wl.wl_pointer, _: u32) callconv(.c) void {}
+    fn axis_stop(_: *@This(), _: *wl.wl_pointer, _: u32, _: u32) callconv(.c) void {}
+    fn axis_discrete(_: *@This(), _: *wl.wl_pointer, _: u32, _: i32) callconv(.c) void {}
+    fn axis_value120(_: *@This(), _: *wl.wl_pointer, _: u32, _: i32) callconv(.c) void {}
+    fn axis_relative_direction(_: *@This(), _: *wl.wl_pointer, _: u32, _: u32) callconv(.c) void {}
 };
 
 pub const Shm = struct {

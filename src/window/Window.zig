@@ -9,10 +9,6 @@ pub const X11 = @import("X11.zig");
 pub const Wayland = @import("Wayland.zig");
 
 handle: Handle,
-callbacks: struct {
-    key: ?*const fn (Event.Key) anyerror!void = null,
-    mouse: ?*const fn (Event.Mouse) anyerror!void = null,
-} = .{},
 
 pub const Handle = switch (native.os) {
     .windows => Win32,
@@ -34,7 +30,7 @@ pub const Posix = union(Tag) {
             return std.meta.stringToEnum(Tag, std.mem.span(arg)[identifier.len..]);
         }
         const session = std.posix.getenv(session_env) orelse "x11";
-        return if (std.mem.eql(u8, session, "wayland")) .wayland else .x11;
+        return std.meta.stringToEnum(Tag, session);
     }
 };
 
@@ -115,23 +111,12 @@ pub fn close(self: @This()) void {
 }
 
 pub fn poll(self: *@This()) !?Event {
-    const event = try switch (native.os) {
+    return switch (native.os) {
         .windows => self.handle.poll(),
         else => switch (self.handle) {
             inline else => |*handle| handle.poll(),
         },
-    } orelse return null;
-
-    switch (event) {
-        .key => if (self.callbacks.key) |callback| {
-            try @call(.auto, callback, .{event.key});
-        },
-        .mouse => if (self.callbacks.mouse) |callback| {
-            try @call(.auto, callback, .{event.mouse});
-        },
-        else => {},
-    }
-    return event;
+    };
 }
 
 pub fn getSize(self: @This()) Size {
