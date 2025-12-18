@@ -26,5 +26,7 @@ pub fn main() !void {
 
 ```
 
-Windows,
-Linux, Unix - X11 
+## supported platforms include
+Windows
+Xorg
+Wayland
