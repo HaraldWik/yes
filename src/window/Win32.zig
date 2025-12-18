@@ -89,12 +89,7 @@ pub fn open(config: Window.Config) !@This() {
             const suggested_pixel_format_index: i32 = win32.ChoosePixelFormat(dc, desired_pixel_format);
             var suggested_pixel_format: win32.PIXELFORMATDESCRIPTOR = undefined;
 
-            const DescribePixelFormat = @extern(*const fn (
-                hdc: ?win32.HDC,
-                iPixelFormat: i32,
-                nBytes: u32,
-                ppfd: ?*win32.PIXELFORMATDESCRIPTOR,
-            ) callconv(.winapi) i32, .{ .name = "DescribePixelFormat", .library_name = "gdi32" });
+            const DescribePixelFormat = @extern(*const fn (hdc: ?win32.HDC, iPixelFormat: i32, nBytes: u32, ppfd: ?*win32.PIXELFORMATDESCRIPTOR) callconv(.winapi) i32, .{ .name = "DescribePixelFormat", .library_name = "gdi32" });
 
             if (!win32.SUCCEEDED(DescribePixelFormat(dc, suggested_pixel_format_index, @sizeOf(win32.PIXELFORMATDESCRIPTOR), &suggested_pixel_format))) return reportErr(error.DescribePixelFormat);
             if (!win32.SUCCEEDED(win32.SetPixelFormat(dc, suggested_pixel_format_index, desired_pixel_format))) return reportErr(error.SetPixelFormat);

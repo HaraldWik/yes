@@ -3,6 +3,11 @@ const builtin = @import("builtin");
 const root = @import("../root.zig");
 const native = @import("../root.zig").native;
 
+pub const Event = @import("event.zig").Union;
+pub const Win32 = @import("Win32.zig");
+pub const X11 = @import("X11.zig");
+pub const Wayland = @import("Wayland.zig");
+
 handle: Handle,
 
 pub const Handle = switch (native.os) {
@@ -10,9 +15,6 @@ pub const Handle = switch (native.os) {
     else => Posix,
 };
 
-pub const Win32 = @import("Win32.zig");
-pub const X11 = @import("X11.zig");
-pub const Wayland = @import("Wayland.zig");
 pub const Posix = union(Tag) {
     x11: X11,
     wayland: Wayland,
@@ -28,11 +30,9 @@ pub const Posix = union(Tag) {
             return std.meta.stringToEnum(Tag, std.mem.span(arg)[identifier.len..]);
         }
         const session = std.posix.getenv(session_env) orelse "x11";
-        return if (std.mem.eql(u8, session, "wayland")) .wayland else .x11;
+        return std.meta.stringToEnum(Tag, session);
     }
 };
-
-pub const Event = @import("event.zig").Union;
 
 pub const Size = struct {
     width: usize,
