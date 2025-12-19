@@ -317,3 +317,8 @@ pub fn minimize(self: @This()) void {
     _ = x11.XIconifyWindow(display, self.window, screen);
     _ = x11.XFlush(display);
 }
+
+pub fn setPosition(self: @This(), position: Window.Position(i32)) void {
+    _ = x11.XMoveWindow(self.display, self.window, @intCast(position.x), @intCast(position.y));
+    _ = x11.XFlush(self.display);
+}

@@ -14,12 +14,16 @@ pub fn main() !void {
             monitor.orientation,
         });
     }
+    std.debug.print("\n", .{});
+
+    const monitor: yes.Monitor = .primary(&buffer);
 
     var window: yes.Window = try .open(.{
-        .title = "Title",
+        .title = "Title 😀✅♥",
         .size = .{ .width = 900, .height = 600 },
     });
     defer window.close();
+    try window.setPosition(monitor.position);
 
     const start_timestamp: std.time.Instant = try .now();
 

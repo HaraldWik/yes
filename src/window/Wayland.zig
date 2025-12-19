@@ -242,6 +242,9 @@ pub fn minimize(self: @This()) void {
     xdg.xdg_toplevel_set_minimized(self.xdg_toplevel);
 }
 
+/// Wayland does not provide a way to set the windows position
+pub fn setPosition(_: @This(), _: Window.Position(i32)) !void {}
+
 const Registry = struct {
     compositor: ?*wl.wl_compositor,
     xdg_wm_base: ?*xdg.xdg_wm_base,

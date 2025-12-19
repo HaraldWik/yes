@@ -137,3 +137,12 @@ pub fn minimize(self: @This()) void {
         },
     }
 }
+
+pub fn setPosition(self: @This(), position: Position(i32)) !void {
+    switch (builtin.os.tag) {
+        .windows => try self.handle.setPosition(position),
+        else => switch (self.handle) {
+            inline else => |handle| try handle.setPosition(position),
+        },
+    }
+}

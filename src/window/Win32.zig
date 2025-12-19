@@ -334,3 +334,8 @@ pub fn reportErr(err: anyerror) anyerror {
 
     return err;
 }
+
+pub fn setPosition(self: @This(), position: Window.Position(i32)) !void {
+    const size = self.getSize();
+    if (!win32.SUCCEEDED(win32.SetWindowPos(self.hwnd, null, position.x, position.y, @intCast(size.width), @intCast(size.height), .{ .NOZORDER = 1, .NOSIZE = 1 }))) return error.SetWindowPos;
+}

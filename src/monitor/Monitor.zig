@@ -14,7 +14,7 @@ position: Position(i32) = .{},
 /// milimeters
 physical_size: ?Size = null,
 scale: f32 = 1.0,
-primary: bool = false,
+is_primary: bool = false,
 orientation: Orientation = .@"0",
 
 /// clockwise
@@ -73,3 +73,13 @@ pub const Iterator = struct {
         };
     }
 };
+
+pub fn primary(buffer: []u8) @This() {
+    var it: Iterator = .init(buffer);
+    while (it.next() catch null) |monitor| {
+        if (monitor.is_primary) return monitor;
+    } else {
+        @branchHint(.cold);
+        @panic("no monitors found");
+    }
+}

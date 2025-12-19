@@ -48,7 +48,7 @@ pub fn get(index: usize, buffer: []u8) !?Monitor {
             @as(f32, @floatFromInt(monitor.width)) / @as(f32, @floatFromInt(monitor.mwidth)) * 25.4 / 96.0
         else
             1.0,
-        .primary = monitor.primary == x11.True,
+        .is_primary = monitor.primary == x11.True,
         .orientation = .@"0",
     };
 }

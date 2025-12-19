@@ -32,7 +32,7 @@ pub fn get(index: usize, buffer: []u8) !?Monitor {
             while (device_name_len <= dd.DeviceName.len and dd.DeviceName[device_name_len] != 0) device_name_len += 1;
             const name = buffer[0..try std.unicode.utf16LeToUtf8(buffer, dd.DeviceName[0..device_name_len])];
 
-            _ = win32.MessageBoxW(null, @ptrCast(dd.DeviceString[0..]), win32.L("Device string"), .{});
+            // _ = win32.MessageBoxW(null, @ptrCast(dd.DeviceString[0..]), win32.L("Device string"), .{});
 
             return .{
                 .name = name,
@@ -40,7 +40,7 @@ pub fn get(index: usize, buffer: []u8) !?Monitor {
                 .position = .{ .x = dm.Anonymous1.Anonymous2.dmPosition.x, .y = dm.Anonymous1.Anonymous2.dmPosition.y },
                 .physical_size = null,
                 .scale = 1.0,
-                .primary = (dd.StateFlags & win32.DISPLAY_DEVICE_PRIMARY_DEVICE) != 0,
+                .is_primary = (dd.StateFlags & win32.DISPLAY_DEVICE_PRIMARY_DEVICE) != 0,
             };
         }
 
