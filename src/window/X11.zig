@@ -270,56 +270,28 @@ pub fn fullscreen(self: @This(), state: bool) void {
 }
 
 pub fn maximize(self: @This(), state: bool) void {
-    const horiz = x11.XInternAtom(self.display, "_NET_WM_STATE_MAXIMIZED_HORZ", x11.False);
-    const vert = x11.XInternAtom(self.display, "_NET_WM_STATE_MAXIMIZED_VERT", x11.False);
-
-    const action: c_long = @intFromBool(state); // 1 = add, 0 = remove
-
-    self.sendWmState(action, horiz);
-    self.sendWmState(action, vert);
-}
-
-pub fn minimize(self: @This()) void {
     const display = self.display;
     const root = x11.XDefaultRootWindow(display);
 
-    const net_wm_state = x11.XInternAtom(display, "_NET_WM_STATE", x11.False);
-    const hidden = x11.XInternAtom(display, "_NET_WM_STATE_HIDDEN", x11.False);
+    const wm_state = x11.XInternAtom(display, "_NET_WM_STATE", x11.False);
+    const horiz = x11.XInternAtom(display, "_NET_WM_STATE_MAXIMIZED_HORZ", x11.False);
+    const vert = x11.XInternAtom(display, "_NET_WM_STATE_MAXIMIZED_VERT", x11.False);
+
+    const action: c_long = if (state) 1 else 0; // add / remove
 
     var event: x11.XEvent = .{
         .xclient = .{
             .type = x11.ClientMessage,
             .serial = 0,
             .send_event = x11.True,
-            .message_type = net_wm_state,
-            .window = self.window,
-            .format = 32,
-            .data = .{
-                .l = .{ 1, @intCast(hidden), 0, 0, 0 },
-            },
-        },
-    };
-
-    _ = x11.XSendEvent(display, root, x11.False, x11.SubstructureRedirectMask | x11.SubstructureNotifyMask, &event);
-
-    _ = x11.XFlush(display);
-}
-
-fn sendWmState(self: @This(), action: c_long, prop: x11.Atom) void {
-    const wm_state = x11.XInternAtom(self.display, "_NET_WM_STATE", x11.False);
-
-    var event: x11.XEvent = .{
-        .xclient = .{
-            .type = x11.ClientMessage,
             .message_type = wm_state,
-            .display = self.display,
             .window = self.window,
             .format = 32,
             .data = .{
                 .l = .{
-                    action, // 0=remove, 1=add, 2=toggle
-                    @intCast(prop),
-                    0,
+                    action,
+                    @intCast(horiz),
+                    @intCast(vert),
                     1, // normal client source
                     0,
                 },
@@ -328,12 +300,20 @@ fn sendWmState(self: @This(), action: c_long, prop: x11.Atom) void {
     };
 
     _ = x11.XSendEvent(
-        self.display,
-        x11.DefaultRootWindow(self.display),
+        display,
+        root,
         x11.False,
         x11.SubstructureRedirectMask | x11.SubstructureNotifyMask,
         &event,
     );
 
-    _ = x11.XFlush(self.display);
+    _ = x11.XFlush(display);
+}
+
+pub fn minimize(self: @This()) void {
+    const display = self.display;
+    const screen = x11.XDefaultScreen(display);
+
+    _ = x11.XIconifyWindow(display, self.window, screen);
+    _ = x11.XFlush(display);
 }
