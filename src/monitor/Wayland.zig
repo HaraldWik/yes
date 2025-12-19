@@ -63,6 +63,8 @@ pub fn get(index: usize, buffer: []u8) !?Monitor {
     _ = wl.wl_display_roundtrip(display);
 
     if (index >= monitors.items.len) return null;
+    // TODO: fix this trash
+    if (index == 0) monitors.items[index].is_primary = true;
 
     return monitors.items[index];
 }

@@ -59,6 +59,7 @@ pub const Config = struct {
     max_size: ?Size = null,
     resizable: bool = true,
     api: GraphicsApi = .none,
+    decoration: bool = true,
 };
 
 pub fn open(config: Config) !@This() {
@@ -138,11 +139,13 @@ pub fn minimize(self: @This()) void {
     }
 }
 
+/// Wayland does not provide a way to set the windows position so we do nothing on wayland
 pub fn setPosition(self: @This(), position: Position(i32)) !void {
-    switch (builtin.os.tag) {
-        .windows => try self.handle.setPosition(position),
+    return switch (builtin.os.tag) {
+        .windows => self.handle.setPosition(position),
         else => switch (self.handle) {
-            inline else => |handle| try handle.setPosition(position),
+            .x11 => |handle| handle.setPosition(position),
+            else => {},
         },
-    }
+    };
 }

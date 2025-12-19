@@ -113,7 +113,7 @@ pub fn build(b: *std.Build) void {
 
                 .{ .name = "wayland", .module = wayland },
                 .{ .name = "xdg", .module = xdg },
-                .{ .name = "decor", .module = xdg },
+                .{ .name = "decor", .module = decor },
                 .{ .name = "egl", .module = egl },
             },
         },

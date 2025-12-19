@@ -15,6 +15,7 @@ mouse: Mouse,
 surface: *wl.wl_surface,
 xdg_surface: *xdg.xdg_surface,
 xdg_toplevel: *xdg.xdg_toplevel,
+decoration: ?Decoration,
 api: GraphicsApi,
 
 // Data
@@ -48,7 +49,7 @@ pub fn open(config: Window.Config) !@This() {
 
     const display: *wl.wl_display = wl.wl_display_connect(null) orelse return error.ConnectDisplay;
     errdefer wl.wl_display_disconnect(display);
-    const compositor: *wl.wl_compositor, const xdg_wm_base: *xdg.xdg_wm_base, const seat: *wl.wl_seat, const shm: ?*wl.wl_shm = registry: {
+    const compositor: *wl.wl_compositor, const xdg_wm_base: *xdg.xdg_wm_base, const seat: *wl.wl_seat, const shm: ?*wl.wl_shm, const decoration_manager: ?*decor.zxdg_decoration_manager_v1 = registry: {
         var data: Registry = undefined;
         const registry: *wl.wl_registry = wl.wl_display_get_registry(display) orelse return error.GetDisplayRegistry;
         if (wl.wl_registry_add_listener(registry, &wl.wl_registry_listener{ .global = @ptrCast(&Registry.callback) }, @ptrCast(&data)) != 0) return error.RegistryAddListener;
@@ -58,6 +59,7 @@ pub fn open(config: Window.Config) !@This() {
             data.xdg_wm_base orelse return error.XdgWmBase,
             data.seat orelse return error.Seat,
             data.shm,
+            data.decoration_manager,
         };
     };
 
@@ -80,6 +82,12 @@ pub fn open(config: Window.Config) !@This() {
     if (xdg.xdg_toplevel_add_listener(xdg_toplevel, Toplevel.listener, null) != 0) return error.XdgToplevelAddListener;
     if (config.min_size) |size| xdg.xdg_toplevel_set_min_size(xdg_toplevel, @intCast(size.width), @intCast(size.height));
     if (config.max_size) |size| xdg.xdg_toplevel_set_max_size(xdg_toplevel, @intCast(size.width), @intCast(size.height));
+
+    var decoration: ?Decoration = null;
+    if (config.decoration and decoration_manager != null) {
+        decoration = .{ .manager = decoration_manager.? };
+        try decoration.?.get(xdg_toplevel);
+    }
 
     wl.wl_surface_commit(surface);
     while (!configuration_done) _ = wl.wl_display_dispatch(display);
@@ -156,6 +164,7 @@ pub fn open(config: Window.Config) !@This() {
         .xdg_toplevel = xdg_toplevel,
         .keyboard = keyboard,
         .mouse = mouse,
+        .decoration = decoration,
         .api = api,
     };
 }
@@ -172,6 +181,7 @@ pub fn close(self: @This()) void {
         .none => |none| wl.wl_buffer_destroy(none.buffer),
     }
 
+    if (self.decoration) |decoration| decoration.deinit();
     xdg.xdg_toplevel_destroy(self.xdg_toplevel);
     xdg.xdg_surface_destroy(self.xdg_surface);
     wl.wl_surface_destroy(self.surface);
@@ -242,14 +252,12 @@ pub fn minimize(self: @This()) void {
     xdg.xdg_toplevel_set_minimized(self.xdg_toplevel);
 }
 
-/// Wayland does not provide a way to set the windows position
-pub fn setPosition(_: @This(), _: Window.Position(i32)) !void {}
-
 const Registry = struct {
-    compositor: ?*wl.wl_compositor,
-    xdg_wm_base: ?*xdg.xdg_wm_base,
-    seat: ?*wl.wl_seat,
-    shm: ?*wl.wl_shm,
+    compositor: ?*wl.wl_compositor = null,
+    xdg_wm_base: ?*xdg.xdg_wm_base = null,
+    seat: ?*wl.wl_seat = null,
+    shm: ?*wl.wl_shm = null,
+    decoration_manager: ?*decor.zxdg_decoration_manager_v1 = null,
 
     fn callback(self: *@This(), registry: *wl.wl_registry, name: u32, interfacez: [*:0]const u8, version: u32) callconv(.c) void {
         const interface = std.mem.span(interfacez);
@@ -262,6 +270,8 @@ const Registry = struct {
             self.seat = @ptrCast(wl.wl_registry_bind(registry, name, &wl.wl_seat_interface, version));
         } else if (std.mem.eql(u8, interface, std.mem.span(wl.wl_shm_interface.name))) {
             self.shm = @ptrCast(wl.wl_registry_bind(registry, name, &wl.wl_shm_interface, version));
+        } else if (std.mem.eql(u8, interface, std.mem.span(decor.zxdg_decoration_manager_v1_interface.name))) {
+            self.decoration_manager = @ptrCast(wl.wl_registry_bind(registry, name, @ptrCast(&decor.zxdg_decoration_manager_v1_interface), version));
         }
     }
 };
@@ -326,10 +336,10 @@ pub const Keyboard = struct {
     }
 
     pub fn deinit(self: @This()) void {
-        if (self.xkb_state) |s| xkb.xkb_state_unref(s);
-        if (self.xkb_keymap) |k| xkb.xkb_keymap_unref(k);
-        if (self.xkb_ctx) |c| xkb.xkb_context_unref(c);
-        if (self.handle) |h| wl.wl_keyboard_destroy(h);
+        if (self.xkb_state != null) xkb.xkb_state_unref(self.xkb_state);
+        if (self.xkb_keymap != null) xkb.xkb_keymap_unref(self.xkb_keymap);
+        if (self.xkb_ctx != null) xkb.xkb_context_unref(self.xkb_ctx);
+        if (self.handle != null) wl.wl_keyboard_destroy(self.handle);
     }
 
     fn keymap(self: *@This(), _: *wl.wl_keyboard, format: u32, fd: std.posix.fd_t, size: u32) callconv(.c) void {
@@ -360,7 +370,7 @@ pub const Keyboard = struct {
         if (!self.focused) return;
         if (self.xkb_state == null or self.xkb_keymap == null) return;
 
-        const sym = xkb.xkb_state_key_get_one_sym(self.xkb_state.?, keycode + 8);
+        const sym = xkb.xkb_state_key_get_one_sym(self.xkb_state, keycode + 8);
 
         events.pushBackAssumeCapacity(.{ .key = .{
             .state = switch (state) {
@@ -493,5 +503,41 @@ pub const Shm = struct {
         const buffer = wl.wl_shm_pool_create_buffer(pool, 0, @intCast(width), @intCast(height), @intCast(width * stride), wl.WL_SHM_FORMAT_ARGB8888) orelse return error.CreateShmPoolBuffer;
         wl.wl_shm_pool_destroy(pool);
         return .{ buffer, pixels[0..size] };
+    }
+};
+
+pub const Decoration = struct {
+    manager: *decor.zxdg_decoration_manager_v1 = undefined,
+    toplevel: *decor.zxdg_toplevel_decoration_v1 = undefined,
+    mode: Mode = undefined,
+
+    pub const Mode = enum(u32) {
+        client = decor.ZXDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE,
+        server = decor.ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE,
+    };
+
+    pub const listener: *const decor.zxdg_toplevel_decoration_v1_listener = &.{
+        .configure = @ptrCast(&configure),
+    };
+
+    pub fn get(self: *@This(), xdg_toplevel: *xdg.xdg_toplevel) !void {
+        self.toplevel = decor.zxdg_decoration_manager_v1_get_toplevel_decoration(self.manager, @ptrCast(xdg_toplevel)) orelse return error.GetToplevelDecoration;
+        decor.zxdg_toplevel_decoration_v1_set_mode(self.toplevel, @intFromEnum(Mode.server));
+        if (decor.zxdg_toplevel_decoration_v1_add_listener(self.toplevel, listener, self) != 0) return error.AddToplevelDecorationListener;
+    }
+
+    pub fn deinit(self: @This()) void {
+        decor.zxdg_toplevel_decoration_v1_destroy(self.toplevel);
+    }
+
+    pub fn configure(self: *@This(), _: *decor.zxdg_toplevel_decoration_v1, mode: u32) callconv(.c) void {
+        std.debug.print("MODE: {d}", .{mode});
+        self.mode = @enumFromInt(mode);
+        switch (self.mode) {
+            .client => {
+                std.log.info("Client side window decoration", .{});
+            },
+            .server => {},
+        }
     }
 };
