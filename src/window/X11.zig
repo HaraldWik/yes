@@ -1,6 +1,6 @@
 const std = @import("std");
-const x11 = @import("../root.zig").native.posix.x11;
 const Window = @import("Window.zig");
+const x11 = @import("x11");
 
 window: x11.Window,
 display: *x11.Display,

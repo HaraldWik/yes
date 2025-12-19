@@ -1,5 +1,4 @@
 const std = @import("std");
-const root = @import("../root.zig");
 const Window = @import("Window.zig");
 const wl = @import("wayland");
 const xdg = @import("xdg");
@@ -386,7 +385,7 @@ pub const Keyboard = struct {
 
 pub const Mouse = struct {
     handle: *wl.wl_pointer = undefined,
-    last_position: Window.Position = .{ .x = 0, .y = 0 },
+    last_position: Window.Position(u32) = .{ .x = 0, .y = 0 },
     focused: bool = true,
 
     pub const listener: *const wl.wl_pointer_listener = &.{

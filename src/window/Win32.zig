@@ -1,6 +1,6 @@
 const std = @import("std");
-const win32 = @import("../root.zig").native.win32.everything;
 const Window = @import("Window.zig");
+const win32 = @import("win32").everything;
 // zig build -Dtarget=x86_64-windows && wine zig-out/bin/example.exe
 
 instance: win32.HINSTANCE,

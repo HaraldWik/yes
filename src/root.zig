@@ -1,6 +1,39 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
+pub const Monitor = @import("monitor/Monitor.zig");
+pub const Window = @import("window/Window.zig");
+
+pub const Size = struct {
+    width: T = 0,
+    height: T = 0,
+
+    pub const T = u32;
+
+    pub fn toArray(self: @This()) [2]T {
+        return .{ self.width, self.height };
+    }
+    pub fn toVec(self: @This()) @Vector(2, T) {
+        return .{ self.width, self.height };
+    }
+    pub fn aspect(self: @This()) f32 {
+        return @as(f32, @floatFromInt(self.width)) / @as(f32, @floatFromInt(self.height));
+    }
+};
+
+pub fn Position(T: type) type {
+    return struct {
+        x: T = 0,
+        y: T = 0,
+        pub fn toArray(self: @This()) [2]T {
+            return .{ self.x, self.y };
+        }
+        pub fn toVec(self: @This()) @Vector(2, T) {
+            return .{ self.x, self.y };
+        }
+    };
+}
+
 pub const opengl = @import("opengl.zig");
 /// only windows support currently (sort of)
 pub const clipboard = @import("clipboard.zig");
@@ -21,5 +54,3 @@ pub const native = struct {
         };
     };
 };
-
-pub const Window = @import("window/Window.zig");

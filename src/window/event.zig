@@ -1,7 +1,6 @@
 const std = @import("std");
-const native = @import("../root.zig").native;
-const win32 = @import("../root.zig").native.win32.everything;
-const xkb = @import("../root.zig").native.posix.xkb;
+const win32 = @import("win32").everything;
+const xkb = @import("xkb");
 const Size = @import("Window.zig").Size;
 const Position = @import("Window.zig").Position;
 
@@ -303,7 +302,7 @@ pub const Union = union(enum) {
     };
 
     pub const Mouse = union(enum) {
-        move: Position,
+        move: Position(u32),
         scroll: Scroll,
         button: Button,
 
@@ -315,7 +314,7 @@ pub const Union = union(enum) {
         pub const Button = struct {
             state: State,
             code: Code,
-            position: Position,
+            position: Position(u32),
 
             pub const State = Key.State;
 

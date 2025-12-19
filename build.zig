@@ -12,12 +12,14 @@ pub fn build(b: *std.Build) void {
             \\#include <X11/Xutil.h>
             \\#include <X11/Xatom.h>
             \\#include <GL/glx.h>
+            \\#include <X11/extensions/Xrandr.h>
         ),
         .target = target,
         .optimize = optimize,
     }).createModule();
     x11.addIncludePath(b.dependency("x11", .{}).path("include/X11/"));
     x11.linkSystemLibrary("X11", .{});
+    x11.linkSystemLibrary("Xrandr", .{});
     x11.linkSystemLibrary("glx", .{});
 
     const wayland = b.addTranslateC(.{
@@ -103,7 +105,7 @@ pub fn build(b: *std.Build) void {
                 .{ .name = "win32", .module = win32 },
             },
             else => &.{
-                // .{ .name = "win32", .module = win32 }, // JUST FOR LSP
+                .{ .name = "win32", .module = win32 }, // NOTE: Just for lsp on linux
 
                 .{ .name = "xkb", .module = xkbcommon_headers },
 
