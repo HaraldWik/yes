@@ -5,16 +5,14 @@ pub fn main() !void {
     var buffer: [128]u8 = undefined;
     var it: yes.Monitor.Iterator = .init(&buffer);
     while (it.next() catch null) |monitor| {
-        std.debug.print("monitor: {s}\n\tsize: {any}, physical size: {any}\n\tposition: {any}\n\torientation: {t}\n", .{
+        std.debug.print("monitor: {s}\n\tsize: {any}, physical size: {any}\n\tposition: {any}\n\tscale: {d:.3}\n\torientation: {t}\n", .{
             monitor.name orelse "unknown",
             monitor.size,
             monitor.physical_size,
             monitor.position,
+            monitor.scale,
             monitor.orientation,
         });
-        if (monitor.manufacturer) |manufacturer| {
-            std.debug.print("\tmanufacturer {s}, model: {s}\n", .{ manufacturer.name, manufacturer.model orelse "unknown" });
-        }
     }
 
     var window: yes.Window = try .open(.{

@@ -16,10 +16,6 @@ physical_size: ?Size = null,
 scale: f32 = 1.0,
 primary: bool = false,
 orientation: Orientation = .@"0",
-manufacturer: ?struct {
-    name: []const u8,
-    model: ?[]const u8,
-} = null,
 
 /// clockwise
 pub const Orientation = enum(u2) {
