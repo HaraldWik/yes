@@ -177,7 +177,7 @@ pub fn close(self: @This()) void {
     _ = win32.UnregisterClassW(self.class.lpszClassName, self.instance);
 }
 
-pub fn poll(self: *@This()) !?Window.Event {
+pub fn poll(self: *@This(), state: *Window.PollState) !?Window.Event {
     var msg: win32.MSG = undefined;
     if (win32.PeekMessageW(&msg, self.hwnd, 0, 0, .{ .REMOVE = 1 }) == 0) return null;
     _ = win32.TranslateMessage(&msg);
@@ -235,10 +235,10 @@ pub fn poll(self: *@This()) !?Window.Event {
             const sym = Window.Event.Key.Sym.fromWin32(std.enums.fromInt(win32.VIRTUAL_KEY, msg.wParam).?, msg.lParam) orelse return null;
             switch (msg.message) {
                 win32.WM_KEYDOWN => {
-                    if (self.keyboard[@intFromEnum(sym)] == .pressed) return null;
-                    self.keyboard[@intFromEnum(sym)] = .pressed;
+                    if (state.keyboard[@intFromEnum(sym)] == .pressed) return null;
+                    state.keyboard[@intFromEnum(sym)] = .pressed;
                 },
-                win32.WM_KEYUP => self.keyboard[@intFromEnum(sym)] = .released,
+                win32.WM_KEYUP => state.keyboard[@intFromEnum(sym)] = .released,
                 else => unreachable,
             }
             return .{ .key = .{

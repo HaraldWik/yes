@@ -6,7 +6,6 @@ window: x11.Window,
 display: *x11.Display,
 wm_delete_window: x11.Atom,
 api: GraphicsApi,
-keyboard: [std.math.maxInt(std.meta.Tag(Window.Event.Key.Sym))]Window.Event.Key.State = @splat(.released),
 
 pub const GraphicsApi = union(Window.GraphicsApi.Tag) {
     opengl: struct {
@@ -189,7 +188,7 @@ pub fn close(self: @This()) void {
     _ = x11.XCloseDisplay(self.display);
 }
 
-pub fn poll(self: *@This()) !?Window.Event {
+pub fn poll(self: *@This(), state: *Window.PollState) !?Window.Event {
     var event: x11.XEvent = undefined;
     while (x11.XPending(self.display) > 0) {
         if (x11.XNextEvent(self.display, &event) != x11.XCSUCCESS) return null;
@@ -232,10 +231,10 @@ pub fn poll(self: *@This()) !?Window.Event {
             const sym = Window.Event.Key.Sym.fromXkb(x11.XLookupKeysym(&event.xkey, @intCast(event.xkey.state & x11.ShiftMask))) orelse return null;
             switch (event.type) {
                 x11.KeyPress => {
-                    if (self.keyboard[@intFromEnum(sym)] == .pressed) return null;
-                    self.keyboard[@intFromEnum(sym)] = .pressed;
+                    if (state.keyboard[@intFromEnum(sym)] == .pressed) return null;
+                    state.keyboard[@intFromEnum(sym)] = .pressed;
                 },
-                x11.KeyRelease => self.keyboard[@intFromEnum(sym)] = .released,
+                x11.KeyRelease => state.keyboard[@intFromEnum(sym)] = .released,
                 else => unreachable,
             }
             return .{ .key = .{

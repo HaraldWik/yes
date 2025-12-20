@@ -190,7 +190,7 @@ pub fn close(self: @This()) void {
     wl.wl_display_disconnect(self.display);
 }
 
-pub fn poll(self: *@This()) !?Window.Event {
+pub fn poll(self: *@This(), state: *Window.PollState) !?Window.Event {
     while (wl.wl_display_prepare_read(self.display) != 0) _ = wl.wl_display_dispatch_pending(self.display);
     _ = wl.wl_display_flush(self.display);
 
@@ -221,6 +221,7 @@ pub fn poll(self: *@This()) !?Window.Event {
                 } else return null,
             }
         },
+        .key => |key| state.keyboard[@intFromEnum(key.sym)] = key.state,
         else => {},
     }
     return event;

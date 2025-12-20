@@ -21,17 +21,18 @@ pub fn main() !void {
     var window: yes.Window = try .open(.{
         .title = "Title 😀✅♥",
         .size = .{ .width = 900, .height = 600 },
-        .decoration = false,
+        .decoration = true,
     });
     defer window.close();
     try window.setPosition(monitor.position);
+    var poll_state: yes.Window.PollState = .empty;
 
     const start_timestamp: std.time.Instant = try .now();
 
     var is_fullscreen: bool = false;
     var is_maximize: bool = false;
     main_loop: while (true) {
-        while (try window.poll()) |event| switch (event) {
+        while (try window.poll(&poll_state)) |event| switch (event) {
             .close => break :main_loop,
             .resize => |size| {
                 const width, const height = window.getSize().toArray();

@@ -33,6 +33,12 @@ pub const Posix = union(Tag) {
     }
 };
 
+pub const PollState = struct {
+    keyboard: [std.math.maxInt(std.meta.Tag(Event.Key.Sym))]Event.Key.State = @splat(.released),
+
+    pub const empty: @This() = .{};
+};
+
 pub const GraphicsApi = union(Tag) {
     opengl: Opengl,
     vulkan: Vulkan,
@@ -87,11 +93,11 @@ pub fn close(self: @This()) void {
     }
 }
 
-pub fn poll(self: *@This()) !?Event {
+pub fn poll(self: *@This(), state: *PollState) !?Event {
     return switch (builtin.os.tag) {
-        .windows => self.handle.poll(),
+        .windows => self.handle.poll(state),
         else => switch (self.handle) {
-            inline else => |*handle| handle.poll(),
+            inline else => |*handle| handle.poll(state),
         },
     };
 }
