@@ -47,6 +47,7 @@ pub fn main() !void {
     defer window.close();
     try yes.opengl.makeCurrent(window);
     try yes.opengl.swapInterval(window, 1);
+    var poll_state: yes.Window.PollState = .empty;
 
     gl.load(yes.opengl.getProcAddress, false);
     gl.debug.set(null);
@@ -87,7 +88,7 @@ pub fn main() !void {
     var color: [4]f32 = .{ 0.1, 0.5, 0.3, 1.0 };
     const color_step = 0.05;
     main_loop: while (true) {
-        while (try window.poll()) |event| {
+        while (try window.poll(&poll_state)) |event| {
             switch (event) {
                 .close => break :main_loop,
                 .resize => |size| {
