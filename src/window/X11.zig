@@ -111,6 +111,36 @@ pub fn open(config: Window.Config) !@This() {
         // zig fmt: on
     ) == x11.False) return error.SelectInput;
 
+    const MotifWmHints = extern struct {
+        flags: c_ulong,
+        functions: c_ulong,
+        decorations: c_ulong,
+        input_mode: c_ulong,
+        status: c_ulong,
+    };
+    const MWM_HINTS_DECORATIONS = 1 << 1;
+
+    var motif_hints: MotifWmHints = .{
+        .flags = MWM_HINTS_DECORATIONS,
+        .functions = 0,
+        .decorations = @intFromBool(config.decoration),
+        .input_mode = 0,
+        .status = 0,
+    };
+
+    const motif = x11.XInternAtom(display, "_MOTIF_WM_HINTS", x11.False);
+
+    _ = x11.XChangeProperty(
+        display,
+        window,
+        motif,
+        motif,
+        32,
+        x11.PropModeReplace,
+        @ptrCast(&motif_hints),
+        5,
+    );
+
     if (x11.XMapWindow(display, window) == x11.False) return error.MapWindow;
     if (x11.XFlush(display) == x11.False) return error.Flush;
 

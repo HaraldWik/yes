@@ -511,13 +511,13 @@ pub const Decoration = struct {
     toplevel: *decor.zxdg_toplevel_decoration_v1 = undefined,
     mode: Mode = undefined,
 
+    pub const listener: *const decor.zxdg_toplevel_decoration_v1_listener = &.{
+        .configure = @ptrCast(&configure),
+    };
+
     pub const Mode = enum(u32) {
         client = decor.ZXDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE,
         server = decor.ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE,
-    };
-
-    pub const listener: *const decor.zxdg_toplevel_decoration_v1_listener = &.{
-        .configure = @ptrCast(&configure),
     };
 
     pub fn get(self: *@This(), xdg_toplevel: *xdg.xdg_toplevel) !void {
@@ -531,7 +531,6 @@ pub const Decoration = struct {
     }
 
     pub fn configure(self: *@This(), _: *decor.zxdg_toplevel_decoration_v1, mode: u32) callconv(.c) void {
-        std.debug.print("MODE: {d}", .{mode});
         self.mode = @enumFromInt(mode);
         switch (self.mode) {
             .client => {
