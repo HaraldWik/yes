@@ -47,12 +47,12 @@ pub fn open(config: Window.Config) !@This() {
             .OWNDC = if (config.api == .opengl) 1 else 0,
         },
     });
-    if (!win32.SUCCEEDED(win32.RegisterClassExW(@ptrCast(&class)))) return reportErr(error.RegisterClass);
+    if (!win32.SUCCEEDED(win32.RegisterClassExW(@ptrCast(&class)))) return error.RegisterClass;
     var title_buffer: [256]u16 = undefined;
     const title = title_buffer[0..(try std.unicode.utf8ToUtf16Le(&title_buffer, config.title[0 .. config.title.len + 1]))];
 
     const hwnd = win32.CreateWindowExW(
-        .{},
+        .{ .TRANSPARENT = 1 },
         class.lpszClassName,
         @ptrCast(title),
         win32.WS_OVERLAPPEDWINDOW,
@@ -68,7 +68,7 @@ pub fn open(config: Window.Config) !@This() {
 
     const api: GraphicsApi = api: switch (config.api) {
         .opengl => {
-            const dc: win32.HDC = win32.GetDC(hwnd) orelse return reportErr(error.GetDeviceContext);
+            const dc: win32.HDC = win32.GetDC(hwnd) orelse return error.GetDeviceContext;
 
             const desired_pixel_format: *const win32.PIXELFORMATDESCRIPTOR = &std.mem.zeroInit(win32.PIXELFORMATDESCRIPTOR, .{
                 .nSize = @sizeOf(win32.PIXELFORMATDESCRIPTOR),
@@ -91,16 +91,16 @@ pub fn open(config: Window.Config) !@This() {
 
             const DescribePixelFormat = @extern(*const fn (hdc: ?win32.HDC, iPixelFormat: i32, nBytes: u32, ppfd: ?*win32.PIXELFORMATDESCRIPTOR) callconv(.winapi) i32, .{ .name = "DescribePixelFormat", .library_name = "gdi32" });
 
-            if (!win32.SUCCEEDED(DescribePixelFormat(dc, suggested_pixel_format_index, @sizeOf(win32.PIXELFORMATDESCRIPTOR), &suggested_pixel_format))) return reportErr(error.DescribePixelFormat);
-            if (!win32.SUCCEEDED(win32.SetPixelFormat(dc, suggested_pixel_format_index, desired_pixel_format))) return reportErr(error.SetPixelFormat);
+            if (!win32.SUCCEEDED(DescribePixelFormat(dc, suggested_pixel_format_index, @sizeOf(win32.PIXELFORMATDESCRIPTOR), &suggested_pixel_format))) return error.DescribePixelFormat;
+            if (!win32.SUCCEEDED(win32.SetPixelFormat(dc, suggested_pixel_format_index, desired_pixel_format))) return error.SetPixelFormat;
 
-            var rc: win32.HGLRC = win32.wglCreateContext(dc) orelse return reportErr(error.WglCreateContext);
-            if (!win32.SUCCEEDED(win32.wglMakeCurrent(dc, rc))) return reportErr(error.WglMakeCurrent);
+            var rc: win32.HGLRC = win32.wglCreateContext(dc) orelse return error.WglCreateContext;
+            if (!win32.SUCCEEDED(win32.wglMakeCurrent(dc, rc))) return error.WglMakeCurrent;
 
             _ = win32.ReleaseDC(hwnd, dc);
 
             var wgl: GraphicsApi.OpenGL.Wgl = undefined;
-            const getExtensionsStringARB: *const fn (win32.HDC) callconv(.winapi) ?[*:0]const u8 = @ptrCast(win32.wglGetProcAddress("wglGetExtensionsStringARB") orelse return reportErr(error.WglGetProcAddress));
+            const getExtensionsStringARB: *const fn (win32.HDC) callconv(.winapi) ?[*:0]const u8 = @ptrCast(win32.wglGetProcAddress("wglGetExtensionsStringARB") orelse return error.WglGetProcAddress);
 
             var createContextAttribsARB: ?*const fn (win32.HDC, ?win32.HGLRC, [*:0]const i32) callconv(.winapi) ?win32.HGLRC = null;
 
@@ -108,11 +108,11 @@ pub fn open(config: Window.Config) !@This() {
                 var it = std.mem.tokenizeScalar(u8, std.mem.sliceTo(extensions, 0), ' ');
                 while (it.next()) |name| {
                     if (std.mem.eql(u8, name, "WGL_EXT_swap_control"))
-                        wgl.swapIntervalEXT = @ptrCast(win32.wglGetProcAddress("wglSwapIntervalEXT") orelse return reportErr(error.WglSwapIntervalEXT));
+                        wgl.swapIntervalEXT = @ptrCast(win32.wglGetProcAddress("wglSwapIntervalEXT") orelse return error.WglSwapIntervalEXT);
                     // if (std.mem.eql(u8, name, "WGL_ARB_pixel_format"))
-                    // wgl.choosePixelFormatARB = @ptrCast(win32.wglGetProcAddress("wglChoosePixelFormatARB") orelse return reportErr(error.WglChoosePixelFormatARB));
+                    // wgl.choosePixelFormatARB = @ptrCast(win32.wglGetProcAddress("wglChoosePixelFormatARB") orelse return error.WglChoosePixelFormatARB);
                     if (std.mem.eql(u8, name, "WGL_ARB_create_context_profile"))
-                        createContextAttribsARB = @ptrCast(win32.wglGetProcAddress("wglCreateContextAttribsARB") orelse return reportErr(error.WglCreateContextAttribsARB));
+                        createContextAttribsARB = @ptrCast(win32.wglGetProcAddress("wglCreateContextAttribsARB") orelse return error.WglCreateContextAttribsARB);
                 }
             }
 
@@ -129,7 +129,7 @@ pub fn open(config: Window.Config) !@This() {
 
             _ = win32.wglDeleteContext(rc);
             rc = try if (createContextAttribsARB) |createContextAttribs|
-                createContextAttribs(dc, null, attributes) orelse return reportErr(error.CreateModernOpenGL)
+                createContextAttribs(dc, null, attributes) orelse return error.CreateModernOpenGL
             else
                 error.NoCreateContextAttribs;
             _ = win32.wglMakeCurrent(dc, rc);
@@ -143,7 +143,7 @@ pub fn open(config: Window.Config) !@This() {
             };
         },
         .vulkan => {
-            const vulkan: win32.HINSTANCE = win32.LoadLibraryW(win32.L("vulkan-1.dll")) orelse return reportErr(error.LoadLibraryWVulkan);
+            const vulkan: win32.HINSTANCE = win32.LoadLibraryW(win32.L("vulkan-1.dll")) orelse return error.LoadLibraryWVulkan;
             const getInstanceProcAddress: GraphicsApi.Vulkan.GetInstanceProcAddress = @ptrCast(win32.GetProcAddress(vulkan, "vkGetInstanceProcAddr") orelse return error.GetProcAddress);
             break :api .{ .vulkan = .{
                 .instance = vulkan,
@@ -154,7 +154,7 @@ pub fn open(config: Window.Config) !@This() {
     };
 
     _ = win32.ShowWindow(hwnd, .{ .SHOWNORMAL = 1 });
-    if (!win32.SUCCEEDED(win32.UpdateWindow(hwnd))) return reportErr(error.UpdateWindow);
+    if (!win32.SUCCEEDED(win32.UpdateWindow(hwnd))) return error.UpdateWindow;
 
     return .{
         .instance = instance,
@@ -298,6 +298,10 @@ pub fn minimize(self: @This()) void {
     _ = win32.ShowWindow(self.hwnd, win32.SW_MINIMIZE);
 }
 
+pub fn setPosition(self: @This(), position: Window.Position(i32)) !void {
+    if (!win32.SUCCEEDED(win32.SetWindowPos(self.hwnd, null, position.x, position.y, 0, 0, .{ .NOZORDER = 1, .NOSIZE = 1 }))) return reportErr(error.SetWindowPos);
+}
+
 pub fn wndProc(hwnd: win32.HWND, msg: u32, wParam: usize, lParam: isize) callconv(.winapi) isize {
     return switch (msg) {
         win32.WM_SIZE => {
@@ -333,9 +337,4 @@ pub fn reportErr(err: anyerror) anyerror {
     );
 
     return err;
-}
-
-pub fn setPosition(self: @This(), position: Window.Position(i32)) !void {
-    const size = self.getSize();
-    if (!win32.SUCCEEDED(win32.SetWindowPos(self.hwnd, null, position.x, position.y, @intCast(size.width), @intCast(size.height), .{ .NOZORDER = 1, .NOSIZE = 1 }))) return error.SetWindowPos;
 }

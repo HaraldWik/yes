@@ -21,7 +21,7 @@ pub fn main() !void {
     var window: yes.Window = try .open(.{
         .title = "Title 😀✅♥",
         .size = .{ .width = 900, .height = 600 },
-        .decoration = true,
+        .decoration = false,
     });
     defer window.close();
     try window.setPosition(monitor.position);

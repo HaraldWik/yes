@@ -65,7 +65,9 @@ pub const Config = struct {
 pub fn open(config: Config) !@This() {
     const window: @This() = .{
         .handle = switch (builtin.os.tag) {
-            .windows => try .open(config),
+            .windows => Win32.open(config) catch |err| {
+                return Win32.reportErr(err);
+            },
             else => switch (Posix.getSessionType() orelse .x11) {
                 .x11 => .{ .x11 = try .open(config) },
                 .wayland => .{ .wayland = try .open(config) },
