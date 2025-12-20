@@ -15,14 +15,14 @@ pub const Union = union(enum) {
         code: Code,
         sym: Sym,
 
-        pub const State = enum {
-            press,
-            release,
+        pub const State = enum(u1) {
+            pressed = 1,
+            released = 0,
         };
 
         pub const Code = usize;
 
-        pub const Sym = enum(u32) {
+        pub const Sym = enum(u8) {
             // Digits
             @"0" = '0',
             @"1" = '1',

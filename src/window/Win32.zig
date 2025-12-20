@@ -7,6 +7,7 @@ instance: win32.HINSTANCE,
 class: win32.WNDCLASSEXW,
 hwnd: win32.HWND,
 api: GraphicsApi = .none,
+keyboard: [std.math.maxInt(std.meta.Tag(Window.Event.Key.Sym))]Window.Event.Key.State = @splat(.released),
 
 previous_style: i32 = 0,
 previous_placement: win32.WINDOWPLACEMENT = std.mem.zeroInit(win32.WINDOWPLACEMENT, .{ .length = @sizeOf(win32.WINDOWPLACEMENT) }),
@@ -176,7 +177,7 @@ pub fn close(self: @This()) void {
     _ = win32.UnregisterClassW(self.class.lpszClassName, self.instance);
 }
 
-pub fn poll(self: @This()) !?Window.Event {
+pub fn poll(self: *@This()) !?Window.Event {
     var msg: win32.MSG = undefined;
     if (win32.PeekMessageW(&msg, self.hwnd, 0, 0, .{ .REMOVE = 1 }) == 0) return null;
     _ = win32.TranslateMessage(&msg);
@@ -218,8 +219,8 @@ pub fn poll(self: @This()) !?Window.Event {
         },
         win32.WM_RBUTTONDOWN, win32.WM_MBUTTONDOWN, win32.WM_LBUTTONDOWN, win32.WM_XBUTTONDOWN, win32.WM_RBUTTONUP, win32.WM_MBUTTONUP, win32.WM_LBUTTONUP, win32.WM_XBUTTONUP => |button| .{ .mouse = .{ .button = .{
             .state = switch (msg.message) {
-                win32.WM_RBUTTONDOWN, win32.WM_MBUTTONDOWN, win32.WM_LBUTTONDOWN, win32.WM_XBUTTONDOWN => .press,
-                win32.WM_RBUTTONUP, win32.WM_MBUTTONUP, win32.WM_LBUTTONUP, win32.WM_XBUTTONUP => .release,
+                win32.WM_RBUTTONDOWN, win32.WM_MBUTTONDOWN, win32.WM_LBUTTONDOWN, win32.WM_XBUTTONDOWN => .pressed,
+                win32.WM_RBUTTONUP, win32.WM_MBUTTONUP, win32.WM_LBUTTONUP, win32.WM_XBUTTONUP => .released,
                 else => unreachable,
             },
             .code = Window.Event.Mouse.Button.Code.fromWin32(button, msg.wParam) orelse return null,
@@ -230,15 +231,26 @@ pub fn poll(self: @This()) !?Window.Event {
         } } },
 
         // Key
-        win32.WM_KEYDOWN, win32.WM_KEYUP => .{ .key = .{
-            .state = switch (msg.message) {
-                win32.WM_KEYDOWN => .press,
-                win32.WM_KEYUP => .release,
+        win32.WM_KEYDOWN, win32.WM_KEYUP => {
+            const sym = Window.Event.Key.Sym.fromWin32(std.enums.fromInt(win32.VIRTUAL_KEY, msg.wParam).?, msg.lParam) orelse return null;
+            switch (msg.message) {
+                win32.WM_KEYDOWN => {
+                    if (self.keyboard[@intFromEnum(sym)] == .pressed) return null;
+                    self.keyboard[@intFromEnum(sym)] = .pressed;
+                },
+                win32.WM_KEYUP => self.keyboard[@intFromEnum(sym)] = .released,
                 else => unreachable,
-            },
-            .code = @intCast((msg.lParam >> @intCast(16)) & 0xFF),
-            .sym = Window.Event.Key.Sym.fromWin32(std.enums.fromInt(win32.VIRTUAL_KEY, msg.wParam).?, msg.lParam) orelse return null,
-        } },
+            }
+            return .{ .key = .{
+                .state = switch (msg.message) {
+                    win32.WM_KEYDOWN => .pressed,
+                    win32.WM_KEYUP => .released,
+                    else => unreachable,
+                },
+                .code = @intCast((msg.lParam >> @intCast(16)) & 0xFF),
+                .sym = sym,
+            } };
+        },
         else => null,
     };
 }

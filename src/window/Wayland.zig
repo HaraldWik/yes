@@ -374,8 +374,8 @@ pub const Keyboard = struct {
 
         events.pushBackAssumeCapacity(.{ .key = .{
             .state = switch (state) {
-                wl.WL_KEYBOARD_KEY_STATE_PRESSED => .press,
-                wl.WL_KEYBOARD_KEY_STATE_RELEASED => .release,
+                wl.WL_KEYBOARD_KEY_STATE_PRESSED => .pressed,
+                wl.WL_KEYBOARD_KEY_STATE_RELEASED => .released,
                 else => unreachable,
             },
             .code = @intCast(keycode),
@@ -441,8 +441,8 @@ pub const Mouse = struct {
         if (!self.focused) return;
         events.pushBackAssumeCapacity(.{ .mouse = .{ .button = .{
             .state = switch (state) {
-                wl.WL_POINTER_BUTTON_STATE_PRESSED => .press,
-                wl.WL_POINTER_BUTTON_STATE_RELEASED => .release,
+                wl.WL_POINTER_BUTTON_STATE_PRESSED => .pressed,
+                wl.WL_POINTER_BUTTON_STATE_RELEASED => .released,
                 else => unreachable,
             },
             .code = Window.Event.Mouse.Button.Code.fromWayland(code) orelse return,

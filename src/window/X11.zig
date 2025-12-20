@@ -6,6 +6,7 @@ window: x11.Window,
 display: *x11.Display,
 wm_delete_window: x11.Atom,
 api: GraphicsApi,
+keyboard: [std.math.maxInt(std.meta.Tag(Window.Event.Key.Sym))]Window.Event.Key.State = @splat(.released),
 
 pub const GraphicsApi = union(Window.GraphicsApi.Tag) {
     opengl: struct {
@@ -188,7 +189,7 @@ pub fn close(self: @This()) void {
     _ = x11.XCloseDisplay(self.display);
 }
 
-pub fn poll(self: @This()) !?Window.Event {
+pub fn poll(self: *@This()) !?Window.Event {
     var event: x11.XEvent = undefined;
     while (x11.XPending(self.display) > 0) {
         if (x11.XNextEvent(self.display, &event) != x11.XCSUCCESS) return null;
@@ -212,8 +213,8 @@ pub fn poll(self: @This()) !?Window.Event {
             } },
             else => .{ .mouse = .{ .button = .{
                 .state = switch (event.type) {
-                    x11.ButtonPress => .press,
-                    x11.ButtonRelease => .release,
+                    x11.ButtonPress => .pressed,
+                    x11.ButtonRelease => .released,
                     else => unreachable,
                 },
                 .code = Window.Event.Mouse.Button.Code.fromX11(event.xbutton.button) orelse return null,
@@ -227,15 +228,26 @@ pub fn poll(self: @This()) !?Window.Event {
             .x = @intCast(event.xmotion.x),
             .y = @intCast(event.xmotion.y),
         } } },
-        x11.KeyPress, x11.KeyRelease => .{ .key = .{
-            .state = switch (event.type) {
-                x11.KeyPress => .press,
-                x11.KeyRelease => .release,
+        x11.KeyPress, x11.KeyRelease => {
+            const sym = Window.Event.Key.Sym.fromXkb(x11.XLookupKeysym(&event.xkey, @intCast(event.xkey.state & x11.ShiftMask))) orelse return null;
+            switch (event.type) {
+                x11.KeyPress => {
+                    if (self.keyboard[@intFromEnum(sym)] == .pressed) return null;
+                    self.keyboard[@intFromEnum(sym)] = .pressed;
+                },
+                x11.KeyRelease => self.keyboard[@intFromEnum(sym)] = .released,
                 else => unreachable,
-            },
-            .code = @intCast(event.xkey.keycode),
-            .sym = Window.Event.Key.Sym.fromXkb(x11.XLookupKeysym(&event.xkey, @intCast(event.xkey.state & x11.ShiftMask))) orelse return null,
-        } },
+            }
+            return .{ .key = .{
+                .state = switch (event.type) {
+                    x11.KeyPress => .pressed,
+                    x11.KeyRelease => .released,
+                    else => unreachable,
+                },
+                .code = @intCast(event.xkey.keycode),
+                .sym = sym,
+            } };
+        },
         else => null,
     };
 }

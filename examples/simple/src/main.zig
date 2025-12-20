@@ -54,7 +54,7 @@ pub fn main() !void {
                     @as(f32, @floatFromInt(@divTrunc((try std.time.Instant.now()).since(start_timestamp), std.time.ns_per_s / 10))) / 10.0,
                 });
 
-                if (key.state == .release) switch (key.sym) {
+                if (key.state == .released) switch (key.sym) {
                     .f => {
                         is_fullscreen = !is_fullscreen;
                         window.fullscreen(is_fullscreen);
