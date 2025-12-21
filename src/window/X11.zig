@@ -102,6 +102,7 @@ pub fn open(config: Window.Config) !@This() {
         display,
         window,
         // zig fmt: off
+        x11.FocusChangeMask |
         x11.KeyPressMask | x11.KeyReleaseMask |
         x11.ButtonPressMask | x11.ButtonReleaseMask |
         x11.PointerMotionMask |
@@ -196,6 +197,8 @@ pub fn poll(self: *@This(), keyboard: *Window.io.Keyboard) !?Window.io.Event {
 
     return switch (event.type) {
         x11.ClientMessage => if (@as(x11.Atom, @intCast(event.xclient.data.l[0])) == self.wm_delete_window) .close else null,
+        x11.FocusIn => .{ .focus = .enter },
+        x11.FocusOut => .{ .focus = .leave },
         x11.ConfigureNotify => .{ .resize = .{
             .width = @intCast(event.xconfigure.width),
             .height = @intCast(event.xconfigure.height),

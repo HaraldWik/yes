@@ -191,6 +191,8 @@ pub fn poll(self: *@This(), keyboard: *Window.io.Keyboard) !?Window.io.Event {
                 return null;
             },
         },
+        win32.WM_USER + win32.WM_SETFOCUS => .{ .focus = .enter },
+        win32.WM_USER + win32.WM_KILLFOCUS => .{ .focus = .leave },
         win32.WM_USER + win32.WM_SIZE => .{ .resize = .{
             .width = @intCast(@as(u16, @truncate(@as(u32, @intCast(msg.lParam))))),
             .height = @intCast(@as(u16, @truncate(@as(u32, @intCast(msg.lParam >> 16))))),
@@ -315,6 +317,10 @@ pub fn setPosition(self: @This(), position: Window.Position(i32)) !void {
 
 pub fn wndProc(hwnd: win32.HWND, msg: u32, wParam: usize, lParam: isize) callconv(.winapi) isize {
     return switch (msg) {
+        win32.WM_SETFOCUS, win32.WM_KILLFOCUS => |focus| {
+            if (!win32.SUCCEEDED(win32.PostMessageW(hwnd, win32.WM_USER + focus, wParam, lParam))) reportErr(error.PostMessage) catch {};
+            return 0;
+        },
         win32.WM_SIZE => {
             if (!win32.SUCCEEDED(win32.PostMessageW(hwnd, win32.WM_USER + win32.WM_SIZE, wParam, lParam))) reportErr(error.PostMessage) catch {};
             return 0;

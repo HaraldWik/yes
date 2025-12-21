@@ -6,9 +6,15 @@ const Position = @import("Window.zig").Position;
 
 pub const Event = union(enum) {
     close: void,
+    focus: Focus,
     resize: Size,
     key: Key,
     mouse: Mouse,
+
+    pub const Focus = enum {
+        enter,
+        leave,
+    };
 
     pub const Key = struct {
         state: State,

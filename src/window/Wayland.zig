@@ -21,6 +21,7 @@ api: GraphicsApi,
 // Data
 size: Window.Size = undefined,
 
+// TODO: make this not be global state
 var event_buffer: [128]Window.io.Event = undefined;
 var events: std.Deque(Window.io.Event) = .empty;
 
@@ -361,10 +362,12 @@ pub const Keyboard = struct {
 
     fn enter(self: *@This(), _: *wl.wl_keyboard, _: u32, _: ?*wl.wl_surface, _: [*c]wl.wl_array) callconv(.c) void {
         self.focused = true;
+        events.pushBackAssumeCapacity(.{ .focus = .enter });
     }
 
     fn leave(self: *@This(), _: *wl.wl_keyboard, _: u32, _: ?*wl.wl_surface) callconv(.c) void {
         self.focused = false;
+        events.pushBackAssumeCapacity(.{ .focus = .leave });
     }
 
     fn key(self: *@This(), _: *wl.wl_keyboard, _: u32, _: u32, keycode: u32, state: u32) callconv(.c) void {
@@ -407,13 +410,8 @@ pub const Mouse = struct {
         .leave = @ptrCast(&leave),
         .motion = @ptrCast(&motion),
         .button = @ptrCast(&button),
-        .axis = @ptrCast(&axisCallback),
+        .axis = @ptrCast(&axis),
         .frame = @ptrCast(&frame),
-        .axis_source = @ptrCast(&axis_source),
-        .axis_stop = @ptrCast(&axis_stop),
-        .axis_discrete = @ptrCast(&axis_discrete),
-        .axis_value120 = @ptrCast(&axis_value120),
-        .axis_relative_direction = @ptrCast(&axis_relative_direction),
     };
 
     pub fn get(self: *@This(), seat: *wl.wl_seat) !void {
@@ -450,21 +448,16 @@ pub const Mouse = struct {
             .position = self.last_position,
         } } });
     }
-    fn axisCallback(self: *@This(), _: *wl.wl_pointer, _: u32, axis: u32, value: wl.wl_fixed_t) callconv(.c) void {
+    fn axis(self: *@This(), _: *wl.wl_pointer, _: u32, axis_: u32, value: wl.wl_fixed_t) callconv(.c) void {
         if (!self.focused) return;
         const delta = wl.wl_fixed_to_double(value);
-        events.pushBackAssumeCapacity(.{ .mouse = .{ .scroll = switch (axis) {
+        events.pushBackAssumeCapacity(.{ .mouse = .{ .scroll = switch (axis_) {
             wl.WL_POINTER_AXIS_VERTICAL_SCROLL => .{ .y = @intFromFloat(delta) },
             wl.WL_POINTER_AXIS_HORIZONTAL_SCROLL => .{ .x = @intFromFloat(delta) },
             else => unreachable,
         } } });
     }
     fn frame(_: *@This(), _: *wl.wl_pointer) callconv(.c) void {}
-    fn axis_source(_: *@This(), _: *wl.wl_pointer, _: u32) callconv(.c) void {}
-    fn axis_stop(_: *@This(), _: *wl.wl_pointer, _: u32, _: u32) callconv(.c) void {}
-    fn axis_discrete(_: *@This(), _: *wl.wl_pointer, _: u32, _: i32) callconv(.c) void {}
-    fn axis_value120(_: *@This(), _: *wl.wl_pointer, _: u32, _: i32) callconv(.c) void {}
-    fn axis_relative_direction(_: *@This(), _: *wl.wl_pointer, _: u32, _: u32) callconv(.c) void {}
 };
 
 pub const Shm = struct {
@@ -535,7 +528,7 @@ pub const Decoration = struct {
         self.mode = @enumFromInt(mode);
         switch (self.mode) {
             .client => {
-                std.log.info("Client side window decoration", .{});
+                std.log.warn("No server side decorations available", .{});
             },
             .server => {},
         }

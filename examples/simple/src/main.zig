@@ -33,6 +33,7 @@ pub fn main() !void {
     main_loop: while (true) {
         while (try window.poll()) |event| switch (event) {
             .close => break :main_loop,
+            .focus => |focus| std.debug.print("Focus {t}\n", .{focus}),
             .resize => |size| {
                 const width, const height = window.getSize().toArray();
                 std.debug.print("width: {d} == {d}, height: {d} == {d}\n", .{ size.width, width, size.height, height });
@@ -69,5 +70,7 @@ pub fn main() !void {
                 };
             },
         };
+
+        if (window.keyboard.get(.escape) == .pressed) break;
     }
 }
