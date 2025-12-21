@@ -7,7 +7,6 @@ instance: win32.HINSTANCE,
 class: win32.WNDCLASSEXW,
 hwnd: win32.HWND,
 api: GraphicsApi = .none,
-keyboard: [std.math.maxInt(std.meta.Tag(Window.Event.Key.Sym))]Window.Event.Key.State = @splat(.released),
 
 previous_style: i32 = 0,
 previous_placement: win32.WINDOWPLACEMENT = std.mem.zeroInit(win32.WINDOWPLACEMENT, .{ .length = @sizeOf(win32.WINDOWPLACEMENT) }),
@@ -177,7 +176,7 @@ pub fn close(self: @This()) void {
     _ = win32.UnregisterClassW(self.class.lpszClassName, self.instance);
 }
 
-pub fn poll(self: *@This(), state: *Window.PollState) !?Window.Event {
+pub fn poll(self: *@This(), keyboard: *Window.io.Keyboard) !?Window.io.Event {
     var msg: win32.MSG = undefined;
     if (win32.PeekMessageW(&msg, self.hwnd, 0, 0, .{ .REMOVE = 1 }) == 0) return null;
     _ = win32.TranslateMessage(&msg);
@@ -209,7 +208,7 @@ pub fn poll(self: *@This(), state: *Window.PollState) !?Window.Event {
             const delta: isize = @intCast((msg.wParam >> 16) & 0xFFFF);
             var lines: isize = @intCast(@divTrunc(delta, @as(isize, @intCast(win32.WHEEL_DELTA)))); // lines > 0 -> scroll right, lines < 0 -> left
             if (lines == 545) lines = -1;
-            return Window.Event{ .mouse = .{
+            return .{ .mouse = .{
                 .scroll = switch (msg.message) {
                     win32.WM_MOUSEWHEEL => .{ .x = -lines },
                     win32.WM_MOUSEHWHEEL => .{ .y = lines },
@@ -223,7 +222,7 @@ pub fn poll(self: *@This(), state: *Window.PollState) !?Window.Event {
                 win32.WM_RBUTTONUP, win32.WM_MBUTTONUP, win32.WM_LBUTTONUP, win32.WM_XBUTTONUP => .released,
                 else => unreachable,
             },
-            .code = Window.Event.Mouse.Button.Code.fromWin32(button, msg.wParam) orelse return null,
+            .code = Window.io.Event.Mouse.Button.Code.fromWin32(button, msg.wParam) orelse return null,
             .position = .{
                 .x = @intCast(@as(u16, @truncate(@as(usize, @intCast(msg.lParam))))),
                 .y = @intCast(@as(u16, @truncate(@as(usize, @intCast(msg.lParam >> 16))))),
@@ -232,13 +231,13 @@ pub fn poll(self: *@This(), state: *Window.PollState) !?Window.Event {
 
         // Key
         win32.WM_KEYDOWN, win32.WM_KEYUP => {
-            const sym = Window.Event.Key.Sym.fromWin32(std.enums.fromInt(win32.VIRTUAL_KEY, msg.wParam).?, msg.lParam) orelse return null;
+            const sym = Window.io.Event.Key.Sym.fromWin32(std.enums.fromInt(win32.VIRTUAL_KEY, msg.wParam).?, msg.lParam) orelse return null;
             switch (msg.message) {
                 win32.WM_KEYDOWN => {
-                    if (state.keyboard[@intFromEnum(sym)] == .pressed) return null;
-                    state.keyboard[@intFromEnum(sym)] = .pressed;
+                    if (keyboard.keys[@intFromEnum(sym)] == .pressed) return null;
+                    keyboard.keys[@intFromEnum(sym)] = .pressed;
                 },
-                win32.WM_KEYUP => state.keyboard[@intFromEnum(sym)] = .released,
+                win32.WM_KEYUP => keyboard.keys[@intFromEnum(sym)] = .released,
                 else => unreachable,
             }
             return .{ .key = .{

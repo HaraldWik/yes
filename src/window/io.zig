@@ -4,7 +4,7 @@ const xkb = @import("xkb");
 const Size = @import("Window.zig").Size;
 const Position = @import("Window.zig").Position;
 
-pub const Union = union(enum) {
+pub const Event = union(enum) {
     close: void,
     resize: Size,
     key: Key,
@@ -363,4 +363,12 @@ pub const Union = union(enum) {
             };
         };
     };
+};
+
+pub const Keyboard = struct {
+    keys: [std.math.maxInt(std.meta.Tag(Event.Key.Sym))]Event.Key.State = @splat(.released),
+
+    pub fn get(self: @This(), key: Event.Key.Sym) Event.Key.State {
+        return self.keys[@intFromEnum(key)];
+    }
 };

@@ -188,7 +188,7 @@ pub fn close(self: @This()) void {
     _ = x11.XCloseDisplay(self.display);
 }
 
-pub fn poll(self: *@This(), state: *Window.PollState) !?Window.Event {
+pub fn poll(self: *@This(), keyboard: *Window.io.Keyboard) !?Window.io.Event {
     var event: x11.XEvent = undefined;
     while (x11.XPending(self.display) > 0) {
         if (x11.XNextEvent(self.display, &event) != x11.XCSUCCESS) return null;
@@ -201,7 +201,7 @@ pub fn poll(self: *@This(), state: *Window.PollState) !?Window.Event {
             .height = @intCast(event.xconfigure.height),
         } },
         x11.ButtonPress, x11.ButtonRelease => switch (event.xbutton.button) {
-            4...7 => |scroll| Window.Event{ .mouse = .{
+            4...7 => |scroll| .{ .mouse = .{
                 .scroll = switch (scroll) {
                     6 => .{ .x = 1 },
                     7 => .{ .x = -1 },
@@ -216,7 +216,7 @@ pub fn poll(self: *@This(), state: *Window.PollState) !?Window.Event {
                     x11.ButtonRelease => .released,
                     else => unreachable,
                 },
-                .code = Window.Event.Mouse.Button.Code.fromX11(event.xbutton.button) orelse return null,
+                .code = Window.io.Event.Mouse.Button.Code.fromX11(event.xbutton.button) orelse return null,
                 .position = .{
                     .x = @intCast(event.xbutton.x),
                     .y = @intCast(event.xbutton.y),
@@ -228,13 +228,13 @@ pub fn poll(self: *@This(), state: *Window.PollState) !?Window.Event {
             .y = @intCast(event.xmotion.y),
         } } },
         x11.KeyPress, x11.KeyRelease => {
-            const sym = Window.Event.Key.Sym.fromXkb(x11.XLookupKeysym(&event.xkey, @intCast(event.xkey.state & x11.ShiftMask))) orelse return null;
+            const sym = Window.io.Event.Key.Sym.fromXkb(x11.XLookupKeysym(&event.xkey, @intCast(event.xkey.state & x11.ShiftMask))) orelse return null;
             switch (event.type) {
                 x11.KeyPress => {
-                    if (state.keyboard[@intFromEnum(sym)] == .pressed) return null;
-                    state.keyboard[@intFromEnum(sym)] = .pressed;
+                    if (keyboard.keys[@intFromEnum(sym)] == .pressed) return null;
+                    keyboard.keys[@intFromEnum(sym)] = .pressed;
                 },
-                x11.KeyRelease => state.keyboard[@intFromEnum(sym)] = .released,
+                x11.KeyRelease => keyboard.keys[@intFromEnum(sym)] = .released,
                 else => unreachable,
             }
             return .{ .key = .{

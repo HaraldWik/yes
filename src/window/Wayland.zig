@@ -10,8 +10,8 @@ display: *wl.wl_display,
 compositor: *wl.wl_compositor,
 xdg_wm_base: *xdg.xdg_wm_base,
 seat: *wl.wl_seat,
-keyboard: Keyboard,
-mouse: Mouse,
+keyboard: ?Keyboard = null,
+mouse: ?Mouse = null,
 surface: *wl.wl_surface,
 xdg_surface: *xdg.xdg_surface,
 xdg_toplevel: *xdg.xdg_toplevel,
@@ -21,8 +21,8 @@ api: GraphicsApi,
 // Data
 size: Window.Size = undefined,
 
-var event_buffer: [128]Window.Event = undefined;
-var events: std.Deque(Window.Event) = .empty;
+var event_buffer: [128]Window.io.Event = undefined;
+var events: std.Deque(Window.io.Event) = .empty;
 
 pub const GraphicsApi = union(Window.GraphicsApi.Tag) {
     opengl: OpenGL,
@@ -62,13 +62,6 @@ pub fn open(config: Window.Config) !@This() {
             data.decoration_manager,
         };
     };
-
-    var keyboard: Keyboard = .{};
-    try keyboard.get(seat);
-    errdefer keyboard.deinit();
-    var mouse: Mouse = .{};
-    try mouse.get(seat);
-    errdefer mouse.deinit();
 
     if (xdg.xdg_wm_base_add_listener(xdg_wm_base, &xdg.xdg_wm_base_listener{ .ping = callback.xdgBasePing }, null) != 0) return error.AddXdgBaseListener;
 
@@ -162,8 +155,6 @@ pub fn open(config: Window.Config) !@This() {
         .surface = surface,
         .xdg_surface = xdg_surface,
         .xdg_toplevel = xdg_toplevel,
-        .keyboard = keyboard,
-        .mouse = mouse,
         .decoration = decoration,
         .api = api,
     };
@@ -185,12 +176,21 @@ pub fn close(self: @This()) void {
     xdg.xdg_toplevel_destroy(self.xdg_toplevel);
     xdg.xdg_surface_destroy(self.xdg_surface);
     wl.wl_surface_destroy(self.surface);
-    self.mouse.deinit();
-    self.keyboard.deinit();
+    if (self.mouse) |mouse| mouse.deinit();
+    if (self.keyboard) |keyboard| keyboard.deinit();
     wl.wl_display_disconnect(self.display);
 }
 
-pub fn poll(self: *@This(), state: *Window.PollState) !?Window.Event {
+pub fn poll(self: *@This(), keyboard: *Window.io.Keyboard) !?Window.io.Event {
+    if (self.keyboard == null) {
+        self.keyboard = .{};
+        try self.keyboard.?.get(self.seat);
+    }
+    if (self.mouse == null) {
+        self.mouse = .{};
+        try self.mouse.?.get(self.seat);
+    }
+
     while (wl.wl_display_prepare_read(self.display) != 0) _ = wl.wl_display_dispatch_pending(self.display);
     _ = wl.wl_display_flush(self.display);
 
@@ -221,7 +221,7 @@ pub fn poll(self: *@This(), state: *Window.PollState) !?Window.Event {
                 } else return null,
             }
         },
-        .key => |key| state.keyboard[@intFromEnum(key.sym)] = key.state,
+        .key => |key| keyboard.keys[@intFromEnum(key.sym)] = key.state,
         else => {},
     }
     return event;
@@ -380,7 +380,7 @@ pub const Keyboard = struct {
                 else => unreachable,
             },
             .code = @intCast(keycode),
-            .sym = Window.Event.Key.Sym.fromXkb(sym) orelse return,
+            .sym = Window.io.Event.Key.Sym.fromXkb(sym) orelse return,
         } });
     }
 
@@ -446,7 +446,7 @@ pub const Mouse = struct {
                 wl.WL_POINTER_BUTTON_STATE_RELEASED => .released,
                 else => unreachable,
             },
-            .code = Window.Event.Mouse.Button.Code.fromWayland(code) orelse return,
+            .code = Window.io.Event.Mouse.Button.Code.fromWayland(code) orelse return,
             .position = self.last_position,
         } } });
     }

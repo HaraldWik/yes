@@ -2,12 +2,13 @@ const std = @import("std");
 const builtin = @import("builtin");
 pub const Size = @import("../root.zig").Size;
 pub const Position = @import("../root.zig").Position;
-pub const Event = @import("event.zig").Union;
+pub const io = @import("io.zig");
 pub const Win32 = @import("Win32.zig");
 pub const X11 = @import("X11.zig");
 pub const Wayland = @import("Wayland.zig");
 
 handle: Handle,
+keyboard: io.Keyboard = .{},
 
 pub const Handle = switch (builtin.os.tag) {
     .windows => Win32,
@@ -31,12 +32,6 @@ pub const Posix = union(Tag) {
         const session = std.posix.getenv(session_env) orelse "x11";
         return std.meta.stringToEnum(Tag, session);
     }
-};
-
-pub const PollState = struct {
-    keyboard: [std.math.maxInt(std.meta.Tag(Event.Key.Sym))]Event.Key.State = @splat(.released),
-
-    pub const empty: @This() = .{};
 };
 
 pub const GraphicsApi = union(Tag) {
@@ -93,11 +88,11 @@ pub fn close(self: @This()) void {
     }
 }
 
-pub fn poll(self: *@This(), state: *PollState) !?Event {
+pub fn poll(self: *@This()) !?io.Event {
     return switch (builtin.os.tag) {
-        .windows => self.handle.poll(state),
+        .windows => self.handle.poll(&self.keyboard),
         else => switch (self.handle) {
-            inline else => |*handle| handle.poll(state),
+            inline else => |*handle| handle.poll(&self.keyboard),
         },
     };
 }
