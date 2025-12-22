@@ -8,8 +8,8 @@
             .path = "../../",
         },
         .zig_opengl = .{
-            .url = "git+https://github.com/HaraldWik/zig-opengl#cae404109bed7ec092aa8ce4690d082008913b25",
-            .hash = "zig_opengl-0.0.0-WXQ8jyZOCAB25kjOfvn_RqVDGJ2RzfoRx5MNFWArzzVM",
+            .url = "git+https://github.com/HaraldWik/zig-opengl#5bc4e4e046b4e6b21409a298c9a3d46fd2bc1800",
+            .hash = "zig_opengl-0.0.0-WXQ8j8xMCACPLjhy2lgdw6a8ecIPH9mAD-mzW5zmFPLc",
         },
     },
     .paths = .{
