@@ -297,6 +297,7 @@ pub const Toplevel = struct {
         .wm_capabilities = capabilities,
     };
 
+    // TODO: use this correctly
     pub fn configure(_: ?*anyopaque, _: ?*xdg.xdg_toplevel, width: i32, height: i32, _: [*c]xdg.wl_array) callconv(.c) void {
         events.pushBackAssumeCapacity(.{ .resize = .{ .width = @intCast(width), .height = @intCast(height) } });
     }
@@ -402,7 +403,7 @@ pub const Keyboard = struct {
 
 pub const Mouse = struct {
     handle: *wl.wl_pointer = undefined,
-    last_position: Window.Position(u32) = .{ .x = 0, .y = 0 },
+    last_position: Window.Position(u32) = .{},
     focused: bool = true,
 
     pub const listener: *const wl.wl_pointer_listener = &.{
@@ -412,6 +413,11 @@ pub const Mouse = struct {
         .button = @ptrCast(&button),
         .axis = @ptrCast(&axis),
         .frame = @ptrCast(&frame),
+        .axis_source = @ptrCast(&axisSource),
+        .axis_stop = @ptrCast(&axisStop),
+        .axis_discrete = @ptrCast(&axisDiscrete),
+        .axis_value120 = @ptrCast(&axisValue120),
+        .axis_relative_direction = @ptrCast(&axisRelativeDirection),
     };
 
     pub fn get(self: *@This(), seat: *wl.wl_seat) !void {
@@ -450,7 +456,7 @@ pub const Mouse = struct {
     }
     fn axis(self: *@This(), _: *wl.wl_pointer, _: u32, axis_: u32, value: wl.wl_fixed_t) callconv(.c) void {
         if (!self.focused) return;
-        const delta = wl.wl_fixed_to_double(value);
+        const delta = wl.wl_fixed_to_double(value) / 10;
         events.pushBackAssumeCapacity(.{ .mouse = .{ .scroll = switch (axis_) {
             wl.WL_POINTER_AXIS_VERTICAL_SCROLL => .{ .y = @intFromFloat(delta) },
             wl.WL_POINTER_AXIS_HORIZONTAL_SCROLL => .{ .x = @intFromFloat(delta) },
@@ -458,6 +464,11 @@ pub const Mouse = struct {
         } } });
     }
     fn frame(_: *@This(), _: *wl.wl_pointer) callconv(.c) void {}
+    fn axisSource(_: *@This(), _: *wl.wl_pointer, _: u32) callconv(.c) void {}
+    fn axisStop(_: *@This(), _: *wl.wl_pointer, _: u32, _: u32) callconv(.c) void {}
+    fn axisDiscrete(_: *@This(), _: *wl.wl_pointer, _: u32, _: i32) callconv(.c) void {}
+    fn axisValue120(_: *@This(), _: *wl.wl_pointer, _: u32, _: i32) callconv(.c) void {}
+    fn axisRelativeDirection(_: *@This(), _: *wl.wl_pointer, _: u32, _: u32) callconv(.c) void {}
 };
 
 pub const Shm = struct {

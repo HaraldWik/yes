@@ -43,10 +43,11 @@ pub fn main() !void {
                     std.debug.print("'mouse button {t} {t}'\t", .{ button.code, button.state });
                     std.debug.print("({d}, {d})\n", .{ button.position.x, button.position.y });
                 },
-                .move => |pos| std.debug.print("moved: ({d}, {d})\n", .{ pos.x, pos.y }),
+                .move => |pos| {
+                    if (window.keyboard.get(.@"1") == .pressed) std.debug.print("moved: ({d}, {d})\n", .{ pos.x, pos.y });
+                },
                 .scroll => |scroll| std.debug.print("scroll: {any}\n", .{scroll}),
             },
-
             .key => |key| {
                 std.debug.print("{t:<7} {t:<10} {d:3} {d:.3}\n", .{
                     key.state,
