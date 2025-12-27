@@ -51,7 +51,7 @@ pub fn open(config: Window.Config) !@This() {
     const display: *wl.wl_display = wl.wl_display_connect(null) orelse return error.ConnectDisplay;
     errdefer wl.wl_display_disconnect(display);
     const compositor: *wl.wl_compositor, const xdg_wm_base: *xdg.xdg_wm_base, const seat: *wl.wl_seat, const shm: ?*wl.wl_shm, const decoration_manager: ?*decor.zxdg_decoration_manager_v1 = registry: {
-        var data: Registry = undefined;
+        var data: Registry = .{};
         const registry: *wl.wl_registry = wl.wl_display_get_registry(display) orelse return error.GetDisplayRegistry;
         if (wl.wl_registry_add_listener(registry, &wl.wl_registry_listener{ .global = @ptrCast(&Registry.callback) }, @ptrCast(&data)) != 0) return error.RegistryAddListener;
         if (wl.wl_display_roundtrip(display) < 0) return error.DisplayRoundtrip;
@@ -381,7 +381,7 @@ pub const Keyboard = struct {
             .state = switch (state) {
                 wl.WL_KEYBOARD_KEY_STATE_PRESSED => .pressed,
                 wl.WL_KEYBOARD_KEY_STATE_RELEASED => .released,
-                else => unreachable,
+                else => return,
             },
             .code = @intCast(keycode),
             .sym = Window.io.Event.Key.Sym.fromXkb(sym) orelse return,
