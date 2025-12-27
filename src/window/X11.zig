@@ -57,8 +57,7 @@ pub fn open(config: Window.Config) !@This() {
             );
             break :window window;
         },
-        .vulkan => return error.NotImplemented, // TODO: add vulkan window for X
-        .none => x11.XCreateSimpleWindow(display, root, // Parent window
+        .vulkan, .none => x11.XCreateSimpleWindow(display, root, // Parent window
             0, 0, // X, Y position
             @intCast(config.size.width), @intCast(config.size.height), // Width, Height
             2, // Border width

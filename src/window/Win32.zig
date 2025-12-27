@@ -27,11 +27,7 @@ pub const GraphicsApi = union(Window.GraphicsApi.Tag) {
             // choosePixelFormatARB: *const fn (win32.HDC, ?[*]const i32, ?[*:0]const f32, u32, [*:0]i32, *u32) callconv(.winapi) win32.BOOL,
         };
     };
-    pub const Vulkan = struct {
-        instance: win32.HINSTANCE = undefined,
-        getInstanceProcAddress: GetInstanceProcAddress,
-        pub const GetInstanceProcAddress = *const fn (usize, [*:0]const u8) callconv(.winapi) ?*const fn () void;
-    };
+    pub const Vulkan = struct {};
 };
 
 pub fn open(config: Window.Config) !@This() {
@@ -142,14 +138,7 @@ pub fn open(config: Window.Config) !@This() {
                 },
             };
         },
-        .vulkan => {
-            const vulkan: win32.HINSTANCE = win32.LoadLibraryW(win32.L("vulkan-1.dll")) orelse return error.LoadLibraryWVulkan;
-            const getInstanceProcAddress: GraphicsApi.Vulkan.GetInstanceProcAddress = @ptrCast(win32.GetProcAddress(vulkan, "vkGetInstanceProcAddr") orelse return error.GetProcAddress);
-            break :api .{ .vulkan = .{
-                .instance = vulkan,
-                .getInstanceProcAddress = getInstanceProcAddress,
-            } };
-        },
+        .vulkan => .{ .vulkan = .{} },
         .none => .{ .none = undefined },
     };
 
@@ -165,13 +154,7 @@ pub fn open(config: Window.Config) !@This() {
 }
 
 pub fn close(self: @This()) void {
-    switch (self.api) {
-        .opengl => |opengl| {
-            _ = win32.wglDeleteContext(opengl.rc);
-        },
-        .vulkan => |vulkan| _ = win32.FreeLibrary(vulkan.instance),
-        .none => {},
-    }
+    if (self.api == .opengl) _ = win32.wglDeleteContext(self.api.opengl.rc);
     _ = win32.DestroyWindow(self.hwnd);
     _ = win32.UnregisterClassW(self.class.lpszClassName, self.instance);
 }

@@ -130,7 +130,7 @@ pub fn open(config: Window.Config) !@This() {
                 .surface = egl_surface,
             } };
         },
-        .vulkan => @panic("vulkan"),
+        .vulkan => .{ .vulkan = .{} },
         .none => {
             const buffer, const pixels = try Shm.resize(shm orelse return error.NoShm, config.size.width, config.size.height);
             wl.wl_surface_attach(surface, buffer, 0, 0);
@@ -214,7 +214,7 @@ pub fn poll(self: *@This(), keyboard: *Window.io.Keyboard) !?Window.io.Event {
             self.size = size;
             switch (self.api) {
                 .opengl => |opengl| wl.wl_egl_window_resize(opengl.window, @intCast(size.width), @intCast(size.height), 0, 0),
-                .vulkan => @panic("vulkan"),
+                .vulkan => {},
                 .none => if (size.width != 0 and size.height != 0) {
                     self.api.none.buffer, self.api.none.pixels = try Shm.resize(self.api.none.shm, size.width, size.height);
                     @memset(self.api.none.pixels, 255);

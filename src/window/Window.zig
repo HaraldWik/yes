@@ -1,5 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
+const posix = @import("../posix.zig");
 pub const Size = @import("../root.zig").Size;
 pub const Position = @import("../root.zig").Position;
 pub const io = @import("io.zig");
@@ -15,23 +16,9 @@ pub const Handle = switch (builtin.os.tag) {
     else => Posix,
 };
 
-pub const Posix = union(Tag) {
+pub const Posix = union(posix.Tag) {
     x11: X11,
     wayland: Wayland,
-
-    pub const Tag = enum { x11, wayland };
-
-    pub const session_env = "XDG_SESSION_TYPE";
-
-    pub fn getSessionType() ?Tag {
-        for (std.os.argv) |arg| {
-            const identifier = "--xdg=";
-            if (!std.mem.startsWith(u8, std.mem.span(arg), identifier)) continue;
-            return std.meta.stringToEnum(Tag, std.mem.span(arg)[identifier.len..]);
-        }
-        const session = std.posix.getenv(session_env) orelse "x11";
-        return std.meta.stringToEnum(Tag, session);
-    }
 };
 
 pub const GraphicsApi = union(Tag) {
@@ -69,7 +56,7 @@ pub fn open(config: Config) !@This() {
             .windows => Win32.open(config) catch |err| {
                 return Win32.reportErr(err);
             },
-            else => switch (Posix.getSessionType() orelse .x11) {
+            else => switch (posix.getSessionType()) {
                 .x11 => .{ .x11 = try .open(config) },
                 .wayland => .{ .wayland = try .open(config) },
             },

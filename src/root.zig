@@ -1,9 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
-pub const Monitor = @import("monitor/Monitor.zig");
-pub const Window = @import("window/Window.zig");
-
 pub const Size = struct {
     width: T = 0,
     height: T = 0,
@@ -34,7 +31,11 @@ pub fn Position(T: type) type {
     };
 }
 
+pub const Monitor = @import("monitor/Monitor.zig");
+pub const Window = @import("window/Window.zig");
+
 pub const opengl = @import("opengl.zig");
+pub const vulkan = @import("vulkan.zig");
 /// only windows support currently (sort of)
 pub const clipboard = @import("clipboard.zig");
 /// only windows support currently
