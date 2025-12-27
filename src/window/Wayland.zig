@@ -148,6 +148,8 @@ pub fn open(config: Window.Config) !@This() {
     wl.wl_surface_commit(surface);
     _ = wl.wl_display_roundtrip(display); // Ensure compositor processes commit
 
+    events.pushBackAssumeCapacity(.{ .resize = config.size });
+
     return .{
         .display = display,
         .compositor = compositor,
@@ -299,7 +301,9 @@ pub const Toplevel = struct {
 
     // TODO: use this correctly
     pub fn configure(_: ?*anyopaque, _: ?*xdg.xdg_toplevel, width: i32, height: i32, _: [*c]xdg.wl_array) callconv(.c) void {
-        events.pushBackAssumeCapacity(.{ .resize = .{ .width = @intCast(width), .height = @intCast(height) } });
+        _ = width;
+        _ = height;
+        // events.pushBackAssumeCapacity(.{ .resize = .{ .width = @intCast(width), .height = @intCast(height) } });
     }
 
     pub fn close_(_: ?*anyopaque, _: ?*xdg.xdg_toplevel) callconv(.c) void {
