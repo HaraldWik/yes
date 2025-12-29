@@ -41,7 +41,6 @@ pub fn main() !void {
     var window: yes.Window = try .open(.{
         .title = "Title",
         .size = .{ .width = 900, .height = 600 },
-        // .resizable = false,
         .api = .{ .opengl = .{} }, // Don't forget to set to OpenGL
     });
     defer window.close();

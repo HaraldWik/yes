@@ -21,10 +21,9 @@ pub fn open(config: Window.Config) !@This() {
     const screen = x11.DefaultScreen(display);
     const root = x11.RootWindow(display, screen);
 
-    var visual: *x11.XVisualInfo = undefined;
-    const window: x11.Window = window: switch (config.api) {
+    const visual: *x11.XVisualInfo = visual: switch (config.api) {
         .opengl => {
-            var visual_attribs = [_:0]c_int{
+            var attribute_list = [_]c_int{
                 x11.GLX_RGBA,
                 x11.GLX_DOUBLEBUFFER,
                 x11.GLX_DEPTH_SIZE,
@@ -33,43 +32,49 @@ pub fn open(config: Window.Config) !@This() {
                 8,
                 x11.GLX_NONE,
             };
-
-            visual = x11.glXChooseVisual(display, screen, &visual_attribs);
-
-            var swa: x11.XSetWindowAttributes = .{
-                .colormap = x11.XCreateColormap(display, root, visual.visual, x11.AllocNone),
-                .event_mask = x11.ExposureMask | x11.KeyPressMask | x11.StructureNotifyMask,
-            };
-
-            const window: x11.Window = x11.XCreateWindow(
-                display,
-                root,
-                0,
-                0,
-                @intCast(config.size.width),
-                @intCast(config.size.height),
-                0,
-                visual.depth,
-                x11.InputOutput,
-                visual.visual,
-                x11.CWColormap | x11.CWEventMask,
-                &swa,
-            );
-            break :window window;
+            break :visual x11.glXChooseVisual(display, screen, &attribute_list);
         },
-        .vulkan, .none => x11.XCreateSimpleWindow(display, root, // Parent window
-            0, 0, // X, Y position
-            @intCast(config.size.width), @intCast(config.size.height), // Width, Height
-            2, // Border width
-            x11.BlackPixel(display, screen), // Border color
-            x11.BlackPixel(display, screen) // Background color
-        ),
+        .vulkan, .none => {
+            var visual: x11.XVisualInfo = .{
+                .visual = x11.XDefaultVisual(display, screen),
+                .depth = x11.DefaultDepth(display, screen),
+            };
+            break :visual &visual;
+        },
     };
+
+    const colormap = x11.XCreateColormap(display, root, visual.visual, x11.AllocNone);
+    var window_attributes: x11.XSetWindowAttributes = .{
+        .colormap = colormap,
+        .event_mask =
+        // zig fmt: off
+            x11.FocusChangeMask |
+            x11.EnterWindowMask | x11.LeaveWindowMask |
+            x11.KeyPressMask | x11.KeyReleaseMask |
+            x11.ButtonPressMask | x11.ButtonReleaseMask |
+            x11.PointerMotionMask |
+            x11.ExposureMask |
+            x11.StructureNotifyMask,
+        // zig fmt: on
+    };
+
+    const window: x11.Window = x11.XCreateWindow(
+        display,
+        root,
+        0,
+        0,
+        config.size.width,
+        config.size.height,
+        0,
+        visual.depth,
+        x11.InputOutput,
+        visual.visual,
+        x11.CWColormap | x11.CWEventMask,
+        &window_attributes,
+    );
     errdefer _ = x11.XDestroyWindow(display, window);
 
-    // _ = x11.XStoreName(display, window, config.title.ptr);
     var hints: x11.XSizeHints = .{};
-
     if (config.min_size) |size| {
         hints.flags |= x11.PMinSize;
         hints.min_width = @intCast(size.width);
@@ -96,20 +101,6 @@ pub fn open(config: Window.Config) !@This() {
 
     var wm_delete_window: x11.Atom = x11.XInternAtom(display, "WM_DELETE_WINDOW", @intFromBool(false));
     if (x11.XSetWMProtocols(display, window, &wm_delete_window, 1) == x11.False) return error.SetWMProtocols;
-
-    if (x11.XSelectInput(
-        display,
-        window,
-        // zig fmt: off
-        x11.FocusChangeMask |
-        x11.KeyPressMask | x11.KeyReleaseMask |
-        x11.ButtonPressMask | x11.ButtonReleaseMask |
-        x11.PointerMotionMask |
-        x11.FocusChangeMask |
-        x11.ExposureMask |
-        x11.StructureNotifyMask,
-        // zig fmt: on
-    ) == x11.False) return error.SelectInput;
 
     const MotifWmHints = extern struct {
         flags: c_ulong,
@@ -198,10 +189,16 @@ pub fn poll(self: *@This(), keyboard: *Window.io.Keyboard) !?Window.io.Event {
         x11.ClientMessage => if (@as(x11.Atom, @intCast(event.xclient.data.l[0])) == self.wm_delete_window) .close else null,
         x11.FocusIn => .{ .focus = .enter },
         x11.FocusOut => .{ .focus = .leave },
-        x11.ConfigureNotify => .{ .resize = .{
-            .width = @intCast(event.xconfigure.width),
-            .height = @intCast(event.xconfigure.height),
-        } },
+        x11.ConfigureNotify => {
+            var attrs: x11.XWindowAttributes = undefined;
+            _ = x11.XGetWindowAttributes(self.display, self.window, &attrs);
+
+            return .{ .resize = .{
+                .width = @intCast(attrs.width),
+                .height = @intCast(attrs.height),
+            } };
+        },
+
         x11.ButtonPress, x11.ButtonRelease => switch (event.xbutton.button) {
             4...7 => |scroll| .{ .mouse = .{
                 .scroll = switch (scroll) {
