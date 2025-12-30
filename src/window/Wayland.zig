@@ -53,7 +53,7 @@ pub fn open(config: Window.Config) !@This() {
     const compositor: *wl.wl_compositor, const xdg_wm_base: *xdg.xdg_wm_base, const seat: *wl.wl_seat, const shm: ?*wl.wl_shm, const decoration_manager: ?*decor.zxdg_decoration_manager_v1 = registry: {
         var data: Registry = .{};
         const registry: *wl.wl_registry = wl.wl_display_get_registry(display) orelse return error.GetDisplayRegistry;
-        if (wl.wl_registry_add_listener(registry, &wl.wl_registry_listener{ .global = @ptrCast(&Registry.callback) }, @ptrCast(&data)) != 0) return error.RegistryAddListener;
+        if (wl.wl_registry_add_listener(registry, &wl.wl_registry_listener{ .global = @ptrCast(&Registry.register) }, @ptrCast(&data)) != 0) return error.RegistryAddListener;
         if (wl.wl_display_roundtrip(display) < 0) return error.DisplayRoundtrip;
         break :registry .{
             data.compositor orelse return error.Compositor,
@@ -73,7 +73,7 @@ pub fn open(config: Window.Config) !@This() {
     _ = xdg.xdg_surface_add_listener(xdg_surface, &xdg.xdg_surface_listener{ .configure = @ptrCast(&callback.configure) }, &configuration_done);
 
     const xdg_toplevel: *xdg.xdg_toplevel = xdg.xdg_surface_get_toplevel(xdg_surface) orelse return error.XdgSurfaceGetToplevel;
-    if (xdg.xdg_toplevel_add_listener(xdg_toplevel, Toplevel.listener, null) != 0) return error.XdgToplevelAddListener;
+    if (xdg.xdg_toplevel_add_listener(xdg_toplevel, toplevel.listener, null) != 0) return error.XdgToplevelAddListener;
     if (config.min_size) |size| xdg.xdg_toplevel_set_min_size(xdg_toplevel, @intCast(size.width), @intCast(size.height));
     if (config.max_size) |size| xdg.xdg_toplevel_set_max_size(xdg_toplevel, @intCast(size.width), @intCast(size.height));
 
@@ -134,7 +134,7 @@ pub fn open(config: Window.Config) !@This() {
         .none => {
             const buffer, const pixels = try Shm.resize(shm orelse return error.NoShm, config.size.width, config.size.height);
             wl.wl_surface_attach(surface, buffer, 0, 0);
-            wl.wl_surface_damage(surface, 0, 0, @intCast(config.size.width), @intCast(config.size.height));
+            wl.wl_surface_damage_buffer(surface, 0, 0, @intCast(config.size.width), @intCast(config.size.height));
 
             @memset(pixels, 255);
             break :api .{ .none = .{
@@ -263,7 +263,7 @@ const Registry = struct {
     shm: ?*wl.wl_shm = null,
     decoration_manager: ?*decor.zxdg_decoration_manager_v1 = null,
 
-    fn callback(self: *@This(), registry: *wl.wl_registry, name: u32, interfacez: [*:0]const u8, version: u32) callconv(.c) void {
+    fn register(self: *@This(), registry: *wl.wl_registry, name: u32, interfacez: [*:0]const u8, version: u32) callconv(.c) void {
         const interface = std.mem.span(interfacez);
 
         if (std.mem.eql(u8, interface, std.mem.span(wl.wl_compositor_interface.name))) {
@@ -291,7 +291,7 @@ pub const callback = struct {
     }
 };
 
-pub const Toplevel = struct {
+pub const toplevel = struct {
     pub const listener: *const xdg.xdg_toplevel_listener = &.{
         .configure = configure,
         .close = close_,
@@ -299,11 +299,8 @@ pub const Toplevel = struct {
         .wm_capabilities = capabilities,
     };
 
-    // TODO: use this correctly
     pub fn configure(_: ?*anyopaque, _: ?*xdg.xdg_toplevel, width: i32, height: i32, _: [*c]xdg.wl_array) callconv(.c) void {
-        _ = width;
-        _ = height;
-        // events.pushBackAssumeCapacity(.{ .resize = .{ .width = @intCast(width), .height = @intCast(height) } });
+        if (width > 0 and height > 0) events.pushBackAssumeCapacity(.{ .resize = .{ .width = @intCast(width), .height = @intCast(height) } });
     }
 
     pub fn close_(_: ?*anyopaque, _: ?*xdg.xdg_toplevel) callconv(.c) void {
