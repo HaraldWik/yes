@@ -22,6 +22,32 @@ pub fn build(b: *std.Build) void {
     x11.linkSystemLibrary("Xrandr", .{});
     x11.linkSystemLibrary("glx", .{});
 
+    // const xcb_dep = b.dependency("xcb", .{});
+    const xcb = b.createModule(.{
+        .root_source_file = b.path("src/xcb.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    xcb.linkSystemLibrary("xcb", .{});
+    // xcb.addCMacro("XCB_QUEUE_BUFFER_SIZE", "16384");
+    // xcb.addCMacro("IOV_MAX", "1024");
+    // xcb.addIncludePath(xcb_dep.path("src/"));
+    // xcb.addIncludePath(.{ .cwd_relative = "/usr/include/xcb/" });
+    // xcb.addCSourceFiles(.{
+    //     .root = xcb_dep.path("src/"),
+    //     .files = &.{
+    //         "xcb_auth.c",
+    //         "xcb_conn.c",
+    //         "xcb_ext.c",
+    //         "xcb_in.c",
+    //         "xcb_list.c",
+    //         "xcb_out.c",
+    //         "xcb_util.c",
+    //         "xcb_xid.c",
+    //     },
+    // });
+    // xcb.linkSystemLibrary("Xau", .{});
+
     const wayland = b.addTranslateC(.{
         .root_source_file = b.addWriteFiles().add("wayland.h",
             \\#include <wayland-client.h>
@@ -110,6 +136,7 @@ pub fn build(b: *std.Build) void {
                 .{ .name = "xkb", .module = xkbcommon_headers },
 
                 .{ .name = "x11", .module = x11 },
+                .{ .name = "xcb", .module = xcb },
 
                 .{ .name = "wayland", .module = wayland },
                 .{ .name = "xdg", .module = xdg },

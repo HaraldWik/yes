@@ -5,7 +5,7 @@ pub const Size = @import("../root.zig").Size;
 pub const Position = @import("../root.zig").Position;
 pub const io = @import("io.zig");
 pub const Win32 = @import("Win32.zig");
-pub const X11 = @import("X11.zig");
+pub const X11 = @import("Xcb.zig");
 pub const Wayland = @import("Wayland.zig");
 
 handle: Handle,

@@ -20,7 +20,7 @@ pub fn getProcAddress(name: [*:0]const u8) ?Proc {
             if (win32.GetProcAddress(gl, name)) |proc| break :proc @ptrCast(proc);
             break :proc null;
         },
-        else => glx.glXGetProcAddress(name) orelse egl.eglGetProcAddress(name),
+        else => egl.eglGetProcAddress(name),
     };
 }
 
@@ -28,8 +28,7 @@ pub fn makeCurrent(window: Window) !void {
     switch (native.os) {
         .windows => if (wgl.wglMakeCurrent(window.handle.api.opengl.dc, window.handle.api.opengl.rc) == wgl.GL_FALSE) return error.WglMakeCurrent,
         else => switch (window.handle) {
-            .x11 => |handle| if (glx.glXMakeCurrent(handle.display, handle.window, handle.api.opengl.context) == glx.False) return error.GlxMakeCurrent,
-            .wayland => |handle| if (egl.eglMakeCurrent(handle.api.opengl.display, handle.api.opengl.surface, handle.api.opengl.surface, handle.api.opengl.context) != egl.EGL_TRUE) return error.EglMakeCurrent,
+            inline else => |handle| if (egl.eglMakeCurrent(handle.api.opengl.display, handle.api.opengl.surface, handle.api.opengl.surface, handle.api.opengl.context) != egl.EGL_TRUE) return error.EglMakeCurrent,
         },
     }
 }
@@ -38,7 +37,9 @@ pub fn swapBuffers(window: Window) !void {
     switch (native.os) {
         .windows => if (!native.win32.everything.SUCCEEDED(wgl.SwapBuffers(window.handle.api.opengl.dc))) return error.SwapBuffers,
         else => switch (window.handle) {
-            .x11 => |handle| glx.glXSwapBuffers(@ptrCast(handle.display), handle.window),
+            .x11 => |handle| {
+                if (egl.eglSwapBuffers(handle.api.opengl.display, handle.api.opengl.surface) != egl.EGL_TRUE) return error.EglSwapBuffers;
+            },
             .wayland => |handle| {
                 if (egl.eglSwapBuffers(handle.api.opengl.display, handle.api.opengl.surface) != egl.EGL_TRUE) return error.EglSwapBuffers;
                 native.posix.wayland.client.wl_surface_commit(handle.surface);
@@ -52,11 +53,7 @@ pub fn swapInterval(window: Window, interval: i32) !void {
     switch (native.os) {
         .windows => if (window.handle.api.opengl.wgl.swapIntervalEXT(interval) == 0) return error.SwapInterval,
         else => switch (window.handle) {
-            .x11 => {
-                const glXSwapIntervalEXT: *const fn (display: *glx.Display, drawable: glx.Drawable, interval: c_int) callconv(.c) void = @ptrCast(glx.glXGetProcAddress("glXSwapIntervalEXT") orelse return error.SwapIntervalLoad);
-                glXSwapIntervalEXT(window.handle.x11.display, window.handle.x11.window, @intCast(interval));
-            },
-            .wayland => if (egl.eglSwapInterval(window.handle.wayland.api.opengl.display, @intCast(interval)) != egl.EGL_TRUE) return error.SwapInterval,
+            inline else => |handle| if (egl.eglSwapInterval(handle.api.opengl.display, @intCast(interval)) != egl.EGL_TRUE) return error.SwapInterval,
         },
     }
 }

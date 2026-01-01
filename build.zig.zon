@@ -20,6 +20,10 @@
             .url = "git+https://github.com/mirror/libX11/#ff8706a5eae25b8bafce300527079f68a201d27f",
             .hash = "N-V-__8AACyQxwDUvMZdHuuzwuP1mlGU6uroadqmQvBwevJX",
         },
+        // .xcb = .{
+        //     .url = "git+https://github.com/Martin1994/xcb-libxcb#c4f8e68e5987a8d94f4c1f20135f099c76f33eb2",
+        //     .hash = "N-V-__8AACVHCQDWRoyMdpMt93sdohb_3BDGWC8OUFED0tlv",
+        // },
         .wayland = .{
             .url = "git+https://github.com/wayland-mirror/wayland/#1ab6b693b16e1d9734496fe60c8a6ed277e4dec3",
             .hash = "N-V-__8AAFL0GACxHb3Q_xuatHOFPnAcgBEdNcfE1vcr-iT2",
