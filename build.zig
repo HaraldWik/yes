@@ -22,51 +22,6 @@ pub fn build(b: *std.Build) void {
     x11.linkSystemLibrary("Xrandr", .{});
     x11.linkSystemLibrary("glx", .{});
 
-    const wayland = b.addTranslateC(.{
-        .root_source_file = b.addWriteFiles().add("wayland.h",
-            \\#include <wayland-client.h>
-            \\#include <wayland-egl.h>
-        ),
-        .target = target,
-        .optimize = optimize,
-    }).createModule();
-    wayland.addIncludePath(b.dependency("wayland", .{}).path("src/"));
-    wayland.addIncludePath(b.dependency("wayland", .{}).path("egl/"));
-    wayland.linkSystemLibrary("wayland-client", .{});
-    wayland.linkSystemLibrary("wayland-egl", .{});
-
-    const xdg_scanner_h = b.addSystemCommand(&.{
-        "wayland-scanner", "client-header", "/usr/share/wayland-protocols/stable/xdg-shell/xdg-shell.xml",
-    });
-    const xdg_scanner_c = b.addSystemCommand(&.{
-        "wayland-scanner", "private-code", "/usr/share/wayland-protocols/stable/xdg-shell/xdg-shell.xml",
-    });
-    const xdg = b.addTranslateC(.{
-        .root_source_file = xdg_scanner_h.addOutputFileArg("xdg-shell-client-protocol.h"),
-        .target = target,
-        .optimize = optimize,
-    }).createModule();
-    xdg.addCSourceFile(.{ .file = xdg_scanner_c.addOutputFileArg("xdg-shell-protocol.c") });
-
-    const decor_scanner_h = b.addSystemCommand(&.{
-        "wayland-scanner",
-        "client-header",
-        "/usr/share/wayland-protocols/unstable/xdg-decoration/xdg-decoration-unstable-v1.xml",
-    });
-
-    const decor_scanner_c = b.addSystemCommand(&.{
-        "wayland-scanner",
-        "private-code",
-        "/usr/share/wayland-protocols/unstable/xdg-decoration/xdg-decoration-unstable-v1.xml",
-    });
-
-    const decor = b.addTranslateC(.{
-        .root_source_file = decor_scanner_h.addOutputFileArg("xdg-decoration-client-protocol.h"),
-        .target = target,
-        .optimize = optimize,
-    }).createModule();
-    decor.addCSourceFile(.{ .file = decor_scanner_c.addOutputFileArg("xdg-decoration-protocol.c") });
-
     const xkbcommon = b.dependency("xkbcommon", .{
         .target = target,
         .optimize = optimize,
@@ -111,9 +66,6 @@ pub fn build(b: *std.Build) void {
 
                 .{ .name = "x11", .module = x11 },
 
-                .{ .name = "wayland", .module = wayland },
-                .{ .name = "xdg", .module = xdg },
-                .{ .name = "decor", .module = decor },
                 .{ .name = "egl", .module = egl },
             },
         },
@@ -126,6 +78,48 @@ pub fn build(b: *std.Build) void {
             mod.linkSystemLibrary("kernel32", .{});
             mod.linkSystemLibrary("opengl32", .{});
         },
-        else => {},
+        else => {
+            buildWayland(b, mod, target, optimize);
+        },
     }
+}
+
+pub fn buildWayland(b: *std.Build, module: *std.Build.Module, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) void {
+    const shimizu_build = @import("shimizu");
+
+    const wayland_dep = b.dependency("wayland", .{});
+    const wayland_protocols_dep = b.dependency("wayland-protocols", .{});
+
+    const shimizu_dep = b.dependencyFromBuildZig(shimizu_build, .{
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const shimizu_scanner = shimizu_dep.artifact("shimizu-scanner");
+    const wayland_protocols_generate_result = shimizu_build.generateProtocolZig(b, shimizu_scanner, .{
+        .output_directory_name = "wayland-unstable",
+        .source_files = &.{
+            wayland_protocols_dep.path("unstable/xdg-decoration/xdg-decoration-unstable-v1.xml"),
+        },
+        .interface_versions = &.{
+            .{ .interface = "zxdg_decoration_manager_v1", .version = 1 },
+        },
+        .imports = &.{
+            .{ .file = wayland_dep.path("protocol/wayland.xml"), .import_string = "@import(\"core\")" },
+            .{ .file = wayland_protocols_dep.path("stable/xdg-shell/xdg-shell.xml"), .import_string = "@import(\"wayland-protocols\").xdg_shell" },
+        },
+    });
+
+    const wayland_protocols_module = b.addModule("wayland-protocols", .{
+        .root_source_file = wayland_protocols_generate_result.output_directory.?.path(b, "root.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "wire", .module = shimizu_dep.module("wire") },
+            .{ .name = "core", .module = shimizu_dep.module("core") },
+        },
+    });
+
+    module.addImport("shimizu", shimizu_dep.module("shimizu"));
+    module.addImport("wayland-protocols", wayland_protocols_module);
 }

@@ -20,14 +20,22 @@
             .url = "git+https://github.com/mirror/libX11/#ff8706a5eae25b8bafce300527079f68a201d27f",
             .hash = "N-V-__8AACyQxwDUvMZdHuuzwuP1mlGU6uroadqmQvBwevJX",
         },
-        .wayland = .{
-            .url = "git+https://github.com/wayland-mirror/wayland/#1ab6b693b16e1d9734496fe60c8a6ed277e4dec3",
-            .hash = "N-V-__8AAFL0GACxHb3Q_xuatHOFPnAcgBEdNcfE1vcr-iT2",
-        },
 
         .egl = .{
             .url = "git+https://github.com/KhronosGroup/EGL-Registry/#3ae2b7c48690d2ce13cc6db3db02dfc0572be65e",
             .hash = "N-V-__8AAMlebQAc6dRDTEIyEn_i5KeO8qNg3YdK_Sg1KgDT",
+        },
+        .shimizu = .{
+            .url = "git+https://git.sr.ht/~geemili/shimizu#5433fb688e6bb8a193f7df6d471c9c9fd2d40c48",
+            .hash = "shimizu-0.2.0-dev-irfMUUQwBABO45uE7nICsaFMjslxXfDNb54s5KwErHQ3",
+        },
+        .wayland = .{
+            .url = "https://gitlab.freedesktop.org/wayland/wayland/-/archive/1.23.1/wayland-1.23.1.tar.gz",
+            .hash = "1220b62de1974a154da15d285955bd4f6f77255ce6c74918e4a55a9f7f8206266afa",
+        },
+        .@"wayland-protocols" = .{
+            .url = "https://gitlab.freedesktop.org/wayland/wayland-protocols/-/archive/1.38/wayland-protocols-1.38.tar.gz",
+            .hash = "1220668467dd0d0970eb95e53b9e503f5a68801528d5978652ffc275f987aff0a4d8",
         },
     },
     .paths = .{
