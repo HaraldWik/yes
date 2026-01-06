@@ -487,7 +487,7 @@ pub const Shm = struct {
 
         _ = std.c.shm_unlink(name[0..].ptr);
 
-        try std.posix.ftruncate(fd, @intCast(size));
+        _ = std.os.linux.ftruncate(fd, @intCast(size));
 
         return fd;
     }
