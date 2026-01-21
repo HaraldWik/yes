@@ -32,7 +32,7 @@ pub fn open(config: Window.Config) !@This() {
                 8,
                 x11.GLX_NONE,
             };
-            break :visual x11.glXChooseVisual(display, screen, &attribute_list);
+            break :visual x11.glXChooseVisual(display, screen, &attribute_list) orelse return error.ChooseVisual;
         },
         .vulkan, .none => {
             var visual: x11.XVisualInfo = .{

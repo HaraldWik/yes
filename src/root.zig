@@ -31,6 +31,7 @@ pub fn Position(T: type) type {
     };
 }
 
+pub const Context = @import("Context.zig");
 pub const Monitor = @import("monitor/Monitor.zig");
 pub const Window = @import("window/Window.zig");
 

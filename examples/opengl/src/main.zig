@@ -37,8 +37,10 @@ pub const fragment_source: [*:0]const u8 =
     \\}
 ;
 
-pub fn main() !void {
-    var window: yes.Window = try .open(.{
+pub fn main(init: std.process.Init.Minimal) !void {
+    const context: yes.Context = .get(init);
+
+    var window: yes.Window = try .open(context, .{
         .title = "Title",
         .size = .{ .width = 900, .height = 600 },
         .api = .{ .opengl = .{} }, // Don't forget to set to OpenGL

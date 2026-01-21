@@ -17,7 +17,7 @@ pub fn getRequiredInstanceExtensions() []const [:0]const u8 {
             "VK_KHR_surface",
             "VK_KHR_win32_surface",
         },
-        else => switch (posix.getSessionType()) {
+        else => switch (posix.getPlatform()) {
             .wayland => &.{
                 "VK_KHR_surface",
                 "VK_KHR_wayland_surface",

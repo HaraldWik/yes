@@ -1,9 +1,11 @@
 const std = @import("std");
 const yes = @import("yes");
 
-pub fn main() !void {
+pub fn main(init: std.process.Init.Minimal) !void {
+    const context: yes.Context = .get(init);
+
     var buffer: [128]u8 = undefined;
-    var it: yes.Monitor.Iterator = .init(&buffer);
+    var it: yes.Monitor.Iterator = .init(context, &buffer);
     while (it.next() catch null) |monitor| {
         std.debug.print("monitor: {s}\n\tsize: {any}, physical size: {any}\n\tposition: {any}\n\tscale: {d:.3}\n\torientation: {t}\n", .{
             monitor.name orelse "unknown",
@@ -16,9 +18,9 @@ pub fn main() !void {
     }
     std.debug.print("\n", .{});
 
-    const monitor: yes.Monitor = .primary(&buffer);
+    const monitor: yes.Monitor = .primary(context, &buffer);
 
-    var window: yes.Window = try .open(.{
+    var window: yes.Window = try .open(context, .{
         .title = "Title 😀✅♥",
         .size = .{ .width = 900, .height = 600 },
         .decoration = true,

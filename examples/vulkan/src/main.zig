@@ -1,8 +1,9 @@
 const std = @import("std");
 const yes = @import("yes");
 
-pub fn main() !void {
-    var window: yes.Window = try .open(.{
+pub fn main(init: std.process.Init.Minimal) !void {
+    const context: yes.Context = .get(init);
+    var window: yes.Window = try .open(context, .{
         .title = "Title",
         .size = .{ .width = 900, .height = 600 },
         .api = .{ .vulkan = .{} },

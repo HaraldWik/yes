@@ -1,6 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const posix = @import("../posix.zig");
+const Context = @import("../Context.zig");
 pub const Size = @import("../root.zig").Size;
 pub const Position = @import("../root.zig").Position;
 pub const Win32 = @import("Win32.zig");
@@ -33,27 +34,26 @@ pub const Orientation = enum(u2) {
 
 pub const Handle = switch (builtin.os.tag) {
     .windows => Win32,
-    else => Posix,
-};
-
-pub const Posix = union(posix.Tag) {
-    x11: X11,
-    wayland: Wayland,
+    else => union(posix.Platform) {
+        x11: X11,
+        wayland: Wayland,
+    },
 };
 
 pub const Iterator = struct {
+    context: Context,
     index: usize = 0,
     buffer: []u8 = undefined,
 
-    pub fn init(buffer: []u8) @This() {
-        return .{ .buffer = buffer };
+    pub fn init(context: Context, buffer: []u8) @This() {
+        return .{ .context = context, .buffer = buffer };
     }
 
     pub fn next(self: *@This()) !?Monitor {
         defer self.index += 1;
         return switch (builtin.os.tag) {
             .windows => try Win32.get(self.index, self.buffer),
-            else => switch (posix.getSessionType()) {
+            else => switch (self.context.posix_platform) {
                 .x11 => X11.get(self.index, self.buffer),
                 .wayland => Wayland.get(self.index, self.buffer),
             },
@@ -61,8 +61,8 @@ pub const Iterator = struct {
     }
 };
 
-pub fn primary(buffer: []u8) @This() {
-    var it: Iterator = .init(buffer);
+pub fn primary(context: Context, buffer: []u8) @This() {
+    var it: Iterator = .init(context, buffer);
     while (it.next() catch null) |monitor| {
         if (monitor.is_primary) return monitor;
     } else {

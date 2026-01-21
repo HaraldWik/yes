@@ -1,6 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const posix = @import("../posix.zig");
+const Context = @import("../Context.zig");
 pub const Size = @import("../root.zig").Size;
 pub const Position = @import("../root.zig").Position;
 pub const io = @import("io.zig");
@@ -13,12 +14,10 @@ keyboard: io.Keyboard = .{},
 
 pub const Handle = switch (builtin.os.tag) {
     .windows => Win32,
-    else => Posix,
-};
-
-pub const Posix = union(posix.Tag) {
-    x11: X11,
-    wayland: Wayland,
+    else => union(posix.Platform) {
+        x11: X11,
+        wayland: Wayland,
+    },
 };
 
 pub const GraphicsApi = union(Tag) {
@@ -50,13 +49,13 @@ pub const Config = struct {
     decoration: bool = true,
 };
 
-pub fn open(config: Config) !@This() {
+pub fn open(context: Context, config: Config) !@This() {
     const window: @This() = .{
         .handle = switch (builtin.os.tag) {
             .windows => Win32.open(config) catch |err| {
                 return Win32.reportErr(err);
             },
-            else => switch (posix.getSessionType()) {
+            else => switch (context.posix_platform) {
                 .x11 => .{ .x11 = try .open(config) },
                 .wayland => .{ .wayland = try .open(config) },
             },
