@@ -217,7 +217,6 @@ pub fn poll(self: *@This(), keyboard: *Window.io.Keyboard) !?Window.io.Event {
                 .vulkan => {},
                 .none => if (size.width != 0 and size.height != 0) {
                     self.api.none.buffer, self.api.none.pixels = try Shm.resize(self.api.none.shm, size.width, size.height);
-                    @memset(self.api.none.pixels, 255);
                     wl.wl_surface_attach(self.surface, self.api.none.buffer, 0, 0);
                     wl.wl_surface_damage(self.surface, 0, 0, @intCast(size.width), @intCast(size.height));
                     wl.wl_surface_commit(self.surface);

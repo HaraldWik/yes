@@ -1,6 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const posix = @import("posix.zig");
+const Context = @import("Context.zig");
 
 pub fn isSupported() bool {
     var lib_a = std.DynLib.openZ(switch (builtin.os.tag) {
@@ -11,13 +12,13 @@ pub fn isSupported() bool {
     return true;
 }
 
-pub fn getRequiredInstanceExtensions() []const [:0]const u8 {
+pub fn getRequiredInstanceExtensions(context: Context) []const [:0]const u8 {
     return switch (builtin.os.tag) {
         .windows => &.{
             "VK_KHR_surface",
             "VK_KHR_win32_surface",
         },
-        else => switch (posix.getPlatform()) {
+        else => switch (context.posix_platform) {
             .wayland => &.{
                 "VK_KHR_surface",
                 "VK_KHR_wayland_surface",
