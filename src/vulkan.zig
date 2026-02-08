@@ -12,7 +12,9 @@ pub fn isSupported() bool {
     return true;
 }
 
-pub fn getRequiredInstanceExtensions(context: Context) []const [:0]const u8 {
+/// T is the string type
+/// example of T [*:0]const u8 or [:0]const u8 or [:0]const u8
+pub fn getRequiredInstanceExtensions(context: Context, comptime T: type) []const T {
     return switch (builtin.os.tag) {
         .windows => &.{
             "VK_KHR_surface",
@@ -25,7 +27,7 @@ pub fn getRequiredInstanceExtensions(context: Context) []const [:0]const u8 {
             },
             .x11 => &.{
                 "VK_KHR_surface",
-                "VK_KHR_xcb_surface",
+                "VK_KHR_xlib_surface",
             },
         },
     };
