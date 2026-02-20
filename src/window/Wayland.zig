@@ -355,7 +355,7 @@ pub const Keyboard = struct {
             std.posix.munmap(self.keymap_data);
         }
 
-        self.keymap_data = std.posix.mmap(null, size, std.c.PROT.READ, .{ .TYPE = .PRIVATE }, fd, 0) catch return;
+        self.keymap_data = std.posix.mmap(null, size, .{ .READ = true }, .{ .TYPE = .PRIVATE }, fd, 0) catch return;
         self.xkb_keymap = xkb.xkb_keymap_new_from_buffer(self.xkb_ctx, self.keymap_data.ptr, self.keymap_data.len, xkb.XKB_KEYMAP_FORMAT_TEXT_V1, xkb.XKB_KEYMAP_COMPILE_NO_FLAGS) orelse return;
         self.xkb_state = xkb.xkb_state_new(self.xkb_keymap) orelse return;
         _ = xkb.xkb_state_update_mask(self.xkb_state, self.mods_depressed, self.mods_latched, self.mods_locked, self.group, 0, 0);
@@ -499,7 +499,7 @@ pub const Shm = struct {
         const pixels = try std.posix.mmap(
             null,
             size,
-            std.posix.PROT.READ | std.posix.PROT.WRITE,
+            .{ .READ = true, .WRITE = true },
             .{ .TYPE = .SHARED },
             fd,
             0,

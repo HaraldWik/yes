@@ -5,8 +5,8 @@
     .minimum_zig_version = "0.16.0-dev.1912+0cbaaa5eb",
     .dependencies = .{
         .win32 = .{
-            .url = "git+https://github.com/marlersoft/zigwin32#5587b16fa040573846a6bf531301f6206d31a6bf",
-            .hash = "zigwin32-25.0.28-preview-AAAAAICM5AMResOGQnQ85mfe60TTOQeMtt7GRATUOKoP",
+            .url = "git+https://github.com/SquareMan/zigwin32#01df0ea99ae90afc3f46117055ab788646872eba",
+            .hash = "zigwin32-25.0.28-preview-qYSj4tyL5APmYxQI4_nKfd431j6VtaZnQkOb9IY6o5TR",
         },
         .xkbcommon = .{
             .url = "git+https://github.com/allyourcodebase/libxkbcommon.git?ref=1.11.0-1#809157d5118909298f3e086fa8d8103198e938fd",
