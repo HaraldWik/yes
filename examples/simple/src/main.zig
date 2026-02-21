@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const yes = @import("yes");
 
 pub fn main(init: std.process.Init.Minimal) !void {
@@ -28,8 +29,6 @@ pub fn main(init: std.process.Init.Minimal) !void {
     defer window.close();
     try window.setPosition(monitor.position);
 
-    const start_timestamp: std.time.Instant = try .now();
-
     var is_fullscreen: bool = false;
     var is_maximize: bool = false;
     main_loop: while (true) {
@@ -39,6 +38,10 @@ pub fn main(init: std.process.Init.Minimal) !void {
             .resize => |size| {
                 const width, const height = window.getSize().toArray();
                 std.debug.print("width: {d} == {d}, height: {d} == {d}\n", .{ size.width, width, size.height, height });
+
+                if (builtin.os.tag != .windows) if (context.posix_platform == .wayland) {
+                    @memset(window.handle.wayland.api.none.pixels, 127);
+                };
             },
             .mouse => |mouse| switch (mouse) {
                 .button => |button| {
@@ -51,11 +54,10 @@ pub fn main(init: std.process.Init.Minimal) !void {
                 .scroll => |scroll| std.debug.print("scroll: {any}\n", .{scroll}),
             },
             .key => |key| {
-                std.debug.print("{t:<7} {t:<10} {d:3} {d:.3}\n", .{
+                std.debug.print("{t:<7} {t:<10} {d:3}\n", .{
                     key.state,
                     key.sym,
                     key.code,
-                    @as(f32, @floatFromInt(@divTrunc((try std.time.Instant.now()).since(start_timestamp), std.time.ns_per_s / 10))) / 10.0,
                 });
 
                 if (key.state == .released) switch (key.sym) {
