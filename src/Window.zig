@@ -2,28 +2,37 @@ const Platform = @import("Platform.zig");
 
 const Window = @This();
 
-keyboard: [256]bool = @splat(false),
 size: Size = .{},
+position: Position = .{},
+
+pub const Event = @import("event.zig").Event;
 
 pub const Size = extern struct {
     width: u32 = 0,
     height: u32 = 0,
 };
 
+pub const Position = extern struct {
+    x: i32 = 0,
+    y: i32 = 0,
+};
+
 pub const OpenOptions = struct {
     title: []const u8,
     size: Size,
+    position: Position = .{},
+    min_size: ?Size = null,
+    max_size: ?Size = null,
+    resizable: bool = true,
+    decoration: bool = true,
 };
 
-pub const Event = union(enum) {
-    close,
-    resize: Size,
-    focus: Focus,
-
-    pub const Focus = enum {
-        enter,
-        leave,
-    };
+pub const Property = union(enum) {
+    title: []const u8,
+    size: Window.Size,
+    position: Window.Position,
+    always_on_top: bool,
+    floating: bool,
 };
 
 pub fn open(w: *Window, p: Platform, options: OpenOptions) anyerror!void {
@@ -41,5 +50,11 @@ pub fn poll(w: *Window, p: Platform) anyerror!?Event {
     return event;
 }
 pub fn setTitle(w: *Window, p: Platform, title: []const u8) anyerror!void {
-    try p.vtable.windowSetTitle(p.ptr, w, title);
+    try p.vtable.windowSetProperty(p.ptr, w, .{ .title = title });
+}
+pub fn setSize(w: *Window, p: Platform, size: Size) anyerror!void {
+    try p.vtable.windowSetProperty(p.ptr, w, .{ .size = size });
+}
+pub fn setPosition(w: *Window, p: Platform, position: Position) anyerror!void {
+    try p.vtable.windowSetProperty(p.ptr, w, .{ .position = position });
 }

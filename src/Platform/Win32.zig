@@ -41,7 +41,7 @@ pub fn platform(self: *@This()) Platform {
             .windowOpen = windowOpen,
             .windowClose = windowClose,
             .windowPoll = windowPoll,
-            .windowSetTitle = windowSetTitle,
+            .windowSetProperty = windowSetProperty,
         },
     };
 }
@@ -61,7 +61,7 @@ fn windowOpen(context: *anyopaque, platform_window: *Platform.Window, options: P
         },
     });
     if (!win32.SUCCEEDED(win32.RegisterClassExW(@ptrCast(&window.class)))) return error.RegisterClass;
-    const title = try std.unicode.utf8ToUtf16LeAlloc(self.allocator, options.title);
+    const title = try std.unicode.utf8ToUtf16LeAllocZ(self.allocator, options.title);
 
     window.hwnd = @ptrCast(win32.CreateWindowExW(
         .{ .TRANSPARENT = 1 },
@@ -221,37 +221,50 @@ fn windowPoll(context: *anyopaque, platform_window: *Platform.Window) anyerror!?
         // } } },
 
         // Key
-        // win32.WM_KEYDOWN, win32.WM_KEYUP => {
-        //     const sym = Window.io.Event.Key.Sym.fromWin32(std.enums.fromInt(win32.VIRTUAL_KEY, msg.wParam).?, msg.lParam) orelse return null;
-        //     switch (msg.message) {
-        //         win32.WM_KEYDOWN => {
-        //             if (keyboard.keys[@intFromEnum(sym)] == .pressed) return null;
-        //             keyboard.keys[@intFromEnum(sym)] = .pressed;
-        //         },
-        //         win32.WM_KEYUP => keyboard.keys[@intFromEnum(sym)] = .released,
-        //         else => unreachable,
-        //     }
-        //     return .{ .key = .{
-        //         .state = switch (msg.message) {
-        //             win32.WM_KEYDOWN => .pressed,
-        //             win32.WM_KEYUP => .released,
-        //             else => unreachable,
-        //         },
-        //         .code = @intCast((msg.lParam >> @intCast(16)) & 0xFF),
-        //         .sym = sym,
-        //     } };
-        // },
+        win32.WM_KEYDOWN, win32.WM_KEYUP => {
+            const sym = Platform.Window.Event.Key.Sym.fromWin32(std.enums.fromInt(win32.VIRTUAL_KEY, msg.wParam).?, msg.lParam) orelse return null;
+            // switch (msg.message) {
+            //     win32.WM_KEYDOWN => {
+            //         if (keyboard.keys[@intFromEnum(sym)] == .pressed) return null;
+            //         keyboard.keys[@intFromEnum(sym)] = .pressed;
+            //     },
+            //     win32.WM_KEYUP => keyboard.keys[@intFromEnum(sym)] = .released,
+            //     else => unreachable,
+            // }
+            return .{ .key = .{
+                .state = switch (msg.message) {
+                    win32.WM_KEYDOWN => .pressed,
+                    win32.WM_KEYUP => .released,
+                    else => unreachable,
+                },
+                .code = @intCast((msg.lParam >> @intCast(16)) & 0xFF),
+                .sym = sym,
+            } };
+        },
         else => null,
     };
 }
 
-fn windowSetTitle(context: *anyopaque, platform_window: *Platform.Window, title: []const u8) anyerror!void {
+fn windowSetProperty(context: *anyopaque, platform_window: *Platform.Window, property: Platform.Window.Property) anyerror!void {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
 
-    const title_utf16 = try std.unicode.utf8ToUtf16LeAlloc(self.allocator, title);
-    defer self.allocator.free(title_utf16);
-    _ = win32.SetWindowTextW(@ptrCast(window.hwnd), @ptrCast(title_utf16));
+    switch (property) {
+        .title => |title| {
+            const title_utf16 = try std.unicode.utf8ToUtf16LeAllocZ(self.allocator, title);
+            defer self.allocator.free(title_utf16);
+            _ = win32.SetWindowTextW(@ptrCast(window.hwnd), @ptrCast(title_utf16));
+        },
+        .size => |size| {
+            _ = win32.SetWindowPos(@ptrCast(window.hwnd), null, 0, 0, @intCast(size.width), @intCast(size.height), .{ .NOZORDER = 1, .NOMOVE = 1 });
+            try checkError();
+        },
+        .position => |position| {
+            _ = win32.SetWindowPos(@ptrCast(window.hwnd), null, position.x, position.y, 0, 0, .{ .NOZORDER = 1, .NOSIZE = 1 });
+            try checkError();
+        },
+        else => {},
+    }
 }
 
 fn wndProc(hwnd: win32.HWND, msg: u32, wParam: usize, lParam: isize) callconv(.winapi) isize {
@@ -269,6 +282,8 @@ fn wndProc(hwnd: win32.HWND, msg: u32, wParam: usize, lParam: isize) callconv(.w
 }
 
 pub fn reportErr(err: anyerror) anyerror {
+    @branchHint(.unlikely);
+
     const code = win32.GetLastError();
 
     var text_buffer: [512:0]u16 = undefined;
@@ -293,4 +308,14 @@ pub fn reportErr(err: anyerror) anyerror {
     );
 
     return err;
+}
+
+pub fn checkError() !void {
+    @branchHint(.unlikely);
+    const scope = std.log.scoped(.win32);
+    const err = std.os.windows.GetLastError();
+    if (err == .SUCCESS) return;
+
+    scope.err("{s}", .{@tagName(err)});
+    return error.Win32;
 }

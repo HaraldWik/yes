@@ -30,7 +30,7 @@ pub const Window = struct {
 pub const setup_listener = struct {
     pub fn vendor(user_data: ?*anyopaque, name: []const u8) !void {
         _ = user_data;
-        std.log.info("vendor: {s}", .{name});
+        std.log.info("server vendor: {s}", .{name});
     }
 
     pub fn currentScreen(user_data: ?*anyopaque, screen: xpz.Screen) !void {
@@ -81,7 +81,7 @@ pub fn platform(self: *@This()) Platform {
             .windowOpen = windowOpen,
             .windowClose = windowClose,
             .windowPoll = windowPoll,
-            .windowSetTitle = windowSetTitle,
+            .windowSetProperty = windowSetProperty,
         },
     };
 }
@@ -117,6 +117,8 @@ fn windowOpen(context: *anyopaque, platform_window: *Platform.Window, options: P
     });
     try window.handle.map(client);
     try client.writer.flush();
+
+    try windowSetProperty(context, platform_window, .{ .title = options.title });
 }
 
 fn windowClose(context: *anyopaque, platform_window: *Platform.Window) void {
@@ -142,12 +144,17 @@ fn windowPoll(context: *anyopaque, platform_window: *Platform.Window) anyerror!?
     };
 }
 
-fn windowSetTitle(context: *anyopaque, platform_window: *Platform.Window, title: []const u8) anyerror!void {
+fn windowSetProperty(context: *anyopaque, platform_window: *Platform.Window, property: Platform.Window.Property) anyerror!void {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
-
     const client = self.client;
 
-    try window.handle.changeProperty(client, .replace, .wm_name, .string, .@"8", title); // This is for setting on older systems, does not support unicode (emojis)
-    try window.handle.changeProperty(client, .replace, self.atom_table.net_wm_name, self.atom_table.utf8_string, .@"8", title); // Modern way, supports unicode
+    switch (property) {
+        .title => |title| {
+            try window.handle.changeProperty(client, .replace, .wm_name, .string, .@"8", title); // This is for setting on older systems, does not support unicode (emojis)
+            try window.handle.changeProperty(client, .replace, self.atom_table.net_wm_name, self.atom_table.utf8_string, .@"8", title); // Modern way, supports unicode
+
+        },
+        else => {},
+    }
 }

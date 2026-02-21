@@ -6,39 +6,44 @@ pub fn main(init: std.process.Init) !void {
     const allocator = init.gpa;
     const io = init.io;
 
-    var platform_impl = impl: switch (builtin.os.tag) {
-        .windows, .wasi => try yes.Platform.Win32.get(allocator),
-        else => {
-            var xpz_platform: yes.Platform.Xpz = undefined;
-            try xpz_platform.init(io, init.minimal);
-            break :impl xpz_platform;
+    var cross_platform = switch (builtin.os.tag) {
+        .windows => try yes.Platform.Win32.get(allocator),
+        else => platform: {
+            var xpz: yes.Platform.Xpz = undefined;
+            try xpz.init(io, init.minimal);
+            break :platform xpz;
         },
     };
     defer switch (builtin.os.tag) {
-        .windows, .wasi => {},
-        else => platform_impl.deinit(io),
+        .windows => {},
+        else => cross_platform.deinit(io),
     };
 
-    const platform = platform_impl.platform();
+    const platform = cross_platform.platform();
 
-    var window_impl = switch (builtin.os.tag) {
-        .windows, .wasi => yes.Platform.Win32.Window{},
-        else => yes.Platform.Xpz.Window{},
-    };
-    const window = &window_impl.interface;
+    var cross_window: switch (builtin.os.tag) {
+        .windows => yes.Platform.Win32.Window,
+        else => yes.Platform.Xpz.Window,
+    } = .{};
+    const window = &cross_window.interface;
     try window.open(platform, .{
-        .title = "Lucas",
+        .title = "Window 🇸🇪",
         .size = .{ .width = 600, .height = 400 },
     });
     defer window.close(platform);
-
-    try window.setTitle(platform, "Big window?");
 
     main: while (true) {
         while (try window.poll(platform)) |event| switch (event) {
             .close => break :main,
             .resize => |size| std.log.info("resize: {d}x{d}", .{ size.width, size.height }),
-            .focus => |focus| std.log.info("focus: {t}", .{focus}),
+            .focus => |focus| {
+                std.log.info("focus: {t}", .{focus});
+            },
+            .key => |key| {
+                std.log.info("{t:<8} {t}", .{ key.state, key.sym });
+                if (key.state == .released and key.sym == .enter)
+                    try window.setTitle(platform, "Window! 👺🌶️🫑");
+            },
         };
     }
 }

@@ -18,7 +18,7 @@ pub fn platform(self: *@This()) Platform {
             .windowOpen = windowOpen,
             .windowClose = windowClose,
             .windowPoll = windowPoll,
-            .windowSetTitle = windowSetTitle,
+            .windowSetProperty = windowSetProperty,
         },
     };
 }
@@ -58,14 +58,12 @@ fn windowPoll(context: *anyopaque, platform_window: *Platform.Window) anyerror!?
     return null;
 }
 
-fn windowSetTitle(context: *anyopaque, platform_window: *Platform.Window, title: []const u8) anyerror!void {
+fn windowSetProperty(context: *anyopaque, platform_window: *Platform.Window, property: Platform.Window.Property) anyerror!void {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
 
     _ = self;
 
-    const old_title = window.title;
-    window.title = title;
-
-    scope.info("window set title \"{s}\" -> \"{s}\"", .{ old_title, window.title });
+    scope.info("window set property: {s} {any}", .{ window.title, property });
+    if (property == .title) window.title = property.title;
 }
