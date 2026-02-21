@@ -29,6 +29,11 @@
             .url = "git+https://github.com/KhronosGroup/EGL-Registry/#3ae2b7c48690d2ce13cc6db3db02dfc0572be65e",
             .hash = "N-V-__8AAMlebQAc6dRDTEIyEn_i5KeO8qNg3YdK_Sg1KgDT",
         },
+
+        .xpz = .{
+            .url = "git+https://github.com/HaraldWik/xpz#bbf7813786a7c3dbf1634b554db4fb5b4011ec88",
+            .hash = "xpz-0.0.0-_a41wsM5AQDCr-6WgSwcjRhFOkvkUBBWmcPNvWojUUvy",
+        },
     },
     .paths = .{
         "build.zig",
