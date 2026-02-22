@@ -1,5 +1,5 @@
 const std = @import("std");
-const win32 = @import("win32").ui.input.keyboard_and_mouse;
+const win32 = @import("win32").everything;
 const xkb = @import("xkbcommon");
 const Size = @import("Window.zig").Size;
 const Position = @import("Window.zig").Position;
@@ -9,6 +9,9 @@ pub const Event = union(enum) {
     resize: Size,
     focus: Focus,
     key: Key,
+    mouse_move: Position,
+    mouse_scroll: MouseScroll,
+    mouse_button: MouseButton,
 
     pub const Focus = enum {
         enter,
@@ -135,6 +138,9 @@ pub const Event = union(enum) {
             numpad_7,
             numpad_8,
             numpad_9,
+            numpad_10,
+            numpad_11,
+            numpad_12,
             numpad_add,
             numpad_subtract,
             numpad_multiply,
@@ -154,7 +160,7 @@ pub const Event = union(enum) {
                     .DELETE => .delete,
 
                     // Modifiers
-                    .SHIFT => switch (std.enums.fromInt(win32.VIRTUAL_KEY, win32.MapVirtualKeyW(scancode, @import("win32").ui.windows_and_messaging.MAPVK_VSC_TO_VK_EX)) orelse .LSHIFT) {
+                    .SHIFT => switch (std.enums.fromInt(win32.VIRTUAL_KEY, win32.MapVirtualKeyW(scancode, win32.MAPVK_VSC_TO_VK_EX)) orelse .LSHIFT) {
                         .LSHIFT => .left_shift,
                         .RSHIFT => .right_shift,
                         else => .left_shift, // fallback
@@ -299,6 +305,63 @@ pub const Event = union(enum) {
                     xkb.XKB_KEY_KP_Divide => .numpad_divide,
                     xkb.XKB_KEY_KP_Decimal => .numpad_decimal,
                     else => std.enums.fromInt(@This(), key),
+                };
+            }
+        };
+    };
+
+    pub const MouseScroll = union(enum) {
+        x: isize, // horizontal
+        y: isize, // vertical
+    };
+
+    pub const MouseButton = struct {
+        state: State,
+        code: Code,
+        position: Position,
+
+        pub const State = Key.State;
+
+        pub const Code = enum {
+            left,
+            right,
+            middle,
+            forward,
+            backward,
+
+            pub fn fromWin32(button: u32, wparam: usize) ?@This() {
+                return switch (button) {
+                    win32.WM_RBUTTONDOWN, win32.WM_RBUTTONUP => .right,
+                    win32.WM_MBUTTONDOWN, win32.WM_MBUTTONUP => .middle,
+                    win32.WM_LBUTTONDOWN, win32.WM_LBUTTONUP => .left,
+                    win32.WM_XBUTTONDOWN, win32.WM_XBUTTONUP => {
+                        const data: win32.MOUSEHOOKSTRUCTEX_MOUSE_DATA = @bitCast(@as(u32, @intCast(((wparam >> 16) & 0xFFFF))));
+                        return if (std.meta.eql(data, win32.XBUTTON1)) .backward else if (std.meta.eql(data, win32.XBUTTON2)) .forward else null;
+                    },
+
+                    else => null,
+                };
+            }
+
+            pub fn fromX11(button: c_uint) ?@This() {
+                return switch (button) {
+                    3 => .right,
+                    2 => .middle,
+                    1 => .left,
+                    9 => .forward,
+                    8 => .backward,
+                    else => null,
+                };
+            }
+
+            pub fn fromWayland(button: u32) ?@This() {
+                return switch (button) {
+                    272 => .left,
+                    274 => .middle,
+                    273 => .right,
+                    276 => .forward,
+                    275 => .backward,
+                    else => null,
                 };
             }
         };

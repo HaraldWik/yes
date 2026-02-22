@@ -35,7 +35,7 @@ pub fn main(init: std.process.Init) !void {
     main: while (true) {
         while (try window.poll(platform)) |event| switch (event) {
             .close => break :main,
-            .resize => |size| std.log.info("resize: {d}x{d}", .{ size.width, size.height }),
+            .resize => |size| std.log.info("resize: {d} x {d}", .{ size.width, size.height }),
             .focus => |focus| {
                 std.log.info("focus: {t}", .{focus});
             },
@@ -43,6 +43,16 @@ pub fn main(init: std.process.Init) !void {
                 std.log.info("{t:<8} {t}", .{ key.state, key.sym });
                 if (key.state == .released and key.sym == .enter)
                     try window.setTitle(platform, "Window! 👺🌶️🫑");
+            },
+            .mouse_move => {},
+            .mouse_button => |button| {
+                std.log.info("{t:<8} mouse button {t:<8} at {d} x {d}", .{ button.state, button.code, button.position.x, button.position.y });
+            },
+            .mouse_scroll => |scroll| {
+                std.log.info("mouse scroll: {t}: {d:2}", .{ scroll, switch (scroll) {
+                    .x => scroll.x,
+                    .y => scroll.y,
+                } });
             },
         };
     }

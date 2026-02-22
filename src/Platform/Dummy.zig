@@ -19,6 +19,9 @@ pub fn platform(self: *@This()) Platform {
             .windowClose = windowClose,
             .windowPoll = windowPoll,
             .windowSetProperty = windowSetProperty,
+            .windowOpenglMakeCurrent = windowOpenglMakeCurrent,
+            .windowOpenglSwapBuffers = windowOpenglSwapBuffers,
+            .windowOpenglSwapInterval = windowOpenglSwapInterval,
         },
     };
 }
@@ -66,4 +69,27 @@ fn windowSetProperty(context: *anyopaque, platform_window: *Platform.Window, pro
 
     scope.info("window set property: {s} {any}", .{ window.title, property });
     if (property == .title) window.title = property.title;
+}
+
+fn windowOpenglMakeCurrent(context: *anyopaque, platform_window: *Platform.Window) anyerror!void {
+    const self: *@This() = @ptrCast(@alignCast(context));
+    const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
+
+    _ = self;
+
+    scope.info("window opengl make current: ({d}) {s}", .{ window.index, window.title });
+}
+fn windowOpenglSwapBuffers(context: *anyopaque, platform_window: *Platform.Window) anyerror!void {
+    const self: *@This() = @ptrCast(@alignCast(context));
+    const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
+
+    _ = self;
+    scope.info("window opengl swap buffers: ({d}) {s}", .{ window.index, window.title });
+}
+fn windowOpenglSwapInterval(context: *anyopaque, platform_window: *Platform.Window, interval: i32) anyerror!void {
+    const self: *@This() = @ptrCast(@alignCast(context));
+    const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
+
+    _ = self;
+    scope.info("window opengl swap interval: ({d}) {s}, interval: {}", .{ window.index, window.title, interval });
 }

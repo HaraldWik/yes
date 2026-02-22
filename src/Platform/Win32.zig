@@ -20,15 +20,17 @@ pub const Window = struct {
         none: void,
 
         pub const OpenGL = struct {
-            dc: win32.HDC = undefined, // Device context
-            rc: win32.HGLRC = undefined, // Render context
+            /// Device context
+            dc: win32.HDC = undefined,
+            /// Render context
+            rc: win32.HGLRC = undefined,
 
             swapIntervalEXT: *const fn (i32) callconv(.winapi) win32.BOOL = undefined,
         };
     };
 };
 
-/// Alternativly you can use winMain and get the instane thru that
+/// Alternativly you can use winMain to get the HINSTANCE
 pub fn get(allocator: std.mem.Allocator) !@This() {
     const instance: std.os.windows.HINSTANCE = @ptrCast(win32.GetModuleHandleW(null) orelse return error.GetInstanceHandle);
     return .{ .allocator = allocator, .instance = instance };
@@ -42,6 +44,9 @@ pub fn platform(self: *@This()) Platform {
             .windowClose = windowClose,
             .windowPoll = windowPoll,
             .windowSetProperty = windowSetProperty,
+            .windowOpenglMakeCurrent = windowOpenglMakeCurrent,
+            .windowOpenglSwapBuffers = windowOpenglSwapBuffers,
+            .windowOpenglSwapInterval = windowOpenglSwapInterval,
         },
     };
 }
@@ -150,7 +155,6 @@ fn windowOpen(context: *anyopaque, platform_window: *Platform.Window, options: P
     _ = win32.ShowWindow(@ptrCast(window.hwnd), .{ .SHOWNORMAL = 1 });
     if (!win32.SUCCEEDED(win32.UpdateWindow(@ptrCast(window.hwnd)))) return error.UpdateWindow;
 }
-
 fn windowClose(context: *anyopaque, platform_window: *Platform.Window) void {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
@@ -159,7 +163,6 @@ fn windowClose(context: *anyopaque, platform_window: *Platform.Window) void {
     _ = win32.DestroyWindow(@ptrCast(window.hwnd));
     _ = win32.UnregisterClassW(window.class.lpszClassName, @ptrCast(self.instance));
 }
-
 fn windowPoll(context: *anyopaque, platform_window: *Platform.Window) anyerror!?Platform.Window.Event {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
@@ -191,34 +194,36 @@ fn windowPoll(context: *anyopaque, platform_window: *Platform.Window) anyerror!?
             return null;
         },
         // Mouse
-        // win32.WM_MOUSEMOVE => .{ .mouse = .{ .move = .{
-        //     .x = @intCast(@as(u16, @truncate(@as(usize, @intCast(msg.lParam))))),
-        //     .y = @intCast(@as(u16, @truncate(@as(usize, @intCast(msg.lParam >> 16))))),
-        // } } },
-        // win32.WM_MOUSEWHEEL, win32.WM_MOUSEHWHEEL => {
-        //     const delta: isize = @intCast((msg.wParam >> 16) & 0xFFFF);
-        //     var lines: isize = @intCast(@divTrunc(delta, @as(isize, @intCast(win32.WHEEL_DELTA)))); // lines > 0 -> scroll right, lines < 0 -> left
-        //     if (lines == 545) lines = -1;
-        //     return .{ .mouse = .{
-        //         .scroll = switch (msg.message) {
-        //             win32.WM_MOUSEWHEEL => .{ .x = -lines },
-        //             win32.WM_MOUSEHWHEEL => .{ .y = lines },
-        //             else => unreachable,
-        //         },
-        //     } };
-        // },
-        // win32.WM_RBUTTONDOWN, win32.WM_MBUTTONDOWN, win32.WM_LBUTTONDOWN, win32.WM_XBUTTONDOWN, win32.WM_RBUTTONUP, win32.WM_MBUTTONUP, win32.WM_LBUTTONUP, win32.WM_XBUTTONUP => |button| .{ .mouse = .{ .button = .{
-        //     .state = switch (msg.message) {
-        //         win32.WM_RBUTTONDOWN, win32.WM_MBUTTONDOWN, win32.WM_LBUTTONDOWN, win32.WM_XBUTTONDOWN => .pressed,
-        //         win32.WM_RBUTTONUP, win32.WM_MBUTTONUP, win32.WM_LBUTTONUP, win32.WM_XBUTTONUP => .released,
-        //         else => unreachable,
-        //     },
-        //     .code = Window.io.Event.Mouse.Button.Code.fromWin32(button, msg.wParam) orelse return null,
-        //     .position = .{
-        //         .x = @intCast(@as(u16, @truncate(@as(usize, @intCast(msg.lParam))))),
-        //         .y = @intCast(@as(u16, @truncate(@as(usize, @intCast(msg.lParam >> 16))))),
-        //     },
-        // } } },
+        win32.WM_MOUSEMOVE => .{ .mouse_move = .{
+            .x = @intCast(@as(u16, @truncate(@as(usize, @intCast(msg.lParam))))),
+            .y = @intCast(@as(u16, @truncate(@as(usize, @intCast(msg.lParam >> 16))))),
+        } },
+        win32.WM_MOUSEWHEEL, win32.WM_MOUSEHWHEEL => {
+            const delta: isize = @intCast((msg.wParam >> 16) & 0xFFFF);
+            var lines: isize = @intCast(@divTrunc(delta, @as(isize, @intCast(win32.WHEEL_DELTA)))); // lines > 0 -> scroll right, lines < 0 -> left
+            if (lines == 545) lines = -1;
+            return .{
+                .mouse_scroll = switch (msg.message) {
+                    win32.WM_MOUSEWHEEL => .{ .x = -lines },
+                    win32.WM_MOUSEHWHEEL => .{ .y = lines },
+                    else => unreachable,
+                },
+            };
+        },
+        win32.WM_RBUTTONDOWN, win32.WM_MBUTTONDOWN, win32.WM_LBUTTONDOWN, win32.WM_XBUTTONDOWN, win32.WM_RBUTTONUP, win32.WM_MBUTTONUP, win32.WM_LBUTTONUP, win32.WM_XBUTTONUP => |button| .{
+            .mouse_button = .{
+                .state = switch (msg.message) {
+                    win32.WM_RBUTTONDOWN, win32.WM_MBUTTONDOWN, win32.WM_LBUTTONDOWN, win32.WM_XBUTTONDOWN => .pressed,
+                    win32.WM_RBUTTONUP, win32.WM_MBUTTONUP, win32.WM_LBUTTONUP, win32.WM_XBUTTONUP => .released,
+                    else => unreachable,
+                },
+                .code = Platform.Window.Event.MouseButton.Code.fromWin32(button, msg.wParam) orelse return null,
+                .position = .{
+                    .x = @intCast(@as(u16, @truncate(@as(usize, @intCast(msg.lParam))))),
+                    .y = @intCast(@as(u16, @truncate(@as(usize, @intCast(msg.lParam >> 16))))),
+                },
+            },
+        },
 
         // Key
         win32.WM_KEYDOWN, win32.WM_KEYUP => {
@@ -244,7 +249,6 @@ fn windowPoll(context: *anyopaque, platform_window: *Platform.Window) anyerror!?
         else => null,
     };
 }
-
 fn windowSetProperty(context: *anyopaque, platform_window: *Platform.Window, property: Platform.Window.Property) anyerror!void {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
@@ -265,6 +269,28 @@ fn windowSetProperty(context: *anyopaque, platform_window: *Platform.Window, pro
         },
         else => {},
     }
+}
+fn windowOpenglMakeCurrent(context: *anyopaque, platform_window: *Platform.Window) anyerror!void {
+    const self: *@This() = @ptrCast(@alignCast(context));
+    const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
+
+    _ = self;
+    _ = window;
+}
+fn windowOpenglSwapBuffers(context: *anyopaque, platform_window: *Platform.Window) anyerror!void {
+    const self: *@This() = @ptrCast(@alignCast(context));
+    const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
+
+    _ = self;
+    _ = window;
+}
+fn windowOpenglSwapInterval(context: *anyopaque, platform_window: *Platform.Window, interval: i32) anyerror!void {
+    const self: *@This() = @ptrCast(@alignCast(context));
+    const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
+
+    _ = self;
+    _ = window;
+    _ = interval;
 }
 
 fn wndProc(hwnd: win32.HWND, msg: u32, wParam: usize, lParam: isize) callconv(.winapi) isize {

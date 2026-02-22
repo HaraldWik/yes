@@ -13,6 +13,10 @@ pub const VTable = struct {
     windowClose: *const fn (*anyopaque, window: *Window) void,
     windowPoll: *const fn (*anyopaque, window: *Window) anyerror!?Window.Event,
     windowSetProperty: *const fn (*anyopaque, window: *Window, property: Window.Property) anyerror!void,
+
+    windowOpenglMakeCurrent: *const fn (*anyopaque, window: *Window) anyerror!void,
+    windowOpenglSwapBuffers: *const fn (*anyopaque, window: *Window) anyerror!void,
+    windowOpenglSwapInterval: *const fn (*anyopaque, window: *Window, interval: i32) anyerror!void,
 };
 
 pub const Window = @import("Window.zig");

@@ -82,6 +82,9 @@ pub fn platform(self: *@This()) Platform {
             .windowClose = windowClose,
             .windowPoll = windowPoll,
             .windowSetProperty = windowSetProperty,
+            .windowOpenglMakeCurrent = windowOpenglMakeCurrent,
+            .windowOpenglSwapBuffers = windowOpenglSwapBuffers,
+            .windowOpenglSwapInterval = windowOpenglSwapInterval,
         },
     };
 }
@@ -102,7 +105,7 @@ fn windowOpen(context: *anyopaque, platform_window: *Platform.Window, options: P
         .border_width = 1,
         .visual_id = client.root_screen.visual_id,
         .attributes = .{
-            .background_pixel = 0x00c2bb5b, // ARGB color
+            .background_pixel = 0x00000000, // ARGB color
             // .events = .all,
             .events = .{
                 .exposure = true,
@@ -140,6 +143,31 @@ fn windowPoll(context: *anyopaque, platform_window: *Platform.Window) anyerror!?
         .expose => |expose| .{ .resize = .{ .width = @intCast(expose.width), .height = @intCast(expose.height) } },
         .focus_in => .{ .focus = .enter },
         .focus_out => .{ .focus = .leave },
+        .button_press, .button_release => |button| switch (button.button()) {
+            .scroll_up => .{ .mouse_scroll = .{ .y = 1 } },
+            .scroll_down => .{ .mouse_scroll = .{ .y = -1 } },
+            .scroll_right => .{ .mouse_scroll = .{ .x = 1 } },
+            .scroll_left => .{ .mouse_scroll = .{ .x = -1 } },
+
+            else => .{
+                .mouse_button = .{
+                    .state = switch (event) {
+                        .button_press => .pressed,
+                        .button_release => .released,
+                        else => unreachable,
+                    },
+                    .code = switch (button.button()) {
+                        .left => .left,
+                        .right => .right,
+                        .middle => .middle,
+                        .backward => .forward,
+                        .forward => .backward,
+                        else => unreachable,
+                    },
+                    .position = .{ .x = @intCast(button.x), .y = @intCast(button.y) },
+                },
+            },
+        },
         else => null,
     };
 }
@@ -157,4 +185,27 @@ fn windowSetProperty(context: *anyopaque, platform_window: *Platform.Window, pro
         },
         else => {},
     }
+}
+
+fn windowOpenglMakeCurrent(context: *anyopaque, platform_window: *Platform.Window) anyerror!void {
+    const self: *@This() = @ptrCast(@alignCast(context));
+    const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
+
+    _ = self;
+    _ = window;
+}
+fn windowOpenglSwapBuffers(context: *anyopaque, platform_window: *Platform.Window) anyerror!void {
+    const self: *@This() = @ptrCast(@alignCast(context));
+    const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
+
+    _ = self;
+    _ = window;
+}
+fn windowOpenglSwapInterval(context: *anyopaque, platform_window: *Platform.Window, interval: i32) anyerror!void {
+    const self: *@This() = @ptrCast(@alignCast(context));
+    const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
+
+    _ = self;
+    _ = window;
+    _ = interval;
 }

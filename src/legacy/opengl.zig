@@ -9,7 +9,7 @@ pub const egl = @import("egl");
 
 pub const APIENTRY: std.builtin.CallingConvention = if (builtin.os.tag == .windows) .winapi else .c;
 
-pub const Proc = *const fn () callconv(APIENTRY) void;
+pub const Proc = *const fn () callconv(APIENTRY) isize;
 
 pub fn getProcAddress(name: [*:0]const u8) ?Proc {
     return switch (native.os) {

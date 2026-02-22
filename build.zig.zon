@@ -31,8 +31,8 @@
         },
 
         .xpz = .{
-            .url = "git+https://github.com/HaraldWik/xpz#bbf7813786a7c3dbf1634b554db4fb5b4011ec88",
-            .hash = "xpz-0.0.0-_a41wsM5AQDCr-6WgSwcjRhFOkvkUBBWmcPNvWojUUvy",
+            .url = "git+https://github.com/HaraldWik/xpz#5f45c43c1dc84ca4037369c784291f3cc591adf3",
+            .hash = "xpz-0.0.0-_a41woU6AQCLk8KApbhPQX9A_Cs9Rc8nEEajlTso5llM",
         },
     },
     .paths = .{
