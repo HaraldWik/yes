@@ -17,20 +17,22 @@ pub fn build(b: *std.Build) void {
         },
     });
 
-    const options = b.addOptions();
-    const wayland_option = b.option(bool, "wayland", "Links with wayland libraries") orelse false; // Linux
+    _ = mod;
 
-    options.addOption(bool, "wayland", wayland_option);
+    // const options = b.addOptions();
+    // const wayland_option = b.option(bool, "wayland", "Links with wayland libraries") orelse false; // Linux
 
-    switch (target.result.os.tag) {
-        .windows, .wasi => {},
-        .macos => {},
-        else => if (wayland_option) {
-            addWayland(b, mod, target, optimize);
-        },
-    }
+    // options.addOption(bool, "wayland", wayland_option);
 
-    mod.addOptions("build_options", options);
+    // switch (target.result.os.tag) {
+    //     .windows, .wasi => {},
+    //     .macos => {},
+    //     else => if (wayland_option) {
+    //         addWayland(b, mod, target, optimize);
+    //     },
+    // }
+
+    // mod.addOptions("build_options", options);
 }
 
 pub fn addWayland(b: *std.Build, mod: *std.Build.Module, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) void {

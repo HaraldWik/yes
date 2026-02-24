@@ -5,27 +5,28 @@ const Platform = @import("../Platform.zig");
 
 allocator: std.mem.Allocator,
 instance: std.os.windows.HINSTANCE,
+opengl: struct {
+    wglSwapIntervalEXT: ?*const fn (i32) callconv(.winapi) win32.BOOL = null,
+} = .{},
 
 pub const Window = struct {
     interface: Platform.Window = .{},
     class: win32.WNDCLASSEXW = undefined,
     hwnd: std.os.windows.HWND = undefined,
-    api: GraphicsApi = .none,
+    surface: Surface = .empty,
 
     previous_style: i32 = 0,
     previous_placement: win32.WINDOWPLACEMENT = std.mem.zeroInit(win32.WINDOWPLACEMENT, .{ .length = @sizeOf(win32.WINDOWPLACEMENT) }),
 
-    pub const GraphicsApi = union(enum) {
+    pub const Surface = union(enum) {
+        empty: void,
         opengl: OpenGL,
-        none: void,
 
         pub const OpenGL = struct {
             /// Device context
             dc: win32.HDC = undefined,
             /// Render context
             rc: win32.HGLRC = undefined,
-
-            swapIntervalEXT: *const fn (i32) callconv(.winapi) win32.BOOL = undefined,
         };
     };
 };
@@ -62,7 +63,7 @@ fn windowOpen(context: *anyopaque, platform_window: *Platform.Window, options: P
         .hInstance = self.instance,
         .hCursor = win32.LoadCursorW(null, win32.IDC_ARROW),
         .style = win32.WNDCLASS_STYLES{
-            .OWNDC = if (window.api == .opengl) 1 else 0,
+            .OWNDC = if (window.surface == .opengl) 1 else 0,
         },
     });
     if (!win32.SUCCEEDED(win32.RegisterClassExW(@ptrCast(&window.class)))) return error.RegisterClass;
@@ -85,71 +86,78 @@ fn windowOpen(context: *anyopaque, platform_window: *Platform.Window, options: P
 
     self.allocator.free(title);
 
-    if (window.api == .opengl) {
-        const dc: win32.HDC = win32.GetDC(@ptrCast(window.hwnd)) orelse return error.GetDeviceContext;
+    switch (options.surface_type) {
+        .empty => {},
+        .framebuffer => {},
+        .opengl => |version| {
+            const dc: win32.HDC = win32.GetDC(@ptrCast(window.hwnd)) orelse return error.GetDeviceContext;
 
-        const desired_pixel_format: *const win32.PIXELFORMATDESCRIPTOR = &std.mem.zeroInit(win32.PIXELFORMATDESCRIPTOR, .{
-            .nSize = @sizeOf(win32.PIXELFORMATDESCRIPTOR),
-            .nVersion = 1,
-            .dwFlags = .{
-                .DRAW_TO_WINDOW = 1,
-                .SUPPORT_OPENGL = 1,
-                .DOUBLEBUFFER = 1,
-            },
-            .iPixelType = win32.PFD_TYPE_RGBA,
-            .cColorBits = 32,
-            .cDepthBits = 24,
-            .cStencilBits = 8,
-            .cAlphaBits = 8,
-            .iLayerType = win32.PFD_MAIN_PLANE,
-        });
+            const desired_pixel_format: *const win32.PIXELFORMATDESCRIPTOR = &std.mem.zeroInit(win32.PIXELFORMATDESCRIPTOR, .{
+                .nSize = @sizeOf(win32.PIXELFORMATDESCRIPTOR),
+                .nVersion = 1,
+                .dwFlags = .{
+                    .DRAW_TO_WINDOW = 1,
+                    .SUPPORT_OPENGL = 1,
+                    .DOUBLEBUFFER = 1,
+                },
+                .iPixelType = win32.PFD_TYPE_RGBA,
+                .cColorBits = 32,
+                .cDepthBits = 24,
+                .cStencilBits = 8,
+                .cAlphaBits = 8,
+                .iLayerType = win32.PFD_MAIN_PLANE,
+            });
 
-        const suggested_pixel_format_index: i32 = win32.ChoosePixelFormat(dc, desired_pixel_format);
-        var suggested_pixel_format: win32.PIXELFORMATDESCRIPTOR = undefined;
+            const suggested_pixel_format_index: i32 = win32.ChoosePixelFormat(dc, desired_pixel_format);
+            var suggested_pixel_format: win32.PIXELFORMATDESCRIPTOR = undefined;
 
-        const DescribePixelFormat = @extern(*const fn (hdc: ?win32.HDC, iPixelFormat: i32, nBytes: u32, ppfd: ?*win32.PIXELFORMATDESCRIPTOR) callconv(.winapi) i32, .{ .name = "DescribePixelFormat", .library_name = "gdi32" });
+            const DescribePixelFormat = @extern(*const fn (hdc: ?win32.HDC, iPixelFormat: i32, nBytes: u32, ppfd: ?*win32.PIXELFORMATDESCRIPTOR) callconv(.winapi) i32, .{ .name = "DescribePixelFormat", .library_name = "gdi32" });
 
-        if (!win32.SUCCEEDED(DescribePixelFormat(dc, suggested_pixel_format_index, @sizeOf(win32.PIXELFORMATDESCRIPTOR), &suggested_pixel_format))) return error.DescribePixelFormat;
-        if (!win32.SUCCEEDED(win32.SetPixelFormat(dc, suggested_pixel_format_index, desired_pixel_format))) return error.SetPixelFormat;
+            if (!win32.SUCCEEDED(DescribePixelFormat(dc, suggested_pixel_format_index, @sizeOf(win32.PIXELFORMATDESCRIPTOR), &suggested_pixel_format))) return error.DescribePixelFormat;
+            if (!win32.SUCCEEDED(win32.SetPixelFormat(dc, suggested_pixel_format_index, desired_pixel_format))) return error.SetPixelFormat;
 
-        var rc: win32.HGLRC = win32.wglCreateContext(dc) orelse return error.WglCreateContext;
-        if (!win32.SUCCEEDED(win32.wglMakeCurrent(dc, rc))) return error.WglMakeCurrent;
+            var rc: win32.HGLRC = win32.wglCreateContext(dc) orelse return error.WglCreateContext;
+            if (!win32.SUCCEEDED(win32.wglMakeCurrent(dc, rc))) return error.WglMakeCurrent;
 
-        _ = win32.ReleaseDC(@ptrCast(window.hwnd), dc);
+            _ = win32.ReleaseDC(@ptrCast(window.hwnd), dc);
 
-        const getExtensionsStringARB: *const fn (win32.HDC) callconv(.winapi) ?[*:0]const u8 = @ptrCast(win32.wglGetProcAddress("wglGetExtensionsStringARB") orelse return error.WglGetProcAddress);
+            const getExtensionsStringARB: *const fn (win32.HDC) callconv(.winapi) ?[*:0]const u8 = @ptrCast(win32.wglGetProcAddress("wglGetExtensionsStringARB") orelse return error.WglGetProcAddress);
 
-        var createContextAttribsARB: ?*const fn (win32.HDC, ?win32.HGLRC, [*:0]const i32) callconv(.winapi) ?win32.HGLRC = null;
+            var createContextAttribsARB: ?*const fn (win32.HDC, ?win32.HGLRC, [*:0]const i32) callconv(.winapi) ?win32.HGLRC = null;
 
-        if (getExtensionsStringARB(dc)) |extensions| {
-            var it = std.mem.tokenizeScalar(u8, std.mem.sliceTo(extensions, 0), ' ');
-            while (it.next()) |name| {
-                if (std.mem.eql(u8, name, "WGL_EXT_swap_control"))
-                    window.api.opengl.swapIntervalEXT = @ptrCast(win32.wglGetProcAddress("wglSwapIntervalEXT") orelse return error.WglSwapIntervalEXT);
-                // if (std.mem.eql(u8, name, "WGL_ARB_pixel_format"))
-                // wgl.choosePixelFormatARB = @ptrCast(win32.wglGetProcAddress("wglChoosePixelFormatARB") orelse return error.WglChoosePixelFormatARB);
-                if (std.mem.eql(u8, name, "WGL_ARB_create_context_profile"))
-                    createContextAttribsARB = @ptrCast(win32.wglGetProcAddress("wglCreateContextAttribsARB") orelse return error.WglCreateContextAttribsARB);
+            if (getExtensionsStringARB(dc)) |extensions| {
+                var it = std.mem.tokenizeScalar(u8, std.mem.sliceTo(extensions, 0), ' ');
+                while (it.next()) |name| {
+                    if (std.mem.eql(u8, name, "WGL_EXT_swap_control"))
+                        self.opengl.wglSwapIntervalEXT = @ptrCast(win32.wglGetProcAddress("wglSwapIntervalEXT") orelse return error.WglSwapIntervalEXT);
+                    // if (std.mem.eql(u8, name, "WGL_ARB_pixel_format"))
+                    // wgl.choosePixelFormatARB = @ptrCast(win32.wglGetProcAddress("wglChoosePixelFormatARB") orelse return error.WglChoosePixelFormatARB);
+                    if (std.mem.eql(u8, name, "WGL_ARB_create_context_profile"))
+                        createContextAttribsARB = @ptrCast(win32.wglGetProcAddress("wglCreateContextAttribsARB") orelse return error.WglCreateContextAttribsARB);
+                }
             }
-        }
 
-        const WGL_CONTEXT_MAJOR_VERSION_ARB = 0x2091;
-        const WGL_CONTEXT_MINOR_VERSION_ARB = 0x2092;
-        const WGL_CONTEXT_PROFILE_MASK_ARB = 0x9126;
-        const WGL_CONTEXT_CORE_PROFILE_BIT_ARB = 0x00000001;
+            const WGL_CONTEXT_MAJOR_VERSION_ARB = 0x2091;
+            const WGL_CONTEXT_MINOR_VERSION_ARB = 0x2092;
+            const WGL_CONTEXT_PROFILE_MASK_ARB = 0x9126;
+            const WGL_CONTEXT_CORE_PROFILE_BIT_ARB = 0x00000001;
 
-        const attributes: [:0]const i32 = &.{
-            WGL_CONTEXT_MAJOR_VERSION_ARB, @intCast(4),
-            WGL_CONTEXT_MINOR_VERSION_ARB, @intCast(6),
-            WGL_CONTEXT_PROFILE_MASK_ARB,  WGL_CONTEXT_CORE_PROFILE_BIT_ARB,
-        };
+            const attributes: [:0]const i32 = &.{
+                WGL_CONTEXT_MAJOR_VERSION_ARB, @intCast(version.major),
+                WGL_CONTEXT_MINOR_VERSION_ARB, @intCast(version.minor),
+                WGL_CONTEXT_PROFILE_MASK_ARB,  WGL_CONTEXT_CORE_PROFILE_BIT_ARB,
+            };
 
-        _ = win32.wglDeleteContext(rc);
-        rc = try if (createContextAttribsARB) |createContextAttribs|
-            createContextAttribs(dc, null, attributes) orelse return error.CreateModernOpenGL
-        else
-            error.NoCreateContextAttribs;
-        _ = win32.wglMakeCurrent(dc, rc);
+            if (createContextAttribsARB) |createContextAttribs| {
+                _ = win32.wglDeleteContext(rc);
+                rc = createContextAttribs(dc, null, attributes) orelse return error.CreateModernOpenGL;
+                _ = win32.wglMakeCurrent(dc, rc);
+            }
+
+            window.surface = .{ .opengl = .{ .dc = dc, .rc = rc } };
+        },
+        .vulkan => {},
+        .direct3d => {},
     }
 
     _ = win32.ShowWindow(@ptrCast(window.hwnd), .{ .SHOWNORMAL = 1 });
@@ -159,7 +167,7 @@ fn windowClose(context: *anyopaque, platform_window: *Platform.Window) void {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
 
-    if (window.api == .opengl) _ = win32.wglDeleteContext(window.api.opengl.rc);
+    if (window.surface == .opengl) _ = win32.wglDeleteContext(window.surface.opengl.rc);
     _ = win32.DestroyWindow(@ptrCast(window.hwnd));
     _ = win32.UnregisterClassW(window.class.lpszClassName, @ptrCast(self.instance));
 }
@@ -273,24 +281,31 @@ fn windowSetProperty(context: *anyopaque, platform_window: *Platform.Window, pro
 fn windowOpenglMakeCurrent(context: *anyopaque, platform_window: *Platform.Window) anyerror!void {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
-
     _ = self;
-    _ = window;
+
+    std.debug.assert(window.surface == .opengl);
+    const opengl = window.surface.opengl;
+
+    if (!win32.SUCCEEDED(win32.wglMakeCurrent(opengl.dc, opengl.rc))) return reportErr(error.WglMakeCurrent);
 }
 fn windowOpenglSwapBuffers(context: *anyopaque, platform_window: *Platform.Window) anyerror!void {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
-
     _ = self;
-    _ = window;
+
+    std.debug.assert(window.surface == .opengl);
+    const opengl = window.surface.opengl;
+
+    if (!win32.SUCCEEDED(win32.SwapBuffers(opengl.dc))) return reportErr(error.WglSwapBuffers);
 }
 fn windowOpenglSwapInterval(context: *anyopaque, platform_window: *Platform.Window, interval: i32) anyerror!void {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
 
-    _ = self;
-    _ = window;
-    _ = interval;
+    std.debug.assert(window.surface == .opengl);
+    if (self.opengl.wglSwapIntervalEXT == null) return;
+
+    if (!win32.SUCCEEDED(self.opengl.wglSwapIntervalEXT.?(interval))) return reportErr(error.WglMakeCurrent);
 }
 
 fn wndProc(hwnd: win32.HWND, msg: u32, wParam: usize, lParam: isize) callconv(.winapi) isize {

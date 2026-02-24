@@ -1,3 +1,5 @@
+const std = @import("std");
+const builtin = @import("builtin");
 const Platform = @import("Platform.zig");
 
 const Window = @This();
@@ -25,12 +27,38 @@ pub const OpenOptions = struct {
     max_size: ?Size = null,
     resizable: bool = true,
     decoration: bool = true,
+    surface_type: SurfaceType = .empty,
+
+    pub const SurfaceType = switch (builtin.os.tag) {
+        .windows => union(enum) {
+            empty,
+            framebuffer,
+            opengl: std.SemanticVersion,
+            vulkan: std.SemanticVersion,
+            direct3d: std.SemanticVersion,
+        },
+        .macos, .ios => union(enum) {
+            empty,
+            framebuffer,
+            opengl: std.SemanticVersion,
+            metal: std.SemanticVersion,
+        },
+        else => union(enum) {
+            empty,
+            framebuffer,
+            opengl: std.SemanticVersion,
+            vulkan: std.SemanticVersion,
+        },
+    };
 };
 
 pub const Property = union(enum) {
     title: []const u8,
     size: Window.Size,
     position: Window.Position,
+    fullscreen: bool,
+    maximize: bool,
+    minimize: bool,
     always_on_top: bool,
     floating: bool,
 };
@@ -57,4 +85,19 @@ pub fn setSize(w: *Window, p: Platform, size: Size) anyerror!void {
 }
 pub fn setPosition(w: *Window, p: Platform, position: Position) anyerror!void {
     try p.vtable.windowSetProperty(p.ptr, w, .{ .position = position });
+}
+pub fn setFullscreen(w: *Window, p: Platform, fullscreen: bool) anyerror!void {
+    try p.vtable.windowSetProperty(p.ptr, w, .{ .fullscreen = fullscreen });
+}
+pub fn setMaximize(w: *Window, p: Platform, maximize: bool) anyerror!void {
+    try p.vtable.windowSetProperty(p.ptr, w, .{ .maximize = maximize });
+}
+pub fn setMinimize(w: *Window, p: Platform, minimize: bool) anyerror!void {
+    try p.vtable.windowSetProperty(p.ptr, w, .{ .minimize = minimize });
+}
+pub fn setAlwaysOnTop(w: *Window, p: Platform, always_on_top: bool) anyerror!void {
+    try p.vtable.windowSetProperty(p.ptr, w, .{ .always_on_top = always_on_top });
+}
+pub fn setFloating(w: *Window, p: Platform, floating: bool) anyerror!void {
+    try p.vtable.windowSetProperty(p.ptr, w, .{ .floating = floating });
 }

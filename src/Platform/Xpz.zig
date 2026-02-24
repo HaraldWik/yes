@@ -1,5 +1,4 @@
 const std = @import("std");
-const build_options = @import("build_options");
 const xpz = @import("xpz");
 const Platform = @import("../Platform.zig");
 
@@ -195,7 +194,6 @@ fn windowSetProperty(context: *anyopaque, platform_window: *Platform.Window, pro
         .title => |title| {
             try window.handle.changeProperty(client, .replace, .wm_name, .string, .@"8", title); // This is for setting on older systems, does not support unicode (emojis)
             try window.handle.changeProperty(client, .replace, self.atom_table.net_wm_name, self.atom_table.utf8_string, .@"8", title); // Modern way, supports unicode
-
         },
         else => {},
     }

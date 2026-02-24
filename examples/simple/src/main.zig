@@ -2,80 +2,62 @@ const std = @import("std");
 const builtin = @import("builtin");
 const yes = @import("yes");
 
-pub fn main(init: std.process.Init.Minimal) !void {
-    const context: yes.Context = .get(init);
+pub fn main(init: std.process.Init) !void {
+    const allocator = init.gpa;
+    const io = init.io;
 
-    var buffer: [128]u8 = undefined;
-    var it: yes.Monitor.Iterator = .init(context, &buffer);
-    while (it.next() catch null) |monitor| {
-        std.debug.print("monitor: {s}\n\tsize: {any}, physical size: {any}\n\tposition: {any}\n\tscale: {d:.3}\n\torientation: {t}\n", .{
-            monitor.name orelse "unknown",
-            monitor.size,
-            monitor.physical_size,
-            monitor.position,
-            monitor.scale,
-            monitor.orientation,
-        });
-    }
-    std.debug.print("\n", .{});
+    var cross_platform = switch (builtin.os.tag) {
+        .windows => try yes.Platform.Win32.get(allocator),
+        else => platform: {
+            var xpz: yes.Platform.Xpz = undefined;
+            try xpz.init(io, init.minimal);
+            break :platform xpz;
+        },
+    };
+    defer switch (builtin.os.tag) {
+        .windows => {},
+        else => cross_platform.deinit(io),
+    };
 
-    const monitor: yes.Monitor = .primary(context, &buffer);
+    const platform = cross_platform.platform();
 
-    var window: yes.Window = try .open(context, .{
-        .title = "Title 😀✅♥",
-        .size = .{ .width = 900, .height = 600 },
-        .decoration = true,
+    var cross_window: switch (builtin.os.tag) {
+        .windows => yes.Platform.Win32.Window,
+        else => yes.Platform.Xpz.Window,
+    } = .{};
+    const window = &cross_window.interface;
+    try window.open(platform, .{
+        .title = "Window 🇸🇪",
+        .size = .{ .width = 600, .height = 400 },
     });
-    defer window.close();
-    try window.setPosition(monitor.position);
+    defer window.close(platform);
 
-    var is_fullscreen: bool = false;
-    var is_maximize: bool = false;
-    main_loop: while (true) {
-        while (try window.poll()) |event| switch (event) {
-            .close => break :main_loop,
-            .focus => |focus| std.debug.print("Focus {t}\n", .{focus}),
-            .resize => |size| {
-                const width, const height = window.getSize().toArray();
-                std.debug.print("width: {d} == {d}, height: {d} == {d}\n", .{ size.width, width, size.height, height });
-
-                if (builtin.os.tag != .windows) if (context.posix_platform == .wayland) {
-                    @memset(window.handle.wayland.api.none.pixels, 127);
-                };
-            },
-            .mouse => |mouse| switch (mouse) {
-                .button => |button| {
-                    std.debug.print("'mouse button {t} {t}'\t", .{ button.code, button.state });
-                    std.debug.print("({d}, {d})\n", .{ button.position.x, button.position.y });
-                },
-                .move => |pos| {
-                    if (window.keyboard.get(.@"1") == .pressed) std.debug.print("moved: ({d}, {d})\n", .{ pos.x, pos.y });
-                },
-                .scroll => |scroll| std.debug.print("scroll: {any}\n", .{scroll}),
+    main: while (true) {
+        while (try window.poll(platform)) |event| switch (event) {
+            .close => break :main,
+            .resize => |size| std.log.info("resize: {d} x {d}", .{ size.width, size.height }),
+            .focus => |focus| {
+                std.log.info("focus: {t}", .{focus});
             },
             .key => |key| {
-                std.debug.print("{t:<7} {t:<10} {d:3}\n", .{
-                    key.state,
-                    key.sym,
-                    key.code,
-                });
-
-                if (key.state == .released) switch (key.sym) {
-                    .f => {
-                        is_fullscreen = !is_fullscreen;
-                        window.fullscreen(is_fullscreen);
-                    },
-                    .m => {
-                        is_maximize = !is_maximize;
-                        window.maximize(is_maximize);
-                    },
-                    .n => window.minimize(),
-                    .t => window.setTitle("You pressed T!"),
-                    else => {},
-                };
+                std.log.info("{t:<8} {t}", .{ key.state, key.sym });
+                if (key.state == .released and key.sym == .enter)
+                    try window.setTitle(platform, "Window! 👺🌶️🫑");
+            },
+            .mouse_move => {},
+            .mouse_button => |button| {
+                std.log.info("{t:<8} mouse button {t:<8} at {d} x {d}", .{ button.state, button.code, button.position.x, button.position.y });
+                if (button.state == .pressed and button.code == .left)
+                    try window.setTitle(platform, "Window! 👺🌶️🫑");
+                if (button.state == .pressed and button.code == .right)
+                    try window.setTitle(platform, "Window 🇸🇪");
+            },
+            .mouse_scroll => |scroll| {
+                std.log.info("mouse scroll: {t}: {d:2}", .{ scroll, switch (scroll) {
+                    .x => scroll.x,
+                    .y => scroll.y,
+                } });
             },
         };
-
-        if (window.keyboard.get(.escape) == .pressed) break;
     }
 }

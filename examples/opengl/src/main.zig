@@ -1,17 +1,7 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const yes = @import("yes");
 const gl = @import("opengl");
-
-var vertices = [_]f32{
-    // x,    y,    z
-    -0.5, -0.5, 0.0, // Bottom-left
-    0.5, -0.5, 0.0, // Bottom-right
-    0.0, 0.5, 0.0, // Top
-};
-
-var indices = [_]u32{
-    0, 1, 2,
-};
 
 pub const vertex_source: [*:0]const u8 =
     \\#version 460 core
@@ -37,22 +27,43 @@ pub const fragment_source: [*:0]const u8 =
     \\}
 ;
 
-pub fn main(init: std.process.Init.Minimal) !void {
-    const context: yes.Context = .get(init);
+pub fn main(init: std.process.Init) !void {
+    const allocator = init.gpa;
+    const io = init.io;
+    var cross_platform = switch (builtin.os.tag) {
+        .windows => try yes.Platform.Win32.get(allocator),
+        else => platform: {
+            var xpz: yes.Platform.Xpz = undefined;
+            try xpz.init(io, init.minimal);
+            break :platform xpz;
+        },
+    };
+    defer switch (builtin.os.tag) {
+        .windows => {},
+        else => cross_platform.deinit(io),
+    };
 
-    var window: yes.Window = try .open(context, .{
-        .title = "Title",
-        .size = .{ .width = 900, .height = 600 },
-        .api = .{ .opengl = .{} }, // Don't forget to set to OpenGL
+    const platform = cross_platform.platform();
+
+    var cross_window: switch (builtin.os.tag) {
+        .windows => yes.Platform.Win32.Window,
+        else => yes.Platform.Xpz.Window,
+    } = .{};
+    const window = &cross_window.interface;
+    try window.open(platform, .{
+        .title = "OpenGL Window!",
+        .size = .{ .width = 600, .height = 400 },
+        .surface_type = .{ .opengl = .{ .major = 4, .minor = 6, .patch = 0 } },
     });
-    defer window.close();
-    try yes.opengl.makeCurrent(window);
-    try yes.opengl.swapInterval(window, 1);
+    defer window.close(platform);
+
+    try yes.opengl.makeCurrent(platform, window);
+    try yes.opengl.swapInterval(platform, window, 1);
 
     gl.load(yes.opengl.getProcAddress, false);
     gl.debug.set(null);
 
-    if (gl.String.get(.version, null)) |version| std.debug.print("GL version: {s}\n", .{version});
+    if (gl.String.get(.version, null)) |version| std.log.info("OpenGL version: {s}", .{version});
 
     const vertex_shader: gl.Shader = .init(.vertex);
     defer vertex_shader.deinit();
@@ -70,29 +81,14 @@ pub fn main(init: std.process.Init.Minimal) !void {
     program.attach(fragment_shader);
     try program.link();
 
-    const vao: gl.Vao = try .init();
-    const vbo: gl.Buffer = try .init();
-    const ebo: gl.Buffer = try .init();
-    defer vao.deinit();
-    defer vbo.deinit();
-    defer ebo.deinit();
-
-    vbo.bufferData(.static_draw, &vertices);
-    ebo.bufferData(.static_draw, &indices);
-
-    vao.vertexAttribute(0, 0, 3, f32, false, 0);
-
-    vao.vertexBuffer(vbo, 0, 0, 3 * @sizeOf(f32));
-    vao.elementBuffer(ebo);
-
     var color: [4]f32 = .{ 0.1, 0.5, 0.3, 1.0 };
     const color_step = 0.05;
     main_loop: while (true) {
-        while (try window.poll()) |event|
+        while (try window.poll(platform)) |event|
             switch (event) {
                 .close => break :main_loop,
                 .resize => |size| {
-                    std.debug.print("Resize: {d}x{d}\n", .{ size.width, size.height });
+                    std.log.info("resize: {d}x{d}", .{ size.width, size.height });
                     gl.draw.viewport(0, 0, size.width, size.height);
                 },
                 .key => |key| switch (key.sym) {
@@ -109,10 +105,9 @@ pub fn main(init: std.process.Init.Minimal) !void {
         gl.clear.color(color[0], color[1], color[2], color[3]);
 
         program.use();
-        vao.bind();
 
-        gl.draw.elements(.triangles, indices.len, u32, null);
+        gl.draw.elements(.triangles, 3, u32, null);
 
-        try yes.opengl.swapBuffers(window);
+        try yes.opengl.swapBuffers(platform, window);
     }
 }
