@@ -1,4 +1,5 @@
 const std = @import("std");
+const build_options = @import("build_options");
 const xpz = @import("xpz");
 const Platform = @import("../Platform.zig");
 
@@ -108,13 +109,23 @@ fn windowOpen(context: *anyopaque, platform_window: *Platform.Window, options: P
             .background_pixel = 0x00000000, // ARGB color
             // .events = .all,
             .events = .{
-                .exposure = true,
                 .key_press = true,
                 .key_release = true,
-                .keymap_state = true,
-                .focus_change = true,
                 .button_press = true,
                 .button_release = true,
+                .enter_window = true,
+                .leave_window = true,
+                .pointer_motion = true,
+                // .pointer_motion_hint = true,
+                .keymap_state = true,
+                .exposure = true,
+                .structure_notify = true,
+                .substructure_notify = true,
+                .substructure_redirect = true,
+                .focus_change = true,
+                .property_change = true,
+                .colormap_change = true,
+                .owner_grab_button = true,
             },
         },
     });
@@ -136,7 +147,10 @@ fn windowPoll(context: *anyopaque, platform_window: *Platform.Window) anyerror!?
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
     _ = window;
 
-    const event = try xpz.Event.next(self.client) orelse return null;
+    const event = (xpz.Event.next(self.client) catch |err| return switch (err) {
+        error.EndOfStream => .close,
+        else => err,
+    }) orelse return null;
 
     return switch (event) {
         .close => .close,

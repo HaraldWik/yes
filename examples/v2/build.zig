@@ -4,7 +4,7 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const yes = b.dependency("yes", .{ .target = target, .optimize = optimize }).module("yes");
+    const yes = b.dependency("yes", .{ .target = target, .optimize = optimize, .wayland = true }).module("yes");
 
     const exe = b.addExecutable(.{
         .name = "example",

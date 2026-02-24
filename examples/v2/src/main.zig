@@ -47,6 +47,10 @@ pub fn main(init: std.process.Init) !void {
             .mouse_move => {},
             .mouse_button => |button| {
                 std.log.info("{t:<8} mouse button {t:<8} at {d} x {d}", .{ button.state, button.code, button.position.x, button.position.y });
+                if (button.state == .pressed and button.code == .left)
+                    try window.setTitle(platform, "Window! 👺🌶️🫑");
+                if (button.state == .pressed and button.code == .right)
+                    try window.setTitle(platform, "Window 🇸🇪");
             },
             .mouse_scroll => |scroll| {
                 std.log.info("mouse scroll: {t}: {d:2}", .{ scroll, switch (scroll) {
