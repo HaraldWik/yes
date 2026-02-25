@@ -7,6 +7,8 @@ pub const Dummy = @import("Platform/Dummy.zig");
 pub const Win32 = @import("Platform/Win32.zig");
 /// X-protocol implementation written in zig
 pub const Xpz = @import("Platform/Xpz.zig");
+/// Default Wayland Client
+pub const Wayland = @import("Platform/Wayland.zig");
 
 pub const VTable = struct {
     windowOpen: *const fn (*anyopaque, window: *Window, options: Window.OpenOptions) anyerror!void,

@@ -7,9 +7,12 @@ const Position = @import("Window.zig").Position;
 pub const Event = union(enum) {
     close,
     resize: Size,
+    move: Position,
     focus: Focus,
     key: Key,
     mouse_move: Position,
+    /// Positive Y means wheel scrolled up (away from user).
+    /// Positive X means wheel scrolled right.
     mouse_scroll: MouseScroll,
     mouse_button: MouseButton,
 
@@ -317,12 +320,12 @@ pub const Event = union(enum) {
 
     pub const MouseButton = struct {
         state: State,
-        code: Code,
+        type: Kind,
         position: Position,
 
         pub const State = Key.State;
 
-        pub const Code = enum {
+        pub const Kind = enum {
             left,
             right,
             middle,
@@ -343,7 +346,7 @@ pub const Event = union(enum) {
                 };
             }
 
-            pub fn fromX11(button: c_uint) ?@This() {
+            pub fn fromX(button: c_uint) ?@This() {
                 return switch (button) {
                     3 => .right,
                     2 => .middle,

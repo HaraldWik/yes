@@ -4,6 +4,7 @@ const Platform = @import("../Platform.zig");
 
 reader_buffer: [512]u8 = undefined,
 writer_buffer: [512]u8 = undefined,
+stream: std.Io.net.Stream,
 reader: std.Io.net.Stream.Reader,
 writer: std.Io.net.Stream.Writer,
 client: xpz.Client,
@@ -48,10 +49,10 @@ pub const setup_listener = struct {
 
 pub fn init(self: *@This(), io: std.Io, minimal: std.process.Init.Minimal) !void {
     const address: std.Io.net.UnixAddress = try .init(xpz.Client.default_display_path);
-    const stream = try address.connect(io);
+    self.stream = try address.connect(io);
 
-    self.reader = stream.reader(io, &self.reader_buffer);
-    self.writer = stream.writer(io, &self.writer_buffer);
+    self.reader = self.stream.reader(io, &self.reader_buffer);
+    self.writer = self.stream.writer(io, &self.writer_buffer);
 
     self.client = try .init(io, &self.reader.interface, &self.writer.interface, xpz.Client.Options{
         .auth = .{ .mit_magic_cookie_1 = .{ .xauthority = minimal.environ.getPosix(xpz.Client.Auth.@"MIT-MAGIC-COOKIE-1".XAUTHORITY).? } },
@@ -65,13 +66,7 @@ pub fn init(self: *@This(), io: std.Io, minimal: std.process.Init.Minimal) !void
 }
 
 pub fn deinit(self: @This(), io: std.Io) void {
-    const stream = self.getStream();
-    stream.close(io);
-}
-
-pub fn getStream(self: @This()) std.Io.net.Stream {
-    const reader: *std.Io.net.Stream.Reader = @fieldParentPtr("interface", self.client.reader);
-    return reader.stream;
+    self.stream.close(io);
 }
 
 pub fn platform(self: *@This()) Platform {
@@ -154,6 +149,7 @@ fn windowPoll(context: *anyopaque, platform_window: *Platform.Window) anyerror!?
     return switch (event) {
         .close => .close,
         .expose => |expose| .{ .resize = .{ .width = @intCast(expose.width), .height = @intCast(expose.height) } },
+        .configure_notify => |notify| .{ .move = .{ .x = @intCast(notify.x), .y = @intCast(notify.y) } },
         .focus_in => .{ .focus = .enter },
         .focus_out => .{ .focus = .leave },
         .button_press, .button_release => |button| switch (button.button()) {
@@ -169,7 +165,7 @@ fn windowPoll(context: *anyopaque, platform_window: *Platform.Window) anyerror!?
                         .button_release => .released,
                         else => unreachable,
                     },
-                    .code = switch (button.button()) {
+                    .type = switch (button.button()) {
                         .left => .left,
                         .right => .right,
                         .middle => .middle,
@@ -195,6 +191,11 @@ fn windowSetProperty(context: *anyopaque, platform_window: *Platform.Window, pro
             try window.handle.changeProperty(client, .replace, .wm_name, .string, .@"8", title); // This is for setting on older systems, does not support unicode (emojis)
             try window.handle.changeProperty(client, .replace, self.atom_table.net_wm_name, self.atom_table.utf8_string, .@"8", title); // Modern way, supports unicode
         },
+        .size => |size| _ = size,
+        .position => |position| _ = position,
+        .fullscreen => |fullscreen| _ = fullscreen,
+        .maximize => |maximize| _ = maximize,
+        .minimize => |minimize| _ = minimize,
         else => {},
     }
 }

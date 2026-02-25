@@ -17,6 +17,7 @@ pub const Window = struct {
 
     previous_style: i32 = 0,
     previous_placement: win32.WINDOWPLACEMENT = std.mem.zeroInit(win32.WINDOWPLACEMENT, .{ .length = @sizeOf(win32.WINDOWPLACEMENT) }),
+    size_data: SizeData = undefined,
 
     pub const Surface = union(enum) {
         empty: void,
@@ -28,6 +29,13 @@ pub const Window = struct {
             /// Render context
             rc: win32.HGLRC = undefined,
         };
+    };
+
+    pub const SizeData = struct {
+        size: Platform.Window.Size,
+        min_size: ?Platform.Window.Size,
+        max_size: ?Platform.Window.Size,
+        resizable: bool,
     };
 };
 
@@ -55,6 +63,13 @@ pub fn platform(self: *@This()) Platform {
 fn windowOpen(context: *anyopaque, platform_window: *Platform.Window, options: Platform.Window.OpenOptions) anyerror!void {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
+
+    window.size_data = .{
+        .size = options.size,
+        .min_size = options.min_size,
+        .max_size = options.max_size,
+        .resizable = options.resizable,
+    };
 
     window.class = std.mem.zeroInit(win32.WNDCLASSEXW, .{
         .cbSize = @sizeOf(win32.WNDCLASSEXW),
@@ -183,6 +198,24 @@ fn windowPoll(context: *anyopaque, platform_window: *Platform.Window) anyerror!?
     _ = win32.DispatchMessageW(&msg);
 
     return switch (msg.message) {
+        win32.WM_USER + win32.WM_GETMINMAXINFO => {
+            var mmi: *win32.MINMAXINFO = @ptrFromInt(@as(usize, @intCast(msg.lParam)));
+
+            const size_data = window.size_data;
+
+            if (size_data.min_size) |min_size| {
+                const size = if (size_data.resizable) min_size else size_data.size;
+                mmi.ptMinTrackSize.x = @intCast(size.width); // minimum width
+                mmi.ptMinTrackSize.y = @intCast(size.height); // minimum height
+            }
+            if (size_data.max_size) |max_size| {
+                const size = if (size_data.resizable) max_size else size_data.size;
+                mmi.ptMaxTrackSize.x = @intCast(size.width); // maximum width
+                mmi.ptMaxTrackSize.y = @intCast(size.height); // maximum height
+            }
+
+            return null;
+        },
         win32.WM_DESTROY => .close,
         win32.WM_SYSCOMMAND => switch (msg.wParam) {
             win32.SC_CLOSE => .close,
@@ -196,6 +229,10 @@ fn windowPoll(context: *anyopaque, platform_window: *Platform.Window) anyerror!?
         win32.WM_USER + win32.WM_SIZE => .{ .resize = .{
             .width = @intCast(@as(u16, @truncate(@as(u32, @intCast(msg.lParam))))),
             .height = @intCast(@as(u16, @truncate(@as(u32, @intCast(msg.lParam >> 16))))),
+        } },
+        win32.WM_USER + win32.WM_MOVE => .{ .move = .{
+            .x = @intCast(@as(u16, @truncate(std.math.cast(u32, msg.lParam) orelse return null))),
+            .y = @intCast(@as(u16, @truncate(std.math.cast(u32, msg.lParam >> 16) orelse return null))),
         } },
         win32.WM_WINDOWPOSCHANGED => {
             std.debug.print("what\n", .{});
@@ -212,7 +249,7 @@ fn windowPoll(context: *anyopaque, platform_window: *Platform.Window) anyerror!?
             if (lines == 545) lines = -1;
             return .{
                 .mouse_scroll = switch (msg.message) {
-                    win32.WM_MOUSEWHEEL => .{ .x = -lines },
+                    win32.WM_MOUSEWHEEL => .{ .x = lines },
                     win32.WM_MOUSEHWHEEL => .{ .y = lines },
                     else => unreachable,
                 },
@@ -225,7 +262,7 @@ fn windowPoll(context: *anyopaque, platform_window: *Platform.Window) anyerror!?
                     win32.WM_RBUTTONUP, win32.WM_MBUTTONUP, win32.WM_LBUTTONUP, win32.WM_XBUTTONUP => .released,
                     else => unreachable,
                 },
-                .code = Platform.Window.Event.MouseButton.Code.fromWin32(button, msg.wParam) orelse return null,
+                .type = Platform.Window.Event.MouseButton.Kind.fromWin32(button, msg.wParam) orelse return null,
                 .position = .{
                     .x = @intCast(@as(u16, @truncate(@as(usize, @intCast(msg.lParam))))),
                     .y = @intCast(@as(u16, @truncate(@as(usize, @intCast(msg.lParam >> 16))))),
@@ -275,6 +312,42 @@ fn windowSetProperty(context: *anyopaque, platform_window: *Platform.Window, pro
             _ = win32.SetWindowPos(@ptrCast(window.hwnd), null, position.x, position.y, 0, 0, .{ .NOZORDER = 1, .NOSIZE = 1 });
             try checkError();
         },
+        .fullscreen => |fullscreen| if (fullscreen) {
+            _ = win32.GetWindowPlacement(@ptrCast(window.hwnd), &window.previous_placement);
+
+            const style = win32.GetWindowLongW(@ptrCast(window.hwnd), win32.GWL_STYLE);
+            window.previous_style = style;
+            const new_style = (style & ~@as(i32, @bitCast(win32.WS_OVERLAPPEDWINDOW))) | @as(i32, @bitCast(win32.WS_POPUP));
+
+            _ = win32.SetWindowLongW(@ptrCast(window.hwnd), win32.GWL_STYLE, new_style);
+
+            const monitor = win32.MonitorFromWindow(@ptrCast(window.hwnd), win32.MONITOR_DEFAULTTOPRIMARY);
+            var mi: win32.MONITORINFO = std.mem.zeroInit(win32.MONITORINFO, .{
+                .cbSize = @sizeOf(win32.MONITORINFO),
+            });
+            _ = win32.GetMonitorInfoW(monitor, &mi);
+
+            _ = win32.SetWindowPos(
+                @ptrCast(window.hwnd),
+                null,
+                mi.rcMonitor.left,
+                mi.rcMonitor.top,
+                mi.rcMonitor.right - mi.rcMonitor.left,
+                mi.rcMonitor.bottom - mi.rcMonitor.top,
+                .{ .DRAWFRAME = 1, .NOOWNERZORDER = 1 },
+            );
+        } else { // unfullscreen
+            // _ = win32.SetWindowLongW(@ptrCast(window.hwnd), win32.GWL_STYLE, window.previous_style);
+            // _ = win32.SetWindowPos(@ptrCast(window.hwnd), null, 0, 0, 0, 0, .{ .DRAWFRAME = 1, .NOMOVE = 1, .NOSIZE = 1, .NOZORDER = 1, .NOOWNERZORDER = 1 });
+            // _ = win32.SetWindowPlacement(@ptrCast(window.hwnd), &window.previous_placement);
+
+            _ = win32.SetWindowLongW(@ptrCast(window.hwnd), win32.GWL_STYLE, window.previous_style);
+            _ = win32.SetWindowPlacement(@ptrCast(window.hwnd), &window.previous_placement);
+            _ = win32.SetWindowPos(@ptrCast(window.hwnd), null, 0, 0, 0, 0, .{ .DRAWFRAME = 1, .NOMOVE = 1, .NOSIZE = 1, .NOZORDER = 1, .NOOWNERZORDER = 1 });
+        },
+        .maximize => |maximize| _ = win32.ShowWindow(@ptrCast(window.hwnd), if (maximize) win32.SW_MAXIMIZE else win32.SW_RESTORE),
+        .minimize => |minimize| _ = win32.ShowWindow(@ptrCast(window.hwnd), if (minimize) win32.SW_MINIMIZE else win32.SW_RESTORE),
+
         else => {},
     }
 }
@@ -310,12 +383,8 @@ fn windowOpenglSwapInterval(context: *anyopaque, platform_window: *Platform.Wind
 
 fn wndProc(hwnd: win32.HWND, msg: u32, wParam: usize, lParam: isize) callconv(.winapi) isize {
     return switch (msg) {
-        win32.WM_SETFOCUS, win32.WM_KILLFOCUS => |focus| {
-            if (!win32.SUCCEEDED(win32.PostMessageW(hwnd, win32.WM_USER + focus, wParam, lParam))) reportErr(error.PostMessage) catch {};
-            return 0;
-        },
-        win32.WM_SIZE => {
-            if (!win32.SUCCEEDED(win32.PostMessageW(hwnd, win32.WM_USER + win32.WM_SIZE, wParam, lParam))) reportErr(error.PostMessage) catch {};
+        win32.WM_GETMINMAXINFO, win32.WM_SIZE, win32.WM_MOVE, win32.WM_SETFOCUS, win32.WM_KILLFOCUS => |wm| {
+            if (!win32.SUCCEEDED(win32.PostMessageW(hwnd, win32.WM_USER + wm, wParam, lParam))) reportErr(error.PostMessage) catch {};
             return 0;
         },
         else => win32.DefWindowProcW(hwnd, msg, wParam, lParam),
