@@ -10,6 +10,7 @@ const scope = std.log.scoped(.wayland);
 
 pub const Window = struct {
     interface: Platform.Window = .{},
+    some_data: u128 = 0,
 };
 
 pub fn platform(self: *@This()) Platform {
@@ -32,8 +33,8 @@ fn windowOpen(context: *anyopaque, platform_window: *Platform.Window, options: P
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
 
     _ = self;
-    _ = window;
     _ = options;
+    window.some_data += 1;
 
     scope.info("window open", .{});
 }

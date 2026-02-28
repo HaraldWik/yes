@@ -3,63 +3,18 @@ const builtin = @import("builtin");
 const yes = @import("yes");
 
 // example args "zig build run -- --xdg=x11"
-pub const UnixPlatform = union(enum) {
-    xpz: yes.Platform.Xpz,
-    wayland: yes.Platform.Wayland,
-
-    pub fn init(io: std.Io, minimal: std.process.Init.Minimal) !@This() {
-        const unix_session_type = yes.UnixSessionType.get(minimal) orelse .x11;
-        std.log.info("unix session type: {t}", .{unix_session_type});
-
-        var self: @This() = undefined;
-        switch (unix_session_type) {
-            .x11 => {
-                self = .{ .xpz = undefined };
-                try self.xpz.init(io, minimal);
-            },
-            .wayland => {
-                self = .{ .wayland = .{} };
-            },
-            else => return error.UnsupportedUnixPlatform,
-        }
-        return self;
-    }
-
-    pub fn deinit(self: @This(), io: std.Io) void {
-        switch (self) {
-            .xpz => |xpz| xpz.deinit(io),
-            .wayland => {},
-        }
-    }
-
-    pub fn platform(self: *@This()) yes.Platform {
-        return switch (self.*) {
-            .xpz => self.xpz.platform(),
-            .wayland => self.wayland.platform(),
-        };
-    }
-};
 
 pub fn main(init: std.process.Init) !void {
     const allocator = init.gpa;
     const io = init.io;
 
-    var cross_platform = switch (builtin.os.tag) {
-        .windows => try yes.Platform.Win32.get(allocator),
-        else => try UnixPlatform.init(io, init.minimal),
-    };
-    defer switch (builtin.os.tag) {
-        .windows => {},
-        else => cross_platform.deinit(io),
-    };
+    var cross_platform: yes.Platform.Cross = try .init(allocator, io, init.minimal);
+    defer cross_platform.deinit();
 
     const platform = cross_platform.platform();
 
-    var cross_window: switch (builtin.os.tag) {
-        .windows => yes.Platform.Win32.Window,
-        else => yes.Platform.Xpz.Window,
-    } = .{};
-    const window = &cross_window.interface;
+    var cross_window: yes.Platform.Cross.Window = .empty(platform);
+    const window = cross_window.interface(platform);
     try window.open(platform, .{
         .title = "Window 🇸🇪👺🌶️🫑",
         .size = .{ .width = 600, .height = 400 },

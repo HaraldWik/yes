@@ -2,23 +2,24 @@ const std = @import("std");
 const xpz = @import("xpz");
 const Platform = @import("../Platform.zig");
 
-reader_buffer: [512]u8 = undefined,
-writer_buffer: [512]u8 = undefined,
-stream: std.Io.net.Stream,
-reader: std.Io.net.Stream.Reader,
-writer: std.Io.net.Stream.Writer,
-client: xpz.Client,
+connection: xpz.Connection,
+root_screen: xpz.Screen,
 atom_table: AtomTable,
-resource_index: u32,
 
 pub const AtomTable = struct {
     net_wm_name: xpz.Atom,
     utf8_string: xpz.Atom,
 
-    pub fn load(client: xpz.Client) !@This() {
+    pub fn load(connection: *xpz.Connection) !@This() {
+        const net_wm_name_request = try xpz.Atom.internUnflushed(connection, false, xpz.Atom.net_wm.name);
+        const utf8_string_request = try xpz.Atom.internUnflushed(connection, false, xpz.Atom.utf8_string);
+
+        const net_wm_name = (try net_wm_name_request.receiveReply(xpz.protocol.core.atom.intern.Reply)).value.atom;
+        const utf8_string = (try utf8_string_request.receiveReply(xpz.protocol.core.atom.intern.Reply)).value.atom;
+
         return .{
-            .net_wm_name = try .intern(client, false, xpz.Atom.net_wm.name),
-            .utf8_string = try .intern(client, false, xpz.Atom.utf8_string),
+            .net_wm_name = net_wm_name,
+            .utf8_string = utf8_string,
         };
     }
 };
@@ -47,26 +48,24 @@ pub const setup_listener = struct {
     }
 };
 
-pub fn init(self: *@This(), io: std.Io, minimal: std.process.Init.Minimal) !void {
-    const address: std.Io.net.UnixAddress = try .init(xpz.Client.default_display_path);
-    self.stream = try address.connect(io);
-
-    self.reader = self.stream.reader(io, &self.reader_buffer);
-    self.writer = self.stream.writer(io, &self.writer_buffer);
-
-    self.client = try .init(io, &self.reader.interface, &self.writer.interface, xpz.Client.Options{
-        .auth = .{ .mit_magic_cookie_1 = .{ .xauthority = minimal.environ.getPosix(xpz.Client.Auth.@"MIT-MAGIC-COOKIE-1".XAUTHORITY).? } },
+pub fn init(allocator: std.mem.Allocator, io: std.Io, minimal: std.process.Init.Minimal) !@This() {
+    var connection: xpz.Connection = try .connectUnix(allocator, io, xpz.Connection.default_address, .{});
+    const root_screen = try connection.setupOptions(minimal, .{
         .setup_listener = .{
             .vendor = setup_listener.vendor,
             .screen = setup_listener.currentScreen,
         },
     });
 
-    self.atom_table = try .load(self.client);
+    return .{
+        .connection = connection,
+        .root_screen = root_screen,
+        .atom_table = try .load(&connection),
+    };
 }
 
-pub fn deinit(self: @This(), io: std.Io) void {
-    self.stream.close(io);
+pub fn deinit(self: *@This()) void {
+    self.connection.disconnect();
 }
 
 pub fn platform(self: *@This()) Platform {
@@ -88,17 +87,15 @@ fn windowOpen(context: *anyopaque, platform_window: *Platform.Window, options: P
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
 
-    const client = self.client;
+    const connection = &self.*.connection;
 
-    self.resource_index += 1;
-
-    window.handle = client.generateId(xpz.Window, self.resource_index);
-    try window.handle.create(client, .{
-        .parent = client.root_screen.window,
+    window.handle = @enumFromInt(connection.resource_id.next());
+    try window.handle.create(connection, .{
+        .parent = self.root_screen.window,
         .width = @intCast(options.size.width),
         .height = @intCast(options.size.height),
         .border_width = 1,
-        .visual_id = client.root_screen.visual_id,
+        .visual_id = self.root_screen.visual_id,
         .attributes = .{
             .background_pixel = 0x00000000, // ARGB color
             // .events = .all,
@@ -123,8 +120,11 @@ fn windowOpen(context: *anyopaque, platform_window: *Platform.Window, options: P
             },
         },
     });
-    try window.handle.map(client);
-    try client.writer.flush();
+    try window.handle.map(&self.connection);
+    try self.connection.flush();
+
+    try connection.reader.interface.fillMore();
+    std.log.info("read: {any}", .{connection.reader.interface.buffer});
 
     try windowSetProperty(context, platform_window, .{ .title = options.title });
 }
@@ -133,7 +133,9 @@ fn windowClose(context: *anyopaque, platform_window: *Platform.Window) void {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
 
-    window.handle.destroy(self.client);
+    const connection = &self.*.connection;
+
+    window.handle.destroy(connection);
 }
 
 fn windowPoll(context: *anyopaque, platform_window: *Platform.Window) anyerror!?Platform.Window.Event {
@@ -141,7 +143,9 @@ fn windowPoll(context: *anyopaque, platform_window: *Platform.Window) anyerror!?
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
     _ = window;
 
-    const event = (xpz.Event.next(self.client) catch |err| return switch (err) {
+    const connection = &self.*.connection;
+
+    const event = (xpz.Event.next(connection) catch |err| return switch (err) {
         error.EndOfStream => .close,
         else => err,
     }) orelse return null;
@@ -184,12 +188,14 @@ fn windowPoll(context: *anyopaque, platform_window: *Platform.Window) anyerror!?
 fn windowSetProperty(context: *anyopaque, platform_window: *Platform.Window, property: Platform.Window.Property) anyerror!void {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
-    const client = self.client;
+
+    const connection = &self.*.connection;
 
     switch (property) {
         .title => |title| {
-            try window.handle.changeProperty(client, .replace, .wm_name, .string, .@"8", title); // This is for setting on older systems, does not support unicode (emojis)
-            try window.handle.changeProperty(client, .replace, self.atom_table.net_wm_name, self.atom_table.utf8_string, .@"8", title); // Modern way, supports unicode
+            try window.handle.changeProperty(connection, .replace, .wm_name, .string, .@"8", title); // This is for setting on older systems, does not support unicode (emojis)
+            try window.handle.changeProperty(connection, .replace, self.atom_table.net_wm_name, self.atom_table.utf8_string, .@"8", title); // Modern way, supports unicode
+            try connection.flush();
         },
         .size => |size| _ = size,
         .position => |position| _ = position,

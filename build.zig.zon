@@ -10,8 +10,8 @@
         },
 
         .xpz = .{
-            .url = "git+https://github.com/HaraldWik/xpz#5f45c43c1dc84ca4037369c784291f3cc591adf3",
-            .hash = "xpz-0.0.0-_a41woU6AQCLk8KApbhPQX9A_Cs9Rc8nEEajlTso5llM",
+            .url = "git+https://github.com/HaraldWik/xpz#584023b22725773896b3dd93dfb5206e14580c4c",
+            .hash = "xpz-0.0.0-_a41wrl2AQDmCUs5k_Ygfhkf5zcrgyFJQc9B7FBGdluv",
         },
 
         .wayland = .{
