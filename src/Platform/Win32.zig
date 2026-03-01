@@ -1,5 +1,6 @@
 const std = @import("std");
 const win32 = @import("win32").everything;
+const vulkan = @import("../root.zig").vulkan;
 const Platform = @import("../Platform.zig");
 // zig build -Dtarget=x86_64-windows && wine zig-out/bin/example.exe
 
@@ -56,6 +57,7 @@ pub fn platform(self: *@This()) Platform {
             .windowOpenglMakeCurrent = windowOpenglMakeCurrent,
             .windowOpenglSwapBuffers = windowOpenglSwapBuffers,
             .windowOpenglSwapInterval = windowOpenglSwapInterval,
+            .windowVulkanCreateSurface = windowVulkanCreateSurface,
         },
     };
 }
@@ -347,8 +349,8 @@ fn windowSetProperty(context: *anyopaque, platform_window: *Platform.Window, pro
         },
         .maximize => |maximize| _ = win32.ShowWindow(@ptrCast(window.hwnd), if (maximize) win32.SW_MAXIMIZE else win32.SW_RESTORE),
         .minimize => |minimize| _ = win32.ShowWindow(@ptrCast(window.hwnd), if (minimize) win32.SW_MINIMIZE else win32.SW_RESTORE),
-
-        else => {},
+        .always_on_top => {},
+        .floating => {},
     }
 }
 fn windowOpenglMakeCurrent(context: *anyopaque, platform_window: *Platform.Window) anyerror!void {
@@ -379,6 +381,21 @@ fn windowOpenglSwapInterval(context: *anyopaque, platform_window: *Platform.Wind
     if (self.opengl.wglSwapIntervalEXT == null) return;
 
     if (!win32.SUCCEEDED(self.opengl.wglSwapIntervalEXT.?(interval))) return reportErr(error.WglMakeCurrent);
+}
+fn windowVulkanCreateSurface(context: *anyopaque, platform_window: *Platform.Window, instance: *vulkan.Instance, allocator: ?*const vulkan.AllocationCallbacks, getProcAddress: vulkan.Instance.GetProcAddress) anyerror!*vulkan.Surface {
+    const self: *@This() = @ptrCast(@alignCast(context));
+    const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
+
+    const vkCreateWin32SurfaceKHR: vulkan.Surface.CreateProc = @ptrCast(getProcAddress(instance, "vkCreateWin32SurfaceKHR"));
+
+    const create_info: vulkan.Surface.CreateInfo = .{
+        .hinstance = self.instance,
+        .hwnd = window.hwnd,
+    };
+
+    var surface: ?*vulkan.Surface = null;
+    if (vkCreateWin32SurfaceKHR(instance, &create_info, allocator, &surface) != .success) return error.VkCreateWin32SurfaceKHR;
+    return surface orelse error.InvalidSurface;
 }
 
 fn wndProc(hwnd: win32.HWND, msg: u32, wParam: usize, lParam: isize) callconv(.winapi) isize {

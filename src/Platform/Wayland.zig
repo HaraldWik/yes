@@ -1,6 +1,7 @@
 const std = @import("std");
-const Platform = @import("../Platform.zig");
 const build_options = @import("build_options");
+const vulkan = @import("../root.zig").vulkan;
+const Platform = @import("../Platform.zig");
 
 // comptime {
 //     if (!build_options.wayland) @compileError("wayland backend not available unless build options wayland is set to true");
@@ -24,6 +25,7 @@ pub fn platform(self: *@This()) Platform {
             .windowOpenglMakeCurrent = windowOpenglMakeCurrent,
             .windowOpenglSwapBuffers = windowOpenglSwapBuffers,
             .windowOpenglSwapInterval = windowOpenglSwapInterval,
+            .windowVulkanCreateSurface = windowVulkanCreateSurface,
         },
     };
 }
@@ -94,4 +96,16 @@ fn windowOpenglSwapInterval(context: *anyopaque, platform_window: *Platform.Wind
     _ = self;
     _ = window;
     scope.info("window opengl swap interval: {d}", .{interval});
+}
+fn windowVulkanCreateSurface(context: *anyopaque, platform_window: *Platform.Window, instance: *vulkan.Instance, allocator: ?*const vulkan.AllocationCallbacks, getProcAddress: vulkan.Instance.GetProcAddress) anyerror!*vulkan.Surface {
+    const self: *@This() = @ptrCast(@alignCast(context));
+    const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
+
+    _ = self;
+    _ = window;
+    _ = instance;
+    _ = allocator;
+    _ = getProcAddress;
+
+    return undefined;
 }

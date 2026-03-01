@@ -7,6 +7,10 @@
         .yes = .{
             .path = "../../",
         },
+        .vulkan = .{
+            .url = "git+https://github.com/KhronosGroup/Vulkan-Headers#b5c8f996196ba4aa6d8f97e52b5d3b6e70f7e4e2",
+            .hash = "N-V-__8AABJ5QgLfX-rcpaOGlg1YXcabW-m5cl5HEKkRsi3f",
+        },
     },
     .paths = .{
         "build.zig",

@@ -63,41 +63,41 @@ pub const Property = union(enum) {
     floating: bool,
 };
 
-pub fn open(w: *Window, p: Platform, options: OpenOptions) anyerror!void {
-    try p.vtable.windowOpen(p.ptr, w, options);
+pub fn open(window: *Window, platform: Platform, options: OpenOptions) anyerror!void {
+    try platform.vtable.windowOpen(platform.ptr, window, options);
 }
-pub fn close(w: *Window, p: Platform) void {
-    p.vtable.windowClose(p.ptr, w);
+pub fn close(window: *Window, platform: Platform) void {
+    platform.vtable.windowClose(platform.ptr, window);
 }
-pub fn poll(w: *Window, p: Platform) anyerror!?Event {
-    const event = try p.vtable.windowPoll(p.ptr, w) orelse return null;
+pub fn poll(window: *Window, platform: Platform) anyerror!?Event {
+    const event = try platform.vtable.windowPoll(platform.ptr, window) orelse return null;
     switch (event) {
-        .resize => |size| w.size = size,
+        .resize => |size| window.size = size,
         else => {},
     }
     return event;
 }
-pub fn setTitle(w: *Window, p: Platform, title: []const u8) anyerror!void {
-    try p.vtable.windowSetProperty(p.ptr, w, .{ .title = title });
+pub fn setTitle(window: *Window, platform: Platform, title: []const u8) anyerror!void {
+    try platform.vtable.windowSetProperty(platform.ptr, window, .{ .title = title });
 }
-pub fn setSize(w: *Window, p: Platform, size: Size) anyerror!void {
-    try p.vtable.windowSetProperty(p.ptr, w, .{ .size = size });
+pub fn setSize(window: *Window, platform: Platform, size: Size) anyerror!void {
+    try platform.vtable.windowSetProperty(platform.ptr, window, .{ .size = size });
 }
-pub fn setPosition(w: *Window, p: Platform, position: Position) anyerror!void {
-    try p.vtable.windowSetProperty(p.ptr, w, .{ .position = position });
+pub fn setPosition(window: *Window, platform: Platform, position: Position) anyerror!void {
+    try platform.vtable.windowSetProperty(platform.ptr, window, .{ .position = position });
 }
-pub fn setFullscreen(w: *Window, p: Platform, fullscreen: bool) anyerror!void {
-    try p.vtable.windowSetProperty(p.ptr, w, .{ .fullscreen = fullscreen });
+pub fn setFullscreen(window: *Window, platform: Platform, fullscreen: bool) anyerror!void {
+    try platform.vtable.windowSetProperty(platform.ptr, window, .{ .fullscreen = fullscreen });
 }
-pub fn setMaximize(w: *Window, p: Platform, maximize: bool) anyerror!void {
-    try p.vtable.windowSetProperty(p.ptr, w, .{ .maximize = maximize });
+pub fn setMaximize(window: *Window, platform: Platform, maximize: bool) anyerror!void {
+    try platform.vtable.windowSetProperty(platform.ptr, window, .{ .maximize = maximize });
 }
-pub fn setMinimize(w: *Window, p: Platform, minimize: bool) anyerror!void {
-    try p.vtable.windowSetProperty(p.ptr, w, .{ .minimize = minimize });
+pub fn setMinimize(window: *Window, platform: Platform, minimize: bool) anyerror!void {
+    try platform.vtable.windowSetProperty(platform.ptr, window, .{ .minimize = minimize });
 }
-pub fn setAlwaysOnTop(w: *Window, p: Platform, always_on_top: bool) anyerror!void {
-    try p.vtable.windowSetProperty(p.ptr, w, .{ .always_on_top = always_on_top });
+pub fn setAlwaysOnTop(window: *Window, platform: Platform, always_on_top: bool) anyerror!void {
+    try platform.vtable.windowSetProperty(platform.ptr, window, .{ .always_on_top = always_on_top });
 }
-pub fn setFloating(w: *Window, p: Platform, floating: bool) anyerror!void {
-    try p.vtable.windowSetProperty(p.ptr, w, .{ .floating = floating });
+pub fn setFloating(window: *Window, platform: Platform, floating: bool) anyerror!void {
+    try platform.vtable.windowSetProperty(platform.ptr, window, .{ .floating = floating });
 }

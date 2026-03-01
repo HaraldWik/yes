@@ -1,3 +1,4 @@
+const vulkan = @import("../root.zig").vulkan;
 const Platform = @import("../Platform.zig");
 
 window_count: usize = 0,
@@ -22,6 +23,7 @@ pub fn platform(self: *@This()) Platform {
             .windowOpenglMakeCurrent = windowOpenglMakeCurrent,
             .windowOpenglSwapBuffers = windowOpenglSwapBuffers,
             .windowOpenglSwapInterval = windowOpenglSwapInterval,
+            .windowVulkanCreateSurface = windowVulkanCreateSurface,
         },
     };
 }
@@ -68,7 +70,17 @@ fn windowSetProperty(context: *anyopaque, platform_window: *Platform.Window, pro
     _ = self;
 
     scope.info("window set property: {s} {any}", .{ window.title, property });
-    if (property == .title) window.title = property.title;
+
+    switch (property) {
+        .title => window.title = property.title,
+        .size => {},
+        .position => {},
+        .fullscreen => {},
+        .maximize => {},
+        .minimize => {},
+        .always_on_top => {},
+        .floating => {},
+    }
 }
 
 fn windowOpenglMakeCurrent(context: *anyopaque, platform_window: *Platform.Window) anyerror!void {
@@ -92,4 +104,15 @@ fn windowOpenglSwapInterval(context: *anyopaque, platform_window: *Platform.Wind
 
     _ = self;
     scope.info("window opengl swap interval: ({d}) {s}, interval: {}", .{ window.index, window.title, interval });
+}
+fn windowVulkanCreateSurface(context: *anyopaque, platform_window: *Platform.Window, instance: *vulkan.Instance, allocator: ?*const vulkan.AllocationCallbacks, getProcAddress: vulkan.Instance.GetProcAddress) anyerror!*vulkan.Surface {
+    const self: *@This() = @ptrCast(@alignCast(context));
+    const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
+
+    _ = self;
+    _ = instance;
+    _ = allocator;
+    _ = getProcAddress;
+    scope.info("window vulkan create surface: ({d}) {s})", .{ window.index, window.title });
+    return undefined;
 }

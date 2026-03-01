@@ -1,3 +1,5 @@
+const vulkan = @import("root.zig").vulkan;
+
 ptr: *anyopaque,
 vtable: *const VTable,
 
@@ -23,6 +25,8 @@ pub const VTable = struct {
     windowOpenglMakeCurrent: *const fn (*anyopaque, window: *Window) anyerror!void,
     windowOpenglSwapBuffers: *const fn (*anyopaque, window: *Window) anyerror!void,
     windowOpenglSwapInterval: *const fn (*anyopaque, window: *Window, interval: i32) anyerror!void,
+
+    windowVulkanCreateSurface: *const fn (*anyopaque, window: *Window, instance: *vulkan.Instance, allocator: ?*const vulkan.AllocationCallbacks, getProcAddress: vulkan.Instance.GetProcAddress) anyerror!*vulkan.Surface,
 };
 
 pub const Window = @import("Window.zig");

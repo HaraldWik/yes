@@ -10,7 +10,6 @@ pub fn main(init: std.process.Init) !void {
 
     var cross_platform: yes.Platform.Cross = try .init(allocator, io, init.minimal);
     defer cross_platform.deinit();
-
     const platform = cross_platform.platform();
 
     var cross_window: yes.Platform.Cross.Window = .empty(platform);
