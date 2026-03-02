@@ -80,10 +80,12 @@ pub fn getRequiredInstanceExtensions(comptime T: type, unix_session_type: Platfo
         else => switch (unix_session_type) {
             .wayland => &.{
                 "VK_KHR_surface",
+                "VK_KHR_display",
                 "VK_KHR_wayland_surface",
             },
             .x11 => &.{
                 "VK_KHR_surface",
+                "VK_KHR_display",
                 "VK_KHR_xlib_surface",
                 "VK_KHR_xcb_surface",
             },

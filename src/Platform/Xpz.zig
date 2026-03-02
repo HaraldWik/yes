@@ -236,87 +236,95 @@ fn windowVulkanCreateSurface(context: *anyopaque, platform_window: *Platform.Win
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
 
-    const xcb_connection_t = extern struct {
-        has_error: c_int = 0,
-        fd: c_int,
-        setup: *const xpz.protocol.core.setup.Reply,
-        iolock: std.c.pthread_mutex_t = std.c.PTHREAD_MUTEX_INITIALIZER,
+    _ = self;
+    _ = window;
+    _ = instance;
+    _ = allocator;
+    _ = getProcAddress;
 
-        out: extern struct {
-            request: u64,
-            completed: u64,
-            maximum_request_length: u32,
-            socket_closure: c_int,
-        },
+    @panic("vulkan create surface not implemented");
 
-        in: extern struct {
-            lock: std.c.pthread_mutex_t = std.c.PTHREAD_MUTEX_INITIALIZER,
+    // const xcb_connection_t = extern struct {
+    //     has_error: c_int = 0,
+    //     fd: c_int,
+    //     setup: *const xpz.protocol.core.setup.Reply,
+    //     iolock: std.c.pthread_mutex_t = std.c.PTHREAD_MUTEX_INITIALIZER,
 
-            events: ?*anyopaque = null,
-            replies: ?*anyopaque = null,
+    //     out: extern struct {
+    //         request: u64,
+    //         completed: u64,
+    //         maximum_request_length: u32,
+    //         socket_closure: c_int,
+    //     },
 
-            request_expected: u64,
-        },
+    //     in: extern struct {
+    //         lock: std.c.pthread_mutex_t = std.c.PTHREAD_MUTEX_INITIALIZER,
 
-        extensions: [*c]xcb_extension_data_t = null,
+    //         events: ?*anyopaque = null,
+    //         replies: ?*anyopaque = null,
 
-        xid_base: u32,
-        xid_mask: u32,
-        xid_last: u32,
+    //         request_expected: u64,
+    //     },
 
-        auth_info: xcb_auth_info_t = .{},
-        shutdown: c_int,
+    //     extensions: [*c]xcb_extension_data_t = null,
 
-        const xcb_extension_t = extern struct {
-            name: [*:0]u8,
-            global_id: c_int,
-        };
+    //     xid_base: u32,
+    //     xid_mask: u32,
+    //     xid_last: u32,
 
-        const xcb_query_extension_reply_t = extern struct {
-            present: c_int,
-            major_opcode: u8,
-            first_event: u8,
-            first_error: u8,
-        };
+    //     auth_info: xcb_auth_info_t = .{},
+    //     shutdown: c_int,
 
-        const xcb_extension_data_t = extern struct {
-            ext: *xcb_extension_t,
-            reply: xcb_query_extension_reply_t,
-        };
+    //     const xcb_extension_t = extern struct {
+    //         name: [*:0]u8,
+    //         global_id: c_int,
+    //     };
 
-        pub const xcb_auth_info_t = extern struct {
-            namelen: c_int = 0,
-            name: ?[*]u8 = null,
-            datalen: c_int = 0,
-            data: ?[*]u8 = null,
-        };
-    };
+    //     const xcb_query_extension_reply_t = extern struct {
+    //         present: c_int,
+    //         major_opcode: u8,
+    //         first_event: u8,
+    //         first_error: u8,
+    //     };
 
-    const connection = self.connection;
-    var xcb_connection: xcb_connection_t = .{
-        .fd = connection.writer.stream.socket.handle,
-        .setup = &connection.setup_info.?,
-        .out = .{
-            .request = connection.sequence,
-            .completed = connection.sequence,
-            .maximum_request_length = connection.setup_info.?.maximum_request_length,
-            .socket_closure = 1,
-        },
-        .xid_base = connection.resource_id.base,
-        .xid_mask = connection.resource_id.mask,
-        .xid_last = connection.resource_id.index,
-        .in = .{
-            .request_expected = connection.sequence + 1,
-        },
-        .shutdown = 0,
-    };
+    //     const xcb_extension_data_t = extern struct {
+    //         ext: *xcb_extension_t,
+    //         reply: xcb_query_extension_reply_t,
+    //     };
 
-    const create_info: vulkan.Surface.CreateInfo = .{ .xcb = .{
-        .connection = @ptrCast(@alignCast(&xcb_connection)),
-        .window = @intCast(@intFromEnum(window.handle)),
-    } };
+    //     pub const xcb_auth_info_t = extern struct {
+    //         namelen: c_int = 0,
+    //         name: ?[*]u8 = null,
+    //         datalen: c_int = 0,
+    //         data: ?[*]u8 = null,
+    //     };
+    // };
 
-    var surface: ?*vulkan.Surface = undefined;
-    if (getProcAddress(instance, &create_info, allocator, &surface) != .success) return error.CreateSurfaceResult;
-    return surface orelse error.CreateSurface;
+    // const connection = self.connection;
+    // var xcb_connection: xcb_connection_t = .{
+    //     .fd = connection.writer.stream.socket.handle,
+    //     .setup = &connection.setup_info.?,
+    //     .out = .{
+    //         .request = connection.sequence,
+    //         .completed = connection.sequence,
+    //         .maximum_request_length = connection.setup_info.?.maximum_request_length,
+    //         .socket_closure = 1,
+    //     },
+    //     .xid_base = connection.resource_id.base,
+    //     .xid_mask = connection.resource_id.mask,
+    //     .xid_last = connection.resource_id.index,
+    //     .in = .{
+    //         .request_expected = connection.sequence + 1,
+    //     },
+    //     .shutdown = 0,
+    // };
+
+    // const create_info: vulkan.Surface.CreateInfo = .{ .xcb = .{
+    //     .connection = @ptrCast(@alignCast(&xcb_connection)),
+    //     .window = @intCast(@intFromEnum(window.handle)),
+    // } };
+
+    // var surface: ?*vulkan.Surface = undefined;
+    // if (getProcAddress(instance, &create_info, allocator, &surface) != .success) return error.CreateSurfaceResult;
+    // return surface orelse error.CreateSurface;
 }

@@ -30,13 +30,6 @@ pub fn main(init: std.process.Init) !void {
         vkDestroyDebugUtilsMessengerEXT(instance.handle, messenger, null);
 
     // Surface
-    // const surface_create_proc: yes.vulkan.Surface.CreateProc = switch (builtin.os.tag) {
-    //     .windows => @ptrCast(&vk.c.vkCreateWin32SurfaceKHR),
-    //     else => switch (cross_platform.inner) {
-    //         .xpz => @ptrCast(&vk.c.vkCreateXcbSurfaceKHR),
-    //         .wayland => @ptrCast(&vk.c.vkCreateWaylandSurfaceKHR),
-    //     },
-    // };
     const surface: vk.Surface = .{ .handle = @ptrCast(try yes.vulkan.Surface.create(platform, window, @ptrCast(instance.handle), null, @ptrCast(&vk.c.vkGetInstanceProcAddr))) };
     defer surface.deinit(instance);
 

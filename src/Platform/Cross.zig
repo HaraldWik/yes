@@ -57,17 +57,11 @@ pub fn init(allocator: std.mem.Allocator, io: std.Io, minimal: std.process.Init.
 
 fn initUnix(allocator: std.mem.Allocator, io: std.Io, minimal: std.process.Init.Minimal) !@This() {
     const session_type = Platform.unix.SessionType.detect(minimal) orelse .x11;
-    var self: @This() = .{ .inner = undefined };
-    switch (session_type) {
-        .x11 => {
-            self = .{ .inner = .{ .xpz = try .init(allocator, io, minimal) } };
-        },
-        .wayland => {
-            self = .{ .inner = .{ .wayland = .{} } };
-        },
-        else => return error.UnsupportedUnixPlatform,
-    }
-    return self;
+    return switch (session_type) {
+        .x11 => .{ .inner = .{ .xpz = try .init(allocator, io, minimal) } },
+        .wayland => .{ .inner = .{ .wayland = .{} } },
+        else => error.UnsupportedUnixPlatform,
+    };
 }
 
 pub fn deinit(self: *@This()) void {
