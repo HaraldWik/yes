@@ -236,9 +236,6 @@ fn windowOpen(context: *anyopaque, platform_window: *Platform.Window, options: P
     // Create OpenGL context
     switch (options.surface_type) {
         .opengl => if (glx_arb_create_context_supported) {
-            const dummy_ctx = xlib.glXCreateContext(self.display, visual, null, 1) orelse return error.DummyContextFailed;
-            defer xlib.glXDestroyContext(self.display, dummy_ctx);
-
             const ctx_attribs: [*]const c_int = &.{
                 xlib.GLX_CONTEXT_MAJOR_VERSION_ARB, 4,
                 xlib.GLX_CONTEXT_MINOR_VERSION_ARB, 6,
