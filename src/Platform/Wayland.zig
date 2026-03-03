@@ -3,16 +3,20 @@ const build_options = @import("build_options");
 const vulkan = @import("../root.zig").vulkan;
 const Platform = @import("../Platform.zig");
 
-// comptime {
-//     if (!build_options.wayland) @compileError("wayland backend not available unless build options wayland is set to true");
-// }
-
 const scope = std.log.scoped(.wayland);
 
 pub const Window = struct {
     interface: Platform.Window = .{},
     some_data: u128 = 0,
 };
+
+pub fn init() !@This() {
+    return .{};
+}
+
+pub fn deinit(self: @This()) void {
+    _ = self;
+}
 
 pub fn platform(self: *@This()) Platform {
     return .{
@@ -40,7 +44,6 @@ fn windowOpen(context: *anyopaque, platform_window: *Platform.Window, options: P
 
     scope.info("window open", .{});
 }
-
 fn windowClose(context: *anyopaque, platform_window: *Platform.Window) void {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
@@ -50,7 +53,6 @@ fn windowClose(context: *anyopaque, platform_window: *Platform.Window) void {
 
     scope.info("window close", .{});
 }
-
 fn windowPoll(context: *anyopaque, platform_window: *Platform.Window) anyerror!?Platform.Window.Event {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
@@ -60,7 +62,6 @@ fn windowPoll(context: *anyopaque, platform_window: *Platform.Window) anyerror!?
 
     return null;
 }
-
 fn windowSetProperty(context: *anyopaque, platform_window: *Platform.Window, property: Platform.Window.Property) anyerror!void {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
@@ -70,7 +71,6 @@ fn windowSetProperty(context: *anyopaque, platform_window: *Platform.Window, pro
 
     scope.info("window set property: {t}", .{property});
 }
-
 fn windowOpenglMakeCurrent(context: *anyopaque, platform_window: *Platform.Window) anyerror!void {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));

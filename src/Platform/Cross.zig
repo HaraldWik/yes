@@ -67,7 +67,7 @@ fn initUnix(allocator: std.mem.Allocator, io: std.Io, minimal: std.process.Init.
             .{ .inner = .{ .xlib = try .init() } }
         else
             .{ .inner = .{ .xpz = try .init(allocator, io, minimal) } },
-        .wayland => .{ .inner = .{ .wayland = .{} } },
+        .wayland => .{ .inner = .{ .wayland = try .init() } },
         else => error.UnsupportedUnixPlatform,
     };
 }
@@ -78,7 +78,7 @@ pub fn deinit(self: *@This()) void {
         else => switch (self.inner) {
             .xpz => self.inner.xpz.deinit(),
             .xlib => if (build_options.xlib) self.inner.xlib.deinit() else unreachable,
-            .wayland => {},
+            .wayland => self.inner.wayland.deinit(),
         },
     }
 }

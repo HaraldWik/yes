@@ -300,19 +300,18 @@ fn windowPoll(context: *anyopaque, platform_window: *Platform.Window) anyerror!?
             if (window.interface.size.eql(size)) return .{ .move = position };
             if (window.interface.position.x != position.x or window.interface.position.y != position.y) {
                 window.move_event = position;
-                // update the stored position
                 window.interface.position = position;
             }
             return .{ .resize = size };
         },
         xlib.ButtonPress, xlib.ButtonRelease => switch (event.xbutton.button) {
-            4...7 => |scroll| .{ .mouse_scroll = switch (scroll) {
+            4...7 => |scroll| if (event.type == xlib.ButtonPress) .{ .mouse_scroll = switch (scroll) {
                 6 => .{ .x = 1 },
                 7 => .{ .x = -1 },
                 4 => .{ .y = 1 },
                 5 => .{ .y = -1 },
                 else => unreachable,
-            } },
+            } } else null,
             else => .{ .mouse_button = .{
                 .state = switch (event.type) {
                     xlib.ButtonPress => .pressed,
