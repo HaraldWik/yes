@@ -15,7 +15,7 @@ pub fn main(init: std.process.Init) !void {
     const window = cross_window.interface(platform);
     try window.open(platform, .{
         .title = "vulkan triangle",
-        .size = .{ .width = 900, .height = 800 },
+        .size = .{ .width = 600, .height = 400 },
     });
     defer window.close(platform);
 

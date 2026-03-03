@@ -6,7 +6,6 @@ pub fn build(b: *std.Build) void {
 
     const win32 = b.dependency("win32", .{}).module("win32");
     const xpz = b.dependency("xpz", .{ .target = target, .optimize = optimize }).module("xpz");
-    // const wayland = b.dependency("wayland", .{ .target = target, .optimize = optimize });
 
     const mod = b.addModule("yes", .{
         .root_source_file = b.path("src/root.zig"),
@@ -15,20 +14,11 @@ pub fn build(b: *std.Build) void {
         .imports = &.{
             .{ .name = "win32", .module = win32 },
             .{ .name = "xpz", .module = xpz },
-            // .{ .name = "wayland", .module = wayland.module("wayland_core") },
-            // .{ .name = "wayland_protocol", .module = wayland.module("wayland_client_protocol") },
-            // .{ .name = "xdg_shell", .module = wayland.module("xdg_shell_client_protocol") },
         },
     });
 
-    // addWayland(b, mod, target, optimize);
-
-    const options = b.addOptions();
-    const xlib_option = b.option(bool, "xlib", "Allow use of xlib") orelse false; // Linux
+    const xlib_option = b.option(bool, "xlib", "Allow use of xlib platform") orelse false; // Linux
     const wayland_option = b.option(bool, "wayland", "Links with wayland libraries") orelse false; // Linux
-
-    options.addOption(bool, "xlib", xlib_option);
-    options.addOption(bool, "wayland", wayland_option);
 
     switch (target.result.os.tag) {
         .windows, .wasi => {},
@@ -40,6 +30,9 @@ pub fn build(b: *std.Build) void {
         },
     }
 
+    const options = b.addOptions();
+    options.addOption(bool, "xlib", xlib_option);
+    options.addOption(bool, "wayland", wayland_option);
     mod.addOptions("build_options", options);
 }
 

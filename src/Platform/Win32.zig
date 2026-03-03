@@ -25,10 +25,8 @@ pub const Window = struct {
         opengl: OpenGL,
 
         pub const OpenGL = struct {
-            /// Device context
-            dc: win32.HDC = undefined,
-            /// Render context
-            rc: win32.HGLRC = undefined,
+            device_context: std.os.windows.HDC = undefined,
+            render_context: std.os.windows.HGLRC = undefined,
         };
     };
 
@@ -171,7 +169,7 @@ fn windowOpen(context: *anyopaque, platform_window: *Platform.Window, options: P
                 _ = win32.wglMakeCurrent(dc, rc);
             }
 
-            window.surface = .{ .opengl = .{ .dc = dc, .rc = rc } };
+            window.surface = .{ .opengl = .{ .device_context = @ptrCast(dc), .render_context = @ptrCast(rc) } };
         },
         .vulkan => {},
         .direct3d => {},
@@ -184,7 +182,7 @@ fn windowClose(context: *anyopaque, platform_window: *Platform.Window) void {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
 
-    if (window.surface == .opengl) _ = win32.wglDeleteContext(window.surface.opengl.rc);
+    if (window.surface == .opengl) _ = win32.wglDeleteContext(@ptrCast(window.surface.opengl.render_context));
     _ = win32.DestroyWindow(@ptrCast(window.hwnd));
     _ = win32.UnregisterClassW(window.class.lpszClassName, @ptrCast(self.instance));
 }
@@ -361,7 +359,7 @@ fn windowOpenglMakeCurrent(context: *anyopaque, platform_window: *Platform.Windo
     std.debug.assert(window.surface == .opengl);
     const opengl = window.surface.opengl;
 
-    if (!win32.SUCCEEDED(win32.wglMakeCurrent(opengl.dc, opengl.rc))) return reportErr(error.WglMakeCurrent);
+    if (!win32.SUCCEEDED(win32.wglMakeCurrent(@ptrCast(opengl.device_context), @ptrCast(opengl.render_context)))) return reportErr(error.WglMakeCurrent);
 }
 fn windowOpenglSwapBuffers(context: *anyopaque, platform_window: *Platform.Window) anyerror!void {
     const self: *@This() = @ptrCast(@alignCast(context));
@@ -371,7 +369,7 @@ fn windowOpenglSwapBuffers(context: *anyopaque, platform_window: *Platform.Windo
     std.debug.assert(window.surface == .opengl);
     const opengl = window.surface.opengl;
 
-    if (!win32.SUCCEEDED(win32.SwapBuffers(opengl.dc))) return reportErr(error.WglSwapBuffers);
+    if (!win32.SUCCEEDED(win32.SwapBuffers(@ptrCast(opengl.device_context)))) return reportErr(error.WglSwapBuffers);
 }
 fn windowOpenglSwapInterval(context: *anyopaque, platform_window: *Platform.Window, interval: i32) anyerror!void {
     const self: *@This() = @ptrCast(@alignCast(context));
