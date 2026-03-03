@@ -12,11 +12,19 @@ pub const Event = @import("event.zig").Event;
 pub const Size = extern struct {
     width: u32 = 0,
     height: u32 = 0,
+
+    pub fn eql(a: @This(), b: @This()) bool {
+        return a.width == b.width and a.height == b.height;
+    }
 };
 
 pub const Position = extern struct {
     x: i32 = 0,
     y: i32 = 0,
+
+    pub fn eql(a: @This(), b: @This()) bool {
+        return a.x == b.x and a.y == b.y;
+    }
 };
 
 pub const OpenOptions = struct {

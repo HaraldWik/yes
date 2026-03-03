@@ -264,7 +264,7 @@ fn windowPoll(context: *anyopaque, platform_window: *Platform.Window) anyerror!?
                     win32.WM_RBUTTONUP, win32.WM_MBUTTONUP, win32.WM_LBUTTONUP, win32.WM_XBUTTONUP => .released,
                     else => unreachable,
                 },
-                .type = Platform.Window.Event.MouseButton.Kind.fromWin32(button, msg.wParam) orelse return null,
+                .type = Platform.Window.Event.MouseButton.Type.fromWin32(button, msg.wParam) orelse return null,
                 .position = .{
                     .x = @intCast(@as(u16, @truncate(@as(usize, @intCast(msg.lParam))))),
                     .y = @intCast(@as(u16, @truncate(@as(usize, @intCast(msg.lParam >> 16))))),

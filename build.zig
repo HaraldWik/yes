@@ -21,24 +21,45 @@ pub fn build(b: *std.Build) void {
         },
     });
 
-    _ = mod;
-
     // addWayland(b, mod, target, optimize);
 
-    // const options = b.addOptions();
-    // const wayland_option = b.option(bool, "wayland", "Links with wayland libraries") orelse false; // Linux
+    const options = b.addOptions();
+    const xlib_option = b.option(bool, "xlib", "Allow use of xlib") orelse false; // Linux
+    const wayland_option = b.option(bool, "wayland", "Links with wayland libraries") orelse false; // Linux
 
-    // options.addOption(bool, "wayland", wayland_option);
+    options.addOption(bool, "xlib", xlib_option);
+    options.addOption(bool, "wayland", wayland_option);
 
-    // switch (target.result.os.tag) {
-    //     .windows, .wasi => {},
-    //     .macos => {},
-    //     else => if (wayland_option) {
-    //         addWayland(b, mod, target, optimize);
-    //     },
-    // }
+    switch (target.result.os.tag) {
+        .windows, .wasi => {},
+        .macos => {},
+        else => {
+            if (xlib_option) addXlib(b, mod, target, optimize);
+            // if (wayland_option) addWayland(b, mod, target, optimize);
+            if (xlib_option or wayland_option) addXkbcommon(b, mod, target, optimize);
+        },
+    }
 
-    // mod.addOptions("build_options", options);
+    mod.addOptions("build_options", options);
+}
+
+pub fn addXlib(b: *std.Build, mod: *std.Build.Module, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) void {
+    const xlib = b.addTranslateC(.{
+        .root_source_file = b.addWriteFiles().add("c.h",
+            \\#include <X11/Xlib.h>
+            \\#include <X11/Xutil.h>
+            \\#include <X11/Xatom.h>
+            \\#include <GL/glx.h>
+            \\#include <X11/extensions/Xrandr.h>
+        ),
+        .target = target,
+        .optimize = optimize,
+    }).createModule();
+    xlib.addIncludePath(b.lazyDependency("xlib", .{}).?.path("include/X11/"));
+    xlib.linkSystemLibrary("X11", .{});
+    xlib.linkSystemLibrary("Xrandr", .{});
+    xlib.linkSystemLibrary("glx", .{});
+    mod.addImport("xlib", xlib);
 }
 
 pub fn addWayland(b: *std.Build, mod: *std.Build.Module, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) void {
@@ -88,15 +109,15 @@ pub fn addWayland(b: *std.Build, mod: *std.Build.Module, target: std.Build.Resol
 }
 
 pub fn addXkbcommon(b: *std.Build, mod: *std.Build.Module, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) void {
-    const lib = b.lazyDependency("xkbcommon", .{
+    const xkbcommon_dep = b.lazyDependency("xkbcommon", .{
         .target = target,
         .optimize = optimize,
 
         .@"xkb-config-root" = "/usr/share/X11/xkb",
         .@"x-locale-root" = "/usr/share/X11/locale",
     }).?;
-    const headers = b.lazyDependency("xkbcommon_headers", .{}).?;
-    const c = b.addTranslateC(.{
+    const xkbcommon_headers = b.lazyDependency("xkbcommon_headers", .{}).?;
+    const xkbcommon = b.addTranslateC(.{
         .root_source_file =
         // b.dependency("xkbcommon_headers", .{}).path("include/xkbcommon/xkbcommon.h"),
         b.addWriteFiles().add("xkb.c",
@@ -106,7 +127,7 @@ pub fn addXkbcommon(b: *std.Build, mod: *std.Build.Module, target: std.Build.Res
         .target = target,
         .optimize = optimize,
     }).createModule();
-    c.addIncludePath(headers.path("include/"));
-    c.linkLibrary(lib.artifact("xkbcommon"));
-    mod.addImport("xcb_common", c);
+    xkbcommon.addIncludePath(xkbcommon_headers.path("include/"));
+    xkbcommon.linkLibrary(xkbcommon_dep.artifact("xkbcommon"));
+    mod.addImport("xkbcommon", xkbcommon);
 }

@@ -320,12 +320,12 @@ pub const Event = union(enum) {
 
     pub const MouseButton = struct {
         state: State,
-        type: Kind,
+        type: Type,
         position: Position,
 
         pub const State = Key.State;
 
-        pub const Kind = enum {
+        pub const Type = enum {
             left,
             right,
             middle,

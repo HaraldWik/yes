@@ -32,7 +32,7 @@ pub const Surface = opaque {
                 next: ?*const anyopaque = null,
                 flags: u32 = 0,
                 display: *anyopaque,
-                window: c_uint = 0,
+                window: c_ulong = 0,
             };
 
             pub const Xcb = extern struct {

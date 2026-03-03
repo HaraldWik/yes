@@ -17,11 +17,14 @@ pub fn main(init: std.process.Init) !void {
     try window.open(platform, .{
         .title = "Window 🇸🇪👺🌶️🫑",
         .size = .{ .width = 600, .height = 400 },
-        .min_size = .{ .width = 200, .height = 300 },
+        .min_size = .{ .width = 300, .height = 200 },
+        .max_size = .{ .width = 900, .height = 600 },
     });
     defer window.close(platform);
 
     var fullscreen: bool = false;
+    var maximize: bool = false;
+    var minimize: bool = false;
 
     main: while (true) {
         while (try window.poll(platform)) |event| switch (event) {
@@ -33,8 +36,23 @@ pub fn main(init: std.process.Init) !void {
             },
             .key => |key| {
                 std.log.info("{t:<8} {t}", .{ key.state, key.sym });
-                if (key.state == .released and key.sym == .enter)
-                    try window.setTitle(platform, "Window! 👺🌶️🫑");
+                if (key.state != .released) continue;
+
+                if (key.sym == .enter)
+                    try window.setTitle(platform, "You pressed enter!");
+
+                if (key.sym == .f) {
+                    fullscreen = !fullscreen;
+                    try window.setFullscreen(platform, fullscreen);
+                }
+                if (key.sym == .m) {
+                    maximize = !maximize;
+                    try window.setMaximize(platform, fullscreen);
+                }
+                if (key.sym == .n) {
+                    minimize = !minimize;
+                    try window.setMinimize(platform, fullscreen);
+                }
             },
             .mouse_move => {},
             .mouse_button => |button| {

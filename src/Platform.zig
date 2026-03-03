@@ -11,6 +11,8 @@ pub const Cross = @import("Platform/Cross.zig");
 pub const Win32 = @import("Platform/Win32.zig");
 /// X-protocol implementation written in zig
 pub const Xpz = @import("Platform/Xpz.zig");
+/// Xlib
+pub const Xlib = @import("Platform/Xlib.zig");
 /// Default Wayland Client
 pub const Wayland = @import("Platform/Wayland.zig");
 
