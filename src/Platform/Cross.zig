@@ -13,6 +13,17 @@ pub const Inner = switch (builtin.os.tag) {
         xpz: Platform.Xpz,
         xlib: if (build_options.xlib) Platform.Xlib else void,
         wayland: Platform.Wayland,
+
+        pub fn isX(self: @This()) bool {
+            switch (self) {
+                .xpz, .xlib => true,
+                else => false,
+            }
+        }
+
+        pub fn isWayland(self: @This()) bool {
+            return !self.isX();
+        }
     },
 };
 
