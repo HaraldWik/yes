@@ -30,29 +30,18 @@ pub const fragment_source: [*:0]const u8 =
 pub fn main(init: std.process.Init) !void {
     const allocator = init.gpa;
     const io = init.io;
-    var cross_platform = switch (builtin.os.tag) {
-        .windows => try yes.Platform.Win32.get(allocator),
-        else => platform: {
-            var xpz: yes.Platform.Xpz = undefined;
-            try xpz.init(io, init.minimal);
-            break :platform xpz;
-        },
-    };
-    defer switch (builtin.os.tag) {
-        .windows => {},
-        else => cross_platform.deinit(io),
-    };
 
+    var cross_platform: yes.Platform.Cross = try .init(allocator, io, init.minimal);
+    defer cross_platform.deinit();
     const platform = cross_platform.platform();
 
-    var cross_window: switch (builtin.os.tag) {
-        .windows => yes.Platform.Win32.Window,
-        else => yes.Platform.Xpz.Window,
-    } = .{};
-    const window = &cross_window.interface;
+    var cross_window: yes.Platform.Cross.Window = .empty(platform);
+    const window = cross_window.interface(platform);
     try window.open(platform, .{
-        .title = "OpenGL Window!",
+        .title = "OpenGL Triangle",
         .size = .{ .width = 600, .height = 400 },
+        .min_size = .{ .width = 300, .height = 200 },
+        .max_size = .{ .width = 900, .height = 600 },
         .surface_type = .{ .opengl = .{ .major = 4, .minor = 6, .patch = 0 } },
     });
     defer window.close(platform);

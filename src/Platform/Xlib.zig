@@ -13,22 +13,24 @@ atom_table: AtomTable,
 
 pub const AtomTable = struct {
     utf8_string: xlib.Atom,
-    net_wm_name: xlib.Atom,
-
-    net_wm_state: xlib.Atom,
-    net_wm_state_fullscreen: xlib.Atom,
-
-    net_wm_state_maximized_horz: xlib.Atom,
-    net_wm_state_maximized_vert: xlib.Atom,
+    net_wm: struct {
+        name: xlib.Atom,
+        state: xlib.Atom,
+        state_fullscreen: xlib.Atom,
+        state_maximized_horz: xlib.Atom,
+        state_maximized_vert: xlib.Atom,
+    },
 
     pub fn load(display: *xlib.Display) @This() {
         return .{
             .utf8_string = xlib.XInternAtom(display, "UTF8_STRING", xlib.False),
-            .net_wm_name = xlib.XInternAtom(display, "_NET_WM_NAME", xlib.False),
-            .net_wm_state = xlib.XInternAtom(display, "_NET_WM_STATE", xlib.False),
-            .net_wm_state_fullscreen = xlib.XInternAtom(display, "_NET_WM_STATE_FULLSCREEN", xlib.False),
-            .net_wm_state_maximized_horz = xlib.XInternAtom(display, "_NET_WM_STATE_MAXIMIZED_HORZ", xlib.False),
-            .net_wm_state_maximized_vert = xlib.XInternAtom(display, "_NET_WM_STATE_MAXIMIZED_VERT", xlib.False),
+            .net_wm = .{
+                .name = xlib.XInternAtom(display, "_NET_WM_NAME", xlib.False),
+                .state = xlib.XInternAtom(display, "_NET_WM_STATE", xlib.False),
+                .state_fullscreen = xlib.XInternAtom(display, "_NET_WM_STATE_FULLSCREEN", xlib.False),
+                .state_maximized_horz = xlib.XInternAtom(display, "_NET_WM_STATE_MAXIMIZED_HORZ", xlib.False),
+                .state_maximized_vert = xlib.XInternAtom(display, "_NET_WM_STATE_MAXIMIZED_VERT", xlib.False),
+            },
         };
     }
 };
@@ -37,6 +39,7 @@ pub const Window = struct {
     interface: Platform.Window = .{},
     handle: xlib.Window = 0,
     wm_delete_window: xlib.Atom = 0,
+    colormap: xlib.Colormap = 0,
     glx_context: ?*anyopaque = null,
     move_event: ?Platform.Window.Position = null,
 };
@@ -71,10 +74,61 @@ fn windowOpen(context: *anyopaque, platform_window: *Platform.Window, options: P
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
 
     const screen = xlib.DefaultScreen(self.display);
-    const root = xlib.RootWindow(self.display, screen);
+    const screen_window = xlib.RootWindow(self.display, screen);
+
+    const glx_arb_create_context_supported = if (options.surface_type == .opengl) supported: {
+        const ext_str: [*:0]const u8 = xlib.glXQueryExtensionsString(self.display, screen);
+        break :supported std.mem.containsAtLeast(u8, std.mem.span(ext_str), 1, "GLX_ARB_create_context");
+    } else false;
+    var fbconfig: ?xlib.GLXFBConfig = null;
 
     const visual: *xlib.XVisualInfo = visual: switch (options.surface_type) {
-        .opengl => {
+        .opengl => if (glx_arb_create_context_supported) {
+            const possible_attributes: []const ?[*]const c_int = &.{
+                &.{ // Full “preferred” modern attributes
+                    xlib.GLX_X_RENDERABLE,  1,
+                    xlib.GLX_DRAWABLE_TYPE, xlib.GLX_WINDOW_BIT,
+                    xlib.GLX_RENDER_TYPE,   xlib.GLX_RGBA_BIT,
+                    xlib.GLX_DOUBLEBUFFER,  1,
+                    xlib.GLX_RED_SIZE,      8,
+                    xlib.GLX_GREEN_SIZE,    8,
+                    xlib.GLX_BLUE_SIZE,     8,
+                    xlib.GLX_ALPHA_SIZE,    8,
+                    xlib.GLX_DEPTH_SIZE,    24,
+                    xlib.GLX_STENCIL_SIZE,  8,
+                    xlib.GLX_SAMPLE_BUFFERS, 1, // enable multisampling if available
+                    xlib.GLX_SAMPLES, 4, // 4x MSAA
+                    xlib.GLX_NONE,
+                },
+                &.{ // Medium fallback (drop stencil or multisample)
+                    xlib.GLX_X_RENDERABLE,  1,
+                    xlib.GLX_DRAWABLE_TYPE, xlib.GLX_WINDOW_BIT,
+                    xlib.GLX_RENDER_TYPE,   xlib.GLX_RGBA_BIT,
+                    xlib.GLX_DOUBLEBUFFER,  1,
+                    xlib.GLX_RED_SIZE,      8,
+                    xlib.GLX_GREEN_SIZE,    8,
+                    xlib.GLX_BLUE_SIZE,     8,
+                    xlib.GLX_ALPHA_SIZE,    8,
+                    xlib.GLX_DEPTH_SIZE,    24,
+                    xlib.GLX_NONE,
+                },
+                &.{ // Minimal fallback (just a drawable)
+                    xlib.GLX_X_RENDERABLE,  1,
+                    xlib.GLX_DRAWABLE_TYPE, xlib.GLX_WINDOW_BIT,
+                    xlib.GLX_RENDER_TYPE,   xlib.GLX_RGBA_BIT,
+                    xlib.GLX_NONE,
+                },
+                null,
+            };
+            for (possible_attributes) |attributes| {
+                var fb_config_count: c_int = 0;
+                const fbconfigs = xlib.glXChooseFBConfig(self.display, xlib.XDefaultScreen(self.display), attributes, &fb_config_count);
+                if (fbconfigs == null or fb_config_count == 0) continue;
+                fbconfig = fbconfigs[0];
+            }
+            if (fbconfig == null) return error.NoFbFound;
+            break :visual xlib.glXGetVisualFromFBConfig(self.display, fbconfig.?) orelse return error.GlXGetVisualFromFBConfig;
+        } else {
             var attribute_list = [_]c_int{
                 xlib.GLX_RGBA,
                 xlib.GLX_DOUBLEBUFFER,
@@ -84,7 +138,7 @@ fn windowOpen(context: *anyopaque, platform_window: *Platform.Window, options: P
                 8,
                 xlib.GLX_NONE,
             };
-            break :visual xlib.glXChooseVisual(self.display, screen, &attribute_list) orelse return error.ChooseVisual;
+            break :visual xlib.glXChooseVisual(self.display, screen, &attribute_list) orelse return error.GlXChooseVisual;
         },
         else => {
             var visual: xlib.XVisualInfo = .{
@@ -95,7 +149,7 @@ fn windowOpen(context: *anyopaque, platform_window: *Platform.Window, options: P
         },
     };
 
-    const colormap = xlib.XCreateColormap(self.display, root, visual.visual, xlib.AllocNone);
+    const colormap = xlib.XCreateColormap(self.display, screen_window, visual.visual, xlib.AllocNone);
     var window_attributes: xlib.XSetWindowAttributes = .{
         .colormap = colormap,
         .event_mask =
@@ -112,7 +166,7 @@ fn windowOpen(context: *anyopaque, platform_window: *Platform.Window, options: P
 
     window.handle = xlib.XCreateWindow(
         self.display,
-        root,
+        screen_window,
         0,
         0,
         @intCast(options.size.width),
@@ -163,10 +217,9 @@ fn windowOpen(context: *anyopaque, platform_window: *Platform.Window, options: P
         input_mode: c_ulong,
         status: c_ulong,
     };
-    const MWM_HINTS_DECORATIONS = 1 << 1;
 
     var motif_hints: MotifWmHints = .{
-        .flags = MWM_HINTS_DECORATIONS,
+        .flags = 1 << 1,
         .functions = 0,
         .decorations = @intFromBool(options.decoration),
         .input_mode = 0,
@@ -175,44 +228,36 @@ fn windowOpen(context: *anyopaque, platform_window: *Platform.Window, options: P
 
     const motif = xlib.XInternAtom(self.display, "_MOTIF_WM_HINTS", xlib.False);
 
-    _ = xlib.XChangeProperty(
-        self.display,
-        window.handle,
-        motif,
-        motif,
-        32,
-        xlib.PropModeReplace,
-        @ptrCast(&motif_hints),
-        5,
-    );
+    _ = xlib.XChangeProperty(self.display, window.handle, motif, motif, 32, xlib.PropModeReplace, @ptrCast(&motif_hints), 5);
 
     if (xlib.XMapWindow(self.display, window.handle) == xlib.False) return error.MapWindow;
     if (xlib.XFlush(self.display) == xlib.False) return error.Flush;
 
-    if (options.surface_type == .opengl)
-        window.glx_context = xlib.glXCreateContext(self.display, visual, null, @intFromBool(true)) orelse return error.CreateGlxContext;
+    // Create OpenGL context
+    switch (options.surface_type) {
+        .opengl => if (glx_arb_create_context_supported) {
+            const dummy_ctx = xlib.glXCreateContext(self.display, visual, null, 1) orelse return error.DummyContextFailed;
+            defer xlib.glXDestroyContext(self.display, dummy_ctx);
 
-    { // Send initial resize event
-        var attrs: xlib.XWindowAttributes = undefined;
-        if (xlib.XGetWindowAttributes(self.display, window.handle, &attrs) == xlib.False) return error.GetWindowAttributes;
+            const ctx_attribs: [*]const c_int = &.{
+                xlib.GLX_CONTEXT_MAJOR_VERSION_ARB, 4,
+                xlib.GLX_CONTEXT_MINOR_VERSION_ARB, 6,
+                xlib.GLX_CONTEXT_PROFILE_MASK_ARB,  xlib.GLX_CONTEXT_CORE_PROFILE_BIT_ARB,
+                0,
+            };
+            const glXCreateContextAttribsARB = @as(?*const fn (
+                display: *xlib.Display,
+                fbconfig: xlib.GLXFBConfig,
+                share_context: ?*anyopaque,
+                direct: c_int, // bool
+                attribs: [*]const c_int,
+            ) ?*anyerror, @ptrCast(xlib.glXGetProcAddressARB("glXCreateContextAttribsARB"))) orelse return error.LoadGlXCreateContextAttribsARB;
 
-        var event: xlib.XEvent = .{
-            .xconfigure = .{
-                .type = xlib.ConfigureNotify,
-                .display = self.display,
-                .event = window.handle,
-                .window = window.handle,
-                .x = attrs.x,
-                .y = attrs.y,
-                .width = attrs.width,
-                .height = attrs.height,
-                .border_width = attrs.border_width,
-                .above = xlib.None,
-                .override_redirect = xlib.False,
-            },
-        };
-        event.type = xlib.ConfigureNotify;
-        _ = xlib.XSendEvent(self.display, window.handle, xlib.False, xlib.StructureNotifyMask, &event);
+            window.glx_context = glXCreateContextAttribsARB(self.display, fbconfig.?, null, 1, ctx_attribs);
+        } else {
+            window.glx_context = xlib.glXCreateContext(self.display, visual, null, @intFromBool(true)) orelse return error.CreateGlxContext;
+        },
+        else => {},
     }
 }
 
@@ -220,6 +265,7 @@ fn windowClose(context: *anyopaque, platform_window: *Platform.Window) void {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
 
+    if (window.glx_context) |glx_context| xlib.glXDestroyContext(self.display, @ptrCast(glx_context));
     _ = xlib.XDestroyWindow(self.display, window.handle);
     window.* = undefined;
 }
@@ -304,6 +350,8 @@ fn windowSetProperty(context: *anyopaque, platform_window: *Platform.Window, pro
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
 
+    const screen = xlib.XDefaultRootWindow(self.display);
+
     switch (property) {
         .title => |title| {
             // Set legacy WM_NAME for older clients
@@ -321,7 +369,7 @@ fn windowSetProperty(context: *anyopaque, platform_window: *Platform.Window, pro
             _ = xlib.XChangeProperty(
                 self.display,
                 window.handle,
-                self.atom_table.net_wm_name,
+                self.atom_table.net_wm.name,
                 self.atom_table.utf8_string,
                 8,
                 xlib.PropModeReplace,
@@ -329,43 +377,33 @@ fn windowSetProperty(context: *anyopaque, platform_window: *Platform.Window, pro
                 @intCast(title.len),
             );
         },
-        .size => |size| {
-            _ = xlib.XResizeWindow(self.display, window.handle, size.width, size.height);
-            _ = xlib.XFlush(self.display);
-        },
-        .position => |position| {
-            _ = xlib.XMoveWindow(self.display, window.handle, @intCast(position.x), @intCast(position.y));
-            _ = xlib.XFlush(self.display);
-        },
+        .size => |size| _ = xlib.XResizeWindow(self.display, window.handle, size.width, size.height),
+        .position => |position| _ = xlib.XMoveWindow(self.display, window.handle, @intCast(position.x), @intCast(position.y)),
         .fullscreen => |fullscreen| {
             var event: xlib.XEvent = .{ .xclient = .{
                 .type = xlib.ClientMessage,
-                .message_type = self.atom_table.net_wm_state,
+                .message_type = self.atom_table.net_wm.state,
                 .display = self.display,
                 .window = window.handle,
                 .format = 32,
-                .data = .{ .l = .{ @intFromBool(fullscreen), @intCast(self.atom_table.net_wm_state_fullscreen), 0, 1, 0 } },
+                .data = .{ .l = .{ @intFromBool(fullscreen), @intCast(self.atom_table.net_wm.state_fullscreen), 0, 1, 0 } },
             } };
-
             _ = xlib.XSendEvent(self.display, xlib.DefaultRootWindow(self.display), xlib.False, xlib.SubstructureRedirectMask | xlib.SubstructureNotifyMask, &event);
-            _ = xlib.XFlush(self.display);
         },
         .maximize => |maximize| {
-            const root_screen = xlib.XDefaultRootWindow(self.display);
-
             var event: xlib.XEvent = .{
                 .xclient = .{
                     .type = xlib.ClientMessage,
                     .serial = 0,
                     .send_event = xlib.True,
-                    .message_type = self.atom_table.net_wm_state,
+                    .message_type = self.atom_table.net_wm.state,
                     .window = window.handle,
                     .format = 32,
                     .data = .{
                         .l = .{
                             @intFromBool(maximize),
-                            @intCast(self.atom_table.net_wm_state_maximized_horz),
-                            @intCast(self.atom_table.net_wm_state_maximized_vert),
+                            @intCast(self.atom_table.net_wm.state_maximized_horz),
+                            @intCast(self.atom_table.net_wm.state_maximized_vert),
                             1, // normal client source
                             0,
                         },
@@ -373,51 +411,36 @@ fn windowSetProperty(context: *anyopaque, platform_window: *Platform.Window, pro
                 },
             };
 
-            _ = xlib.XSendEvent(
-                self.display,
-                root_screen,
-                xlib.False,
-                xlib.SubstructureRedirectMask | xlib.SubstructureNotifyMask,
-                &event,
-            );
-            _ = xlib.XFlush(self.display);
+            _ = xlib.XSendEvent(self.display, screen, xlib.False, xlib.SubstructureRedirectMask | xlib.SubstructureNotifyMask, &event);
         },
-        .minimize => |minimize| {
-            const display = self.display;
-            const root_screen = xlib.XDefaultScreen(display);
-
-            if (minimize)
-                _ = xlib.XIconifyWindow(display, window.handle, root_screen)
-            else
-                _ = xlib.XMapWindow(display, window.handle);
-            _ = xlib.XFlush(display);
-        },
+        .minimize => |minimize| _ = if (minimize)
+            xlib.XIconifyWindow(self.display, window.handle, @intCast(screen))
+        else
+            xlib.XMapWindow(self.display, window.handle),
         .always_on_top => {},
         .floating => {},
     }
-}
 
+    _ = xlib.XFlush(self.display);
+}
 fn windowOpenglMakeCurrent(context: *anyopaque, platform_window: *Platform.Window) anyerror!void {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
-
-    _ = self;
-    _ = window;
+    if (window.glx_context == null) return error.NotOpenGlSurface;
+    if (xlib.glXMakeCurrent(self.display, window.handle, @ptrCast(window.glx_context)) == xlib.False) return error.GlxMakeCurrent;
 }
 fn windowOpenglSwapBuffers(context: *anyopaque, platform_window: *Platform.Window) anyerror!void {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
-
-    _ = self;
-    _ = window;
+    if (window.glx_context == null) return error.NotOpenGlSurface;
+    xlib.glXSwapBuffers(@ptrCast(self.display), window.handle);
 }
 fn windowOpenglSwapInterval(context: *anyopaque, platform_window: *Platform.Window, interval: i32) anyerror!void {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
-
-    _ = self;
-    _ = window;
-    _ = interval;
+    if (window.glx_context == null) return error.NotOpenGlSurface;
+    const glXSwapIntervalEXT: *const fn (display: *xlib.Display, drawable: xlib.Drawable, interval: i32) callconv(.c) void = @ptrCast(xlib.glXGetProcAddress("glXSwapIntervalEXT") orelse return error.SwapIntervalLoad);
+    glXSwapIntervalEXT(self.display, window.handle, interval);
 }
 fn windowVulkanCreateSurface(context: *anyopaque, platform_window: *Platform.Window, instance: *vulkan.Instance, allocator: ?*const vulkan.AllocationCallbacks, getProcAddress: vulkan.Instance.GetProcAddress) anyerror!*vulkan.Surface {
     const self: *@This() = @ptrCast(@alignCast(context));
