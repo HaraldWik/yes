@@ -20,8 +20,8 @@
         },
 
         .xkbcommon = .{
-            .url = "git+https://github.com/PaNDa2code/libxkbcommon#cd3a0642eacd4837e66cf8955f0a8ff675d47b44",
-            .hash = "libxkbcommon-1.11.0-93LaF25wAgB5JdA4saWc0sbnCTo7PEMKvJYEHw6sxYGX",
+            .url = "git+https://github.com/HaraldWik/libxkbcommon#5caf185f3c1981cc56869c690361902e5612047e",
+            .hash = "libxkbcommon-1.11.0-93LaF31wAgDBmMuuxfPTZ2xJiOc3ZOb5OwOVi4FlD5iy",
             .lazy = true,
         },
         .xkbcommon_headers = .{
