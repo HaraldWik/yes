@@ -1,15 +1,20 @@
 const std = @import("std");
 const win32 = @import("win32").everything;
-const xkb = @import("xkb");
+const xkb = @import("xkbcommon");
 const Size = @import("Window.zig").Size;
 const Position = @import("Window.zig").Position;
 
 pub const Event = union(enum) {
-    close: void,
-    focus: Focus,
+    close,
     resize: Size,
+    move: Position,
+    focus: Focus,
     key: Key,
-    mouse: Mouse,
+    mouse_move: Position,
+    /// Positive Y means wheel scrolled up (away from user).
+    /// Positive X means wheel scrolled right.
+    mouse_scroll: MouseScroll,
+    mouse_button: MouseButton,
 
     pub const Focus = enum {
         enter,
@@ -18,15 +23,13 @@ pub const Event = union(enum) {
 
     pub const Key = struct {
         state: State,
-        code: Code,
+        code: u32,
         sym: Sym,
 
         pub const State = enum(u1) {
             pressed = 1,
             released = 0,
         };
-
-        pub const Code = usize;
 
         pub const Sym = enum(u8) {
             // Digits
@@ -138,6 +141,9 @@ pub const Event = union(enum) {
             numpad_7,
             numpad_8,
             numpad_9,
+            numpad_10,
+            numpad_11,
+            numpad_12,
             numpad_add,
             numpad_subtract,
             numpad_multiply,
@@ -307,74 +313,60 @@ pub const Event = union(enum) {
         };
     };
 
-    pub const Mouse = union(enum) {
-        move: Position(u32),
-        scroll: Scroll,
-        button: Button,
+    pub const MouseScroll = union(enum) {
+        x: isize, // horizontal
+        y: isize, // vertical
+    };
 
-        pub const Scroll = union(enum) {
-            x: isize, // horizontal
-            y: isize, // vertical
-        };
+    pub const MouseButton = struct {
+        state: State,
+        type: Type,
+        position: Position,
 
-        pub const Button = struct {
-            state: State,
-            code: Code,
-            position: Position(u32),
+        pub const State = Key.State;
 
-            pub const State = Key.State;
+        pub const Type = enum {
+            left,
+            right,
+            middle,
+            forward,
+            backward,
 
-            pub const Code = enum {
-                right,
-                middle,
-                left,
-                forward,
-                backward,
+            pub fn fromWin32(button: u32, wparam: usize) ?@This() {
+                return switch (button) {
+                    win32.WM_RBUTTONDOWN, win32.WM_RBUTTONUP => .right,
+                    win32.WM_MBUTTONDOWN, win32.WM_MBUTTONUP => .middle,
+                    win32.WM_LBUTTONDOWN, win32.WM_LBUTTONUP => .left,
+                    win32.WM_XBUTTONDOWN, win32.WM_XBUTTONUP => {
+                        const data: win32.MOUSEHOOKSTRUCTEX_MOUSE_DATA = @bitCast(@as(u32, @intCast(((wparam >> 16) & 0xFFFF))));
+                        return if (std.meta.eql(data, win32.XBUTTON1)) .backward else if (std.meta.eql(data, win32.XBUTTON2)) .forward else null;
+                    },
 
-                pub fn fromWin32(button: u32, wparam: usize) ?@This() {
-                    return switch (button) {
-                        win32.WM_RBUTTONDOWN, win32.WM_RBUTTONUP => .right,
-                        win32.WM_MBUTTONDOWN, win32.WM_MBUTTONUP => .middle,
-                        win32.WM_LBUTTONDOWN, win32.WM_LBUTTONUP => .left,
-                        win32.WM_XBUTTONDOWN, win32.WM_XBUTTONUP => {
-                            const data: win32.MOUSEHOOKSTRUCTEX_MOUSE_DATA = @bitCast(@as(u32, @intCast(((wparam >> 16) & 0xFFFF))));
-                            return if (std.meta.eql(data, win32.XBUTTON1)) .backward else if (std.meta.eql(data, win32.XBUTTON2)) .forward else null;
-                        },
+                    else => null,
+                };
+            }
 
-                        else => null,
-                    };
-                }
+            pub fn fromX(button: c_uint) ?@This() {
+                return switch (button) {
+                    3 => .right,
+                    2 => .middle,
+                    1 => .left,
+                    9 => .forward,
+                    8 => .backward,
+                    else => null,
+                };
+            }
 
-                pub fn fromX11(button: c_uint) ?@This() {
-                    return switch (button) {
-                        3 => .right,
-                        2 => .middle,
-                        1 => .left,
-                        9 => .forward,
-                        8 => .backward,
-                        else => null,
-                    };
-                }
-
-                pub fn fromWayland(button: u32) ?@This() {
-                    return switch (button) {
-                        272 => .left,
-                        274 => .middle,
-                        273 => .right,
-                        276 => .forward,
-                        275 => .backward,
-                        else => null,
-                    };
-                }
-            };
+            pub fn fromWayland(button: u32) ?@This() {
+                return switch (button) {
+                    272 => .left,
+                    274 => .middle,
+                    273 => .right,
+                    276 => .forward,
+                    275 => .backward,
+                    else => null,
+                };
+            }
         };
     };
-};
-
-pub const Keyboard = struct {
-    keys: [std.math.maxInt(std.meta.Tag(Event.Key.Sym))]Event.Key.State = @splat(.released),
-
-    pub fn get(self: @This(), key: Event.Key.Sym) Event.Key.State {
-        return self.keys[@intFromEnum(key)];
-    }
 };

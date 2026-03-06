@@ -2,80 +2,77 @@ const std = @import("std");
 const builtin = @import("builtin");
 const yes = @import("yes");
 
-pub fn main(init: std.process.Init.Minimal) !void {
-    const context: yes.Context = .get(init);
+// example args "zig build run -- --xdg=x11"
 
-    var buffer: [128]u8 = undefined;
-    var it: yes.Monitor.Iterator = .init(context, &buffer);
-    while (it.next() catch null) |monitor| {
-        std.debug.print("monitor: {s}\n\tsize: {any}, physical size: {any}\n\tposition: {any}\n\tscale: {d:.3}\n\torientation: {t}\n", .{
-            monitor.name orelse "unknown",
-            monitor.size,
-            monitor.physical_size,
-            monitor.position,
-            monitor.scale,
-            monitor.orientation,
-        });
-    }
-    std.debug.print("\n", .{});
+pub fn main(init: std.process.Init) !void {
+    const allocator = init.gpa;
+    const io = init.io;
 
-    const monitor: yes.Monitor = .primary(context, &buffer);
+    var cross_platform: yes.Platform.Cross = try .init(allocator, io, init.minimal);
+    defer cross_platform.deinit();
+    const platform = cross_platform.platform();
 
-    var window: yes.Window = try .open(context, .{
-        .title = "Title 😀✅♥",
-        .size = .{ .width = 900, .height = 600 },
-        .decoration = true,
+    var cross_window: yes.Platform.Cross.Window = .empty(platform);
+    const window = cross_window.interface(platform);
+    try window.open(platform, .{
+        .title = "Window 🇸🇪👺🌶️🫑",
+        .size = .{ .width = 600, .height = 400 },
+        .min_size = .{ .width = 300, .height = 200 },
+        .max_size = .{ .width = 900, .height = 600 },
     });
-    defer window.close();
-    try window.setPosition(monitor.position);
+    defer window.close(platform);
 
-    var is_fullscreen: bool = false;
-    var is_maximize: bool = false;
-    main_loop: while (true) {
-        while (try window.poll()) |event| switch (event) {
-            .close => break :main_loop,
-            .focus => |focus| std.debug.print("Focus {t}\n", .{focus}),
-            .resize => |size| {
-                const width, const height = window.getSize().toArray();
-                std.debug.print("width: {d} == {d}, height: {d} == {d}\n", .{ size.width, width, size.height, height });
+    var fullscreen: bool = false;
+    var maximize: bool = false;
+    var minimize: bool = false;
 
-                if (builtin.os.tag != .windows) if (context.posix_platform == .wayland) {
-                    @memset(window.handle.wayland.api.none.pixels, 127);
-                };
-            },
-            .mouse => |mouse| switch (mouse) {
-                .button => |button| {
-                    std.debug.print("'mouse button {t} {t}'\t", .{ button.code, button.state });
-                    std.debug.print("({d}, {d})\n", .{ button.position.x, button.position.y });
-                },
-                .move => |pos| {
-                    if (window.keyboard.get(.@"1") == .pressed) std.debug.print("moved: ({d}, {d})\n", .{ pos.x, pos.y });
-                },
-                .scroll => |scroll| std.debug.print("scroll: {any}\n", .{scroll}),
+    main: while (true) {
+        while (try window.poll(platform)) |event| switch (event) {
+            .close => break :main,
+            .resize => |size| std.log.info("resize: {d} x {d}", .{ size.width, size.height }),
+            .move => |position| std.log.info("move: {d} x {d}", .{ position.x, position.y }),
+            .focus => |focus| {
+                std.log.info("focus: {t}", .{focus});
             },
             .key => |key| {
-                std.debug.print("{t:<7} {t:<10} {d:3}\n", .{
-                    key.state,
-                    key.sym,
-                    key.code,
-                });
+                std.log.info("{t:<8} {t}", .{ key.state, key.sym });
+                if (key.state != .released) continue;
 
-                if (key.state == .released) switch (key.sym) {
-                    .f => {
-                        is_fullscreen = !is_fullscreen;
-                        window.fullscreen(is_fullscreen);
-                    },
-                    .m => {
-                        is_maximize = !is_maximize;
-                        window.maximize(is_maximize);
-                    },
-                    .n => window.minimize(),
-                    .t => window.setTitle("You pressed T!"),
-                    else => {},
-                };
+                if (key.sym == .enter)
+                    try window.setTitle(platform, "You pressed enter!");
+
+                if (key.sym == .f) {
+                    fullscreen = !fullscreen;
+                    try window.setFullscreen(platform, fullscreen);
+                }
+                if (key.sym == .m) {
+                    maximize = !maximize;
+                    try window.setMaximize(platform, fullscreen);
+                }
+                if (key.sym == .n) {
+                    minimize = !minimize;
+                    try window.setMinimize(platform, fullscreen);
+                }
+            },
+            .mouse_move => {},
+            .mouse_button => |button| {
+                std.log.info("{t:<8} mouse button {t:<8} at {d} x {d}", .{ button.state, button.type, button.position.x, button.position.y });
+                if (button.state == .pressed and button.type == .left)
+                    try window.setTitle(platform, "Window! 👺🌶️🫑");
+                if (button.state == .pressed and button.type == .right)
+                    try window.setTitle(platform, "Window 🇸🇪");
+
+                if (button.state == .released and button.type == .middle) {
+                    fullscreen = !fullscreen;
+                    try window.setFullscreen(platform, fullscreen);
+                }
+            },
+            .mouse_scroll => |scroll| {
+                std.log.info("mouse scroll: {t}: {d:2}", .{ scroll, switch (scroll) {
+                    .x => scroll.x,
+                    .y => scroll.y,
+                } });
             },
         };
-
-        if (window.keyboard.get(.escape) == .pressed) break;
     }
 }

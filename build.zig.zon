@@ -8,27 +8,43 @@
             .url = "git+https://github.com/SquareMan/zigwin32#01df0ea99ae90afc3f46117055ab788646872eba",
             .hash = "zigwin32-25.0.28-preview-qYSj4tyL5APmYxQI4_nKfd431j6VtaZnQkOb9IY6o5TR",
         },
+
+        .xpz = .{
+            .url = "git+https://github.com/HaraldWik/xpz#eb34851ec1e6a8c303326e7bf813ba647a8f871d",
+            .hash = "xpz-0.0.0-_a41ws95AQB-Q_J_KlJBNDkUEJxv_SZAyoF6LvVj3pgU",
+        },
+        .xlib = .{
+            .url = "git+https://github.com/mirror/libX11/#ff8706a5eae25b8bafce300527079f68a201d27f",
+            .hash = "N-V-__8AACyQxwDUvMZdHuuzwuP1mlGU6uroadqmQvBwevJX",
+            .lazy = true,
+        },
+
         .xkbcommon = .{
-            .url = "git+https://github.com/allyourcodebase/libxkbcommon.git?ref=1.11.0-1#809157d5118909298f3e086fa8d8103198e938fd",
-            .hash = "libxkbcommon-1.11.0-1-93LaF6pwAgDFoaLfOkR8ioG4RVcDHbBhsDmC_rYwyOEG",
+            .url = "git+https://github.com/HaraldWik/libxkbcommon#5caf185f3c1981cc56869c690361902e5612047e",
+            .hash = "libxkbcommon-1.11.0-93LaF31wAgDBmMuuxfPTZ2xJiOc3ZOb5OwOVi4FlD5iy",
+            .lazy = true,
         },
         .xkbcommon_headers = .{
             .url = "git+https://github.com/xkbcommon/libxkbcommon#99e9b0fc558fb838a04c568bea033c52ffbe704b",
             .hash = "N-V-__8AABlybQDWXn3GPnoYnvJ-umU89n4-fxdyXvALT-W-",
-        },
-        .x11 = .{
-            .url = "git+https://github.com/mirror/libX11/#ff8706a5eae25b8bafce300527079f68a201d27f",
-            .hash = "N-V-__8AACyQxwDUvMZdHuuzwuP1mlGU6uroadqmQvBwevJX",
-        },
-        .wayland = .{
-            .url = "git+https://github.com/wayland-mirror/wayland/#1ab6b693b16e1d9734496fe60c8a6ed277e4dec3",
-            .hash = "N-V-__8AAFL0GACxHb3Q_xuatHOFPnAcgBEdNcfE1vcr-iT2",
+            .lazy = true,
         },
 
-        .egl = .{
-            .url = "git+https://github.com/KhronosGroup/EGL-Registry/#3ae2b7c48690d2ce13cc6db3db02dfc0572be65e",
-            .hash = "N-V-__8AAMlebQAc6dRDTEIyEn_i5KeO8qNg3YdK_Sg1KgDT",
-        },
+        // .wayland = .{
+        //     .url = "git+https://github.com/wayland-mirror/wayland/#1ab6b693b16e1d9734496fe60c8a6ed277e4dec3",
+        //     .hash = "N-V-__8AAFL0GACxHb3Q_xuatHOFPnAcgBEdNcfE1vcr-iT2",
+        //     // .lazy = true,
+        // },
+        // .@"wayland-protocols" = .{
+        //     .url = "https://gitlab.freedesktop.org/wayland/wayland-protocols/-/archive/1.38/wayland-protocols-1.38.tar.gz",
+        //     .hash = "1220668467dd0d0970eb95e53b9e503f5a68801528d5978652ffc275f987aff0a4d8",
+        // },
+
+        // .egl = .{
+        //     .url = "git+https://github.com/KhronosGroup/EGL-Registry/#3ae2b7c48690d2ce13cc6db3db02dfc0572be65e",
+        //     .hash = "N-V-__8AAMlebQAc6dRDTEIyEn_i5KeO8qNg3YdK_Sg1KgDT",
+        // },
+
     },
     .paths = .{
         "build.zig",

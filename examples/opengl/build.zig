@@ -4,7 +4,7 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const yes = b.dependency("yes", .{ .target = target, .optimize = optimize }).module("yes");
+    const yes = b.dependency("yes", .{ .target = target, .optimize = optimize, .xlib = true }).module("yes");
     const gl = b.dependency("zig_opengl", .{ .target = target, .optimize = optimize }).module("zig_opengl");
 
     const exe = b.addExecutable(.{

@@ -1,62 +1,40 @@
 const std = @import("std");
 const builtin = @import("builtin");
-const Window = @import("window/Window.zig");
-const native = @import("root.zig").native;
-
-pub const wgl = @import("root.zig").native.win32.graphics.open_gl;
-pub const glx = @import("root.zig").native.posix.x11;
-pub const egl = @import("egl");
+const Platform = @import("Platform.zig");
 
 pub const APIENTRY: std.builtin.CallingConvention = if (builtin.os.tag == .windows) .winapi else .c;
 
-pub const Proc = *const fn () callconv(APIENTRY) void;
+pub const Proc = switch (builtin.os.tag) {
+    .windows => *const fn () callconv(.winapi) isize,
+    else => *const fn () callconv(.c) void,
+};
+
+extern "opengl32" fn wglGetProcAddress(
+    param0: [*:0]const u8,
+) callconv(.winapi) ?Proc;
 
 pub fn getProcAddress(name: [*:0]const u8) ?Proc {
-    return switch (native.os) {
+    return switch (builtin.os.tag) {
         .windows => proc: {
             const win32 = @import("win32").everything;
-            if (wgl.wglGetProcAddress(name)) |proc| break :proc @ptrCast(proc);
+            if (wglGetProcAddress(name)) |proc| break :proc @ptrCast(proc);
             const gl = win32.LoadLibraryA("opengl32.dll") orelse return null;
             if (win32.GetProcAddress(gl, name)) |proc| break :proc @ptrCast(proc);
             break :proc null;
         },
-        else => glx.glXGetProcAddress(name) orelse egl.eglGetProcAddress(name),
+        else => null,
+        // glx.glXGetProcAddress(name) orelse egl.eglGetProcAddress(name),
     };
 }
 
-pub fn makeCurrent(window: Window) !void {
-    switch (native.os) {
-        .windows => if (wgl.wglMakeCurrent(window.handle.api.opengl.dc, window.handle.api.opengl.rc) == wgl.GL_FALSE) return error.WglMakeCurrent,
-        else => switch (window.handle) {
-            .x11 => |handle| if (glx.glXMakeCurrent(handle.display, handle.window, handle.api.opengl.context) == glx.False) return error.GlxMakeCurrent,
-            .wayland => |handle| if (egl.eglMakeCurrent(handle.api.opengl.display, handle.api.opengl.surface, handle.api.opengl.surface, handle.api.opengl.context) != egl.EGL_TRUE) return error.EglMakeCurrent,
-        },
-    }
+pub fn makeCurrent(platform: Platform, window: *Platform.Window) !void {
+    try platform.vtable.windowOpenglMakeCurrent(platform.ptr, window);
 }
 
-pub fn swapBuffers(window: Window) !void {
-    switch (native.os) {
-        .windows => if (!native.win32.everything.SUCCEEDED(wgl.SwapBuffers(window.handle.api.opengl.dc))) return error.SwapBuffers,
-        else => switch (window.handle) {
-            .x11 => |handle| glx.glXSwapBuffers(@ptrCast(handle.display), handle.window),
-            .wayland => |handle| {
-                if (egl.eglSwapBuffers(handle.api.opengl.display, handle.api.opengl.surface) != egl.EGL_TRUE) return error.EglSwapBuffers;
-                native.posix.wayland.client.wl_surface_commit(handle.surface);
-                if (native.posix.wayland.client.wl_display_flush(handle.display) < 0) return error.FlushDisplay;
-            },
-        },
-    }
+pub fn swapBuffers(platform: Platform, window: *Platform.Window) !void {
+    try platform.vtable.windowOpenglSwapBuffers(platform.ptr, window);
 }
 
-pub fn swapInterval(window: Window, interval: i32) !void {
-    switch (native.os) {
-        .windows => if (window.handle.api.opengl.wgl.swapIntervalEXT(interval) == 0) return error.SwapInterval,
-        else => switch (window.handle) {
-            .x11 => {
-                const glXSwapIntervalEXT: *const fn (display: *glx.Display, drawable: glx.Drawable, interval: c_int) callconv(.c) void = @ptrCast(glx.glXGetProcAddress("glXSwapIntervalEXT") orelse return error.SwapIntervalLoad);
-                glXSwapIntervalEXT(window.handle.x11.display, window.handle.x11.window, @intCast(interval));
-            },
-            .wayland => if (egl.eglSwapInterval(window.handle.wayland.api.opengl.display, @intCast(interval)) != egl.EGL_TRUE) return error.SwapInterval,
-        },
-    }
+pub fn swapInterval(platform: Platform, window: *Platform.Window, interval: i32) !void {
+    try platform.vtable.windowOpenglSwapInterval(platform.ptr, window, interval);
 }
