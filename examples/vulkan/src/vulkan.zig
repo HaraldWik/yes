@@ -27,7 +27,6 @@ pub fn check(result: vk.VkResult) !void {
         vk.VK_ERROR_TOO_MANY_OBJECTS => error.TooManyObjects,
         vk.VK_ERROR_FORMAT_NOT_SUPPORTED => error.FormatNotSupported,
         vk.VK_ERROR_FRAGMENTED_POOL => error.FragmentedPool,
-        vk.VK_ERROR_UNKNOWN => error.Unknown,
         vk.VK_ERROR_VALIDATION_FAILED => error.ValidationFailed,
         vk.VK_ERROR_OUT_OF_POOL_MEMORY => error.OutOfPoolMemory,
         vk.VK_ERROR_INVALID_EXTERNAL_HANDLE => error.InvalidExternalHandle,

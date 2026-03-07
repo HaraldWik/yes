@@ -356,9 +356,7 @@ fn windowOpenglMakeCurrent(context: *anyopaque, platform_window: *Platform.Windo
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
     _ = self;
 
-    std.debug.assert(window.surface == .opengl);
     const opengl = window.surface.opengl;
-
     if (!win32.SUCCEEDED(win32.wglMakeCurrent(@ptrCast(opengl.device_context), @ptrCast(opengl.render_context)))) return reportErr(error.WglMakeCurrent);
 }
 fn windowOpenglSwapBuffers(context: *anyopaque, platform_window: *Platform.Window) anyerror!void {
@@ -366,9 +364,7 @@ fn windowOpenglSwapBuffers(context: *anyopaque, platform_window: *Platform.Windo
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
     _ = self;
 
-    std.debug.assert(window.surface == .opengl);
     const opengl = window.surface.opengl;
-
     if (!win32.SUCCEEDED(win32.SwapBuffers(@ptrCast(opengl.device_context)))) return reportErr(error.WglSwapBuffers);
 }
 fn windowOpenglSwapInterval(context: *anyopaque, platform_window: *Platform.Window, interval: i32) anyerror!void {

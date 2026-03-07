@@ -1,11 +1,13 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const Platform = @import("Platform.zig");
+const opengl = @import("opengl.zig");
 
 const Window = @This();
 
 size: Size = .{},
 position: Position = .{},
+surface_type: SurfaceType = .empty,
 
 pub const Event = @import("event.zig").Event;
 
@@ -15,6 +17,10 @@ pub const Size = extern struct {
 
     pub fn eql(a: @This(), b: @This()) bool {
         return a.width == b.width and a.height == b.height;
+    }
+
+    pub fn aspect(self: @This()) f32 {
+        return @as(f32, @floatFromInt(self.width)) / @as(f32, @floatFromInt(self.height));
     }
 };
 
@@ -27,37 +33,28 @@ pub const Position = extern struct {
     }
 };
 
-pub const OpenOptions = struct {
-    title: []const u8,
-    size: Size,
-    position: Position = .{},
-    min_size: ?Size = null,
-    max_size: ?Size = null,
-    resizable: bool = true,
-    decoration: bool = true,
-    surface_type: SurfaceType = .empty,
-
-    pub const SurfaceType = switch (builtin.os.tag) {
-        .windows => union(enum) {
-            empty,
-            framebuffer,
-            opengl: std.SemanticVersion,
-            vulkan: std.SemanticVersion,
-            direct3d: std.SemanticVersion,
-        },
-        .macos, .ios => union(enum) {
-            empty,
-            framebuffer,
-            opengl: std.SemanticVersion,
-            metal: std.SemanticVersion,
-        },
-        else => union(enum) {
-            empty,
-            framebuffer,
-            opengl: std.SemanticVersion,
-            vulkan: std.SemanticVersion,
-        },
-    };
+pub const SurfaceType = switch (builtin.os.tag) {
+    .windows => union(enum) {
+        empty,
+        software,
+        opengl: opengl.Version,
+        vulkan,
+        /// Example version 12 or 11
+        direct3d: u8,
+    },
+    .macos, .ios => union(enum) {
+        empty,
+        software,
+        /// Max version is 4.1
+        opengl: opengl.Version,
+        metal,
+    },
+    else => union(enum) {
+        empty,
+        software,
+        opengl: opengl.Version,
+        vulkan,
+    },
 };
 
 pub const Property = union(enum) {
@@ -71,7 +68,19 @@ pub const Property = union(enum) {
     floating: bool,
 };
 
+pub const OpenOptions = struct {
+    title: []const u8,
+    size: Size,
+    position: Position = .{},
+    min_size: ?Size = null,
+    max_size: ?Size = null,
+    resizable: bool = true,
+    decoration: bool = true,
+    surface_type: SurfaceType = .empty,
+};
+
 pub fn open(window: *Window, platform: Platform, options: OpenOptions) anyerror!void {
+    window.surface_type = options.surface_type;
     try platform.vtable.windowOpen(platform.ptr, window, options);
 }
 pub fn close(window: *Window, platform: Platform) void {

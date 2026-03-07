@@ -256,8 +256,21 @@ fn windowOpen(context: *anyopaque, platform_window: *Platform.Window, options: P
         },
         else => {},
     }
-}
 
+    // { // Initial resize event
+    //     var event: xlib.XEvent = .{ .xconfigure = .{
+    //         .window = window.handle,
+    //         .width = @intCast(options.size.width),
+    //         .height = @intCast(options.size.height + 100),
+    //         .event = window.handle,
+    //         .send_event = xlib.True,
+    //     } };
+    //     event.type = xlib.ConfigureNotify;
+
+    //     _ = xlib.XSendEvent(self.display, window.handle, xlib.False, xlib.StructureNotifyMask, &event);
+    //     _ = xlib.XFlush(self.display);
+    // }
+}
 fn windowClose(context: *anyopaque, platform_window: *Platform.Window) void {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
@@ -266,7 +279,6 @@ fn windowClose(context: *anyopaque, platform_window: *Platform.Window) void {
     _ = xlib.XDestroyWindow(self.display, window.handle);
     window.* = undefined;
 }
-
 fn windowPoll(context: *anyopaque, platform_window: *Platform.Window) anyerror!?Platform.Window.Event {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
@@ -341,7 +353,6 @@ fn windowPoll(context: *anyopaque, platform_window: *Platform.Window) anyerror!?
         else => null,
     };
 }
-
 fn windowSetProperty(context: *anyopaque, platform_window: *Platform.Window, property: Platform.Window.Property) anyerror!void {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
@@ -422,19 +433,16 @@ fn windowSetProperty(context: *anyopaque, platform_window: *Platform.Window, pro
 fn windowOpenglMakeCurrent(context: *anyopaque, platform_window: *Platform.Window) anyerror!void {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
-    if (window.glx_context == null) return error.NotOpenGlSurface;
     if (xlib.glXMakeCurrent(self.display, window.handle, @ptrCast(window.glx_context)) == xlib.False) return error.GlxMakeCurrent;
 }
 fn windowOpenglSwapBuffers(context: *anyopaque, platform_window: *Platform.Window) anyerror!void {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
-    if (window.glx_context == null) return error.NotOpenGlSurface;
     xlib.glXSwapBuffers(@ptrCast(self.display), window.handle);
 }
 fn windowOpenglSwapInterval(context: *anyopaque, platform_window: *Platform.Window, interval: i32) anyerror!void {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
-    if (window.glx_context == null) return error.NotOpenGlSurface;
     const glXSwapIntervalEXT: *const fn (display: *xlib.Display, drawable: xlib.Drawable, interval: i32) callconv(.c) void = @ptrCast(xlib.glXGetProcAddress("glXSwapIntervalEXT") orelse return error.SwapIntervalLoad);
     glXSwapIntervalEXT(self.display, window.handle, interval);
 }

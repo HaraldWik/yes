@@ -9,9 +9,9 @@ pub const Proc = switch (builtin.os.tag) {
     else => *const fn () callconv(.c) void,
 };
 
-extern "opengl32" fn wglGetProcAddress(
-    param0: [*:0]const u8,
-) callconv(.winapi) ?Proc;
+pub const Version = packed struct(u16) { major: u8, minor: u8 };
+
+extern "opengl32" fn wglGetProcAddress(param0: [*:0]const u8) callconv(.winapi) ?Proc;
 
 pub fn getProcAddress(name: [*:0]const u8) ?Proc {
     return switch (builtin.os.tag) {
@@ -28,13 +28,16 @@ pub fn getProcAddress(name: [*:0]const u8) ?Proc {
 }
 
 pub fn makeCurrent(platform: Platform, window: *Platform.Window) !void {
+    if (window.surface_type != .opengl) return error.WrongSurfaceType;
     try platform.vtable.windowOpenglMakeCurrent(platform.ptr, window);
 }
 
 pub fn swapBuffers(platform: Platform, window: *Platform.Window) !void {
+    if (window.surface_type != .opengl) return error.WrongSurfaceType;
     try platform.vtable.windowOpenglSwapBuffers(platform.ptr, window);
 }
 
 pub fn swapInterval(platform: Platform, window: *Platform.Window, interval: i32) !void {
+    if (window.surface_type != .opengl) return error.WrongSurfaceType;
     try platform.vtable.windowOpenglSwapInterval(platform.ptr, window, interval);
 }
