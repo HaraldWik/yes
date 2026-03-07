@@ -37,6 +37,7 @@ pub fn build(b: *std.Build) void {
 }
 
 pub fn addXlib(b: *std.Build, mod: *std.Build.Module, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) void {
+    const xlib_dep = b.lazyDependency("xlib", .{}) orelse @panic("fetch lazy dependency \"xlib\"");
     const xlib = b.addTranslateC(.{
         .root_source_file = b.addWriteFiles().add("c.h",
             \\#include <X11/Xlib.h>
@@ -48,7 +49,7 @@ pub fn addXlib(b: *std.Build, mod: *std.Build.Module, target: std.Build.Resolved
         .target = target,
         .optimize = optimize,
     }).createModule();
-    xlib.addIncludePath(b.lazyDependency("xlib", .{}).?.path("include/X11/"));
+    xlib.addIncludePath(xlib_dep.path("include/X11/"));
     xlib.linkSystemLibrary("X11", .{});
     xlib.linkSystemLibrary("Xrandr", .{});
     xlib.linkSystemLibrary("glx", .{});
