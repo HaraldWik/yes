@@ -2,7 +2,7 @@
     .name = .yes,
     .version = "0.0.0",
     .fingerprint = 0x75e735a95dccdea4,
-    .minimum_zig_version = "0.16.0-dev.1912+0cbaaa5eb",
+    .minimum_zig_version = "0.16.0-dev.2682+02142a54d",
     .dependencies = .{
         .win32 = .{
             .url = "git+https://github.com/SquareMan/zigwin32#01df0ea99ae90afc3f46117055ab788646872eba",
