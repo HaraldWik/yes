@@ -16,9 +16,13 @@ pub const AtomTable = struct {
     net_wm: struct {
         name: xlib.Atom,
         state: xlib.Atom,
+        state_above: xlib.Atom,
         state_fullscreen: xlib.Atom,
         state_maximized_horz: xlib.Atom,
         state_maximized_vert: xlib.Atom,
+        window_type: xlib.Atom,
+        window_type_normal: xlib.Atom,
+        window_type_dialog: xlib.Atom,
     },
 
     pub fn load(display: *xlib.Display) @This() {
@@ -27,9 +31,13 @@ pub const AtomTable = struct {
             .net_wm = .{
                 .name = xlib.XInternAtom(display, "_NET_WM_NAME", xlib.False),
                 .state = xlib.XInternAtom(display, "_NET_WM_STATE", xlib.False),
+                .state_above = xlib.XInternAtom(display, "_NET_WM_STATE_ABOVE", xlib.False),
                 .state_fullscreen = xlib.XInternAtom(display, "_NET_WM_STATE_FULLSCREEN", xlib.False),
                 .state_maximized_horz = xlib.XInternAtom(display, "_NET_WM_STATE_MAXIMIZED_HORZ", xlib.False),
                 .state_maximized_vert = xlib.XInternAtom(display, "_NET_WM_STATE_MAXIMIZED_VERT", xlib.False),
+                .window_type = xlib.XInternAtom(display, "_NET_WM_WINDOW_TYPE", xlib.False),
+                .window_type_normal = xlib.XInternAtom(display, "_NET_WM_WINDOW_TYPE_NORMAL", xlib.False),
+                .window_type_dialog = xlib.XInternAtom(display, "_NET_WM_WINDOW_TYPE_DIALOG", xlib.False),
             },
         };
     }
@@ -424,8 +432,41 @@ fn windowSetProperty(context: *anyopaque, platform_window: *Platform.Window, pro
             xlib.XIconifyWindow(self.display, window.handle, @intCast(screen))
         else
             xlib.XMapWindow(self.display, window.handle),
-        .always_on_top => {},
-        .floating => {},
+        .always_on_top => |always_on_top| {
+            var event: xlib.XEvent = .{
+                .xclient = .{
+                    .type = xlib.ClientMessage,
+                    .serial = 0,
+                    .send_event = xlib.True,
+                    .message_type = self.atom_table.net_wm.state,
+                    .window = window.handle,
+                    .format = 32,
+                    .data = .{
+                        .l = .{
+                            @intFromBool(always_on_top),
+                            @intCast(self.atom_table.net_wm.state_above),
+                            0,
+                            1, // normal client source
+                            0,
+                        },
+                    },
+                },
+            };
+
+            _ = xlib.XSendEvent(self.display, screen, xlib.False, xlib.SubstructureRedirectMask | xlib.SubstructureNotifyMask, &event);
+        },
+        .floating => |floating| {
+            _ = xlib.XChangeProperty(
+                self.display,
+                window.handle,
+                self.atom_table.net_wm.window_type,
+                xlib.XA_ATOM,
+                32,
+                xlib.PropModeReplace,
+                std.mem.asBytes(&(if (floating) self.atom_table.net_wm.window_type_dialog else self.atom_table.net_wm.window_type_normal)),
+                1,
+            );
+        },
     }
 
     _ = xlib.XFlush(self.display);

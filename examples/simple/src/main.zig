@@ -21,6 +21,8 @@ pub fn main(init: std.process.Init) !void {
         .max_size = .{ .width = 900, .height = 600 },
     });
     defer window.close(platform);
+    try window.setAlwaysOnTop(platform, true);
+    try window.setFloating(platform, true);
 
     var fullscreen: bool = false;
     var maximize: bool = false;

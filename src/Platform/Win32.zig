@@ -103,7 +103,7 @@ fn windowOpen(context: *anyopaque, platform_window: *Platform.Window, options: P
 
     switch (options.surface_type) {
         .empty => {},
-        .framebuffer => {},
+        .software => {},
         .opengl => |version| {
             const dc: win32.HDC = win32.GetDC(@ptrCast(window.hwnd)) orelse return error.GetDeviceContext;
 
@@ -304,14 +304,8 @@ fn windowSetProperty(context: *anyopaque, platform_window: *Platform.Window, pro
             defer self.allocator.free(title_utf16);
             _ = win32.SetWindowTextW(@ptrCast(window.hwnd), @ptrCast(title_utf16));
         },
-        .size => |size| {
-            _ = win32.SetWindowPos(@ptrCast(window.hwnd), null, 0, 0, @intCast(size.width), @intCast(size.height), .{ .NOZORDER = 1, .NOMOVE = 1 });
-            try checkError();
-        },
-        .position => |position| {
-            _ = win32.SetWindowPos(@ptrCast(window.hwnd), null, position.x, position.y, 0, 0, .{ .NOZORDER = 1, .NOSIZE = 1 });
-            try checkError();
-        },
+        .size => |size| _ = win32.SetWindowPos(@ptrCast(window.hwnd), null, 0, 0, @intCast(size.width), @intCast(size.height), .{ .NOZORDER = 1, .NOMOVE = 1 }),
+        .position => |position| _ = win32.SetWindowPos(@ptrCast(window.hwnd), null, position.x, position.y, 0, 0, .{ .NOZORDER = 1, .NOSIZE = 1 }),
         .fullscreen => |fullscreen| if (fullscreen) {
             _ = win32.GetWindowPlacement(@ptrCast(window.hwnd), &window.previous_placement);
 
@@ -337,17 +331,13 @@ fn windowSetProperty(context: *anyopaque, platform_window: *Platform.Window, pro
                 .{ .DRAWFRAME = 1, .NOOWNERZORDER = 1 },
             );
         } else { // unfullscreen
-            // _ = win32.SetWindowLongW(@ptrCast(window.hwnd), win32.GWL_STYLE, window.previous_style);
-            // _ = win32.SetWindowPos(@ptrCast(window.hwnd), null, 0, 0, 0, 0, .{ .DRAWFRAME = 1, .NOMOVE = 1, .NOSIZE = 1, .NOZORDER = 1, .NOOWNERZORDER = 1 });
-            // _ = win32.SetWindowPlacement(@ptrCast(window.hwnd), &window.previous_placement);
-
             _ = win32.SetWindowLongW(@ptrCast(window.hwnd), win32.GWL_STYLE, window.previous_style);
             _ = win32.SetWindowPlacement(@ptrCast(window.hwnd), &window.previous_placement);
             _ = win32.SetWindowPos(@ptrCast(window.hwnd), null, 0, 0, 0, 0, .{ .DRAWFRAME = 1, .NOMOVE = 1, .NOSIZE = 1, .NOZORDER = 1, .NOOWNERZORDER = 1 });
         },
         .maximize => |maximize| _ = win32.ShowWindow(@ptrCast(window.hwnd), if (maximize) win32.SW_MAXIMIZE else win32.SW_RESTORE),
         .minimize => |minimize| _ = win32.ShowWindow(@ptrCast(window.hwnd), if (minimize) win32.SW_MINIMIZE else win32.SW_RESTORE),
-        .always_on_top => {},
+        .always_on_top => |always_on_top| _ = win32.SetWindowPos(@ptrCast(window.hwnd), if (always_on_top) win32.HWND_TOPMOST else win32.HWND_NOTOPMOST, 0, 0, 0, 0, .{ .NOMOVE = 1, .NOSIZE = 1 }),
         .floating => {},
     }
 }
