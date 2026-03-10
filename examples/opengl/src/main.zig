@@ -31,6 +31,7 @@ pub fn main(init: std.process.Init) !void {
     try yes.opengl.swapInterval(platform, window, 1);
 
     gl.load(yes.opengl.getProcAddress, false);
+    gl.debug.set(null);
 
     if (gl.String.get(.version, null)) |version| std.log.info("OpenGL version: {s}", .{version});
 
@@ -51,6 +52,20 @@ pub fn main(init: std.process.Init) !void {
     vertex_shader.deinit();
     fragment_shader.deinit();
 
+    var model_transform: nz.Transform3D(f32) = .{};
+    var view_transform: nz.Transform3D(f32) = .{ .position = .{ 0.0, 0.0, -2.0 } };
+    var projection_matrix: nz.Mat4x4(f32) = .identity;
+
+    program.use();
+
+    const model_loc = gl.c.glGetUniformLocation(@intFromEnum(program), "model");
+    const view_loc = gl.c.glGetUniformLocation(@intFromEnum(program), "view");
+    const projection_loc = gl.c.glGetUniformLocation(@intFromEnum(program), "projection");
+
+    gl.c.glUniformMatrix4fv(model_loc, 1, 0, model_transform.toMat4x4().d[0..].ptr);
+    gl.c.glUniformMatrix4fv(view_loc, 1, 0, view_transform.toMat4x4().d[0..].ptr);
+    gl.c.glUniformMatrix4fv(projection_loc, 1, 0, projection_matrix.d[0..].ptr);
+
     var vao: c_uint = 0;
     var vbo: c_uint = 0;
     gl.c.glGenVertexArrays(1, &vao);
@@ -63,36 +78,74 @@ pub fn main(init: std.process.Init) !void {
     gl.c.glBindVertexArray(vao);
     gl.c.glBindBuffer(gl.c.GL_ARRAY_BUFFER, vbo);
 
-    program.use();
-
     gl.State.enable(.blend, null);
     gl.c.glBlendFunc(gl.c.GL_SRC_ALPHA, gl.c.GL_ONE_MINUS_SRC_ALPHA);
 
-    var color: [4]f32 = .{ 0.1, 0.5, 0.3, 1.0 };
-    const color_step = 0.05;
     main_loop: while (true) {
+        const delta_time = getDeltaTime(io);
+
         while (try window.poll(platform)) |event| switch (event) {
             .close => break :main_loop,
             .resize => |size| {
                 std.log.info("resize: {d}x{d}", .{ size.width, size.height });
                 gl.draw.viewport(0, 0, size.width, size.height);
+
+                projection_matrix = perspectiveOpenGl(f32, std.math.degreesToRadians(45), window.size.aspect(), 0.1, 100);
+                std.log.debug("projection_matrix = {any}", .{projection_matrix.d});
+
+                gl.c.glUniformMatrix4fv(projection_loc, 1, 0, projection_matrix.d[0..].ptr);
             },
-            .key => |key| switch (key.sym) {
-                .a => color[1] = @mod(color[1] + color_step, 1.0),
-                .d => color[1] = @mod(color[1] - color_step, 1.0),
-                .w => color[2] = @mod(color[2] + color_step, 1.0),
-                .s => color[2] = @mod(color[2] - color_step, 1.0),
-                else => {},
+            .key => |key| {
+                if (key.state != .pressed) continue;
+                switch (key.sym) {
+                    .w => view_transform.position[2] += 50.0 * delta_time,
+                    .s => view_transform.position[2] -= 50.0 * delta_time,
+                    .a => view_transform.position[0] += 50.0 * delta_time,
+                    .d => view_transform.position[0] -= 50.0 * delta_time,
+                    else => {},
+                }
+                gl.c.glUniformMatrix4fv(view_loc, 1, 0, view_transform.toMat4x4().d[0..].ptr);
             },
             else => {},
         };
 
-        gl.clear.color(color[0], color[1], color[2], color[3]);
+        gl.clear.color(0.0, 0.0, 0.0, 0.0);
         gl.clear.buffer(.{ .color = true, .depth = true });
+
+        program.use();
+
+        model_transform.rotation[1] = @mod(model_transform.rotation[1] + 30.0 * delta_time, 360.0);
+        gl.c.glUniformMatrix4fv(model_loc, 1, 0, model_transform.toMat4x4().d[0..].ptr);
 
         gl.c.glBindVertexArray(vao);
         gl.draw.arrays(.triangles, 0, 3);
 
         try yes.opengl.swapBuffers(platform, window);
     }
+}
+
+pub fn getDeltaTime(io: std.Io) f32 {
+    const Static = struct {
+        var previous: ?std.Io.Timestamp = null;
+    };
+    if (Static.previous == null) {
+        Static.previous = .now(io, .real);
+        return getDeltaTime(io);
+    }
+    const now: std.Io.Timestamp = .now(io, .real);
+    const duration = Static.previous.?.durationTo(now);
+    Static.previous = now;
+    return @as(f32, @floatFromInt(duration.toNanoseconds())) / 1_000_000_000.0;
+}
+
+pub fn perspectiveOpenGl(comptime T: type, fovy: T, aspect: T, near: T, far: T) nz.Mat4x4(f32) {
+    const f = 1.0 / @tan(fovy / 2);
+    const rangeInv = 1 / (near - far);
+
+    return .new(.{
+        f / aspect, 0, 0,                         0,
+        0,          f, 0,                         0,
+        0,          0, (near + far) * rangeInv,   -1,
+        0,          0, near * far * rangeInv * 2, 0,
+    });
 }
