@@ -11,6 +11,10 @@
             .url = "git+https://github.com/HaraldWik/zig-opengl#5bc4e4e046b4e6b21409a298c9a3d46fd2bc1800",
             .hash = "zig_opengl-0.0.0-WXQ8j8xMCACPLjhy2lgdw6a8ecIPH9mAD-mzW5zmFPLc",
         },
+        .numz = .{
+            .url = "git+https://github.com/HaraldWik/numz#9f02fc1434a5cabe72bade9ea33db7ed8f171328",
+            .hash = "numz-0.0.2-V-sGm0ewAAAVATHTuvzqC2LVu7uHpaWxR_o8CIf5qu2F",
+        },
     },
     .paths = .{
         "build.zig",

@@ -134,8 +134,6 @@ fn windowOpen(context: *anyopaque, platform_window: *Platform.Window, options: P
             var rc: win32.HGLRC = win32.wglCreateContext(dc) orelse return error.WglCreateContext;
             if (!win32.SUCCEEDED(win32.wglMakeCurrent(dc, rc))) return error.WglMakeCurrent;
 
-            _ = win32.ReleaseDC(@ptrCast(window.hwnd), dc);
-
             const getExtensionsStringARB: *const fn (win32.HDC) callconv(.winapi) ?[*:0]const u8 = @ptrCast(win32.wglGetProcAddress("wglGetExtensionsStringARB") orelse return error.WglGetProcAddress);
 
             var createContextAttribsARB: ?*const fn (win32.HDC, ?win32.HGLRC, [*:0]const i32) callconv(.winapi) ?win32.HGLRC = null;
@@ -182,7 +180,11 @@ fn windowClose(context: *anyopaque, platform_window: *Platform.Window) void {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
 
-    if (window.surface == .opengl) _ = win32.wglDeleteContext(@ptrCast(window.surface.opengl.render_context));
+    if (window.surface == .opengl) {
+        _ = win32.wglDeleteContext(@ptrCast(window.surface.opengl.render_context));
+        _ = win32.ReleaseDC(@ptrCast(window.hwnd), @ptrCast(window.surface.opengl.device_context));
+    }
+
     _ = win32.DestroyWindow(@ptrCast(window.hwnd));
     _ = win32.UnregisterClassW(window.class.lpszClassName, @ptrCast(self.instance));
 }

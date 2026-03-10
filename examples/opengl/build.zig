@@ -6,6 +6,7 @@ pub fn build(b: *std.Build) void {
 
     const yes = b.dependency("yes", .{ .target = target, .optimize = optimize, .xlib = true }).module("yes");
     const gl = b.dependency("zig_opengl", .{ .target = target, .optimize = optimize }).module("zig_opengl");
+    const numz = b.dependency("numz", .{ .target = target, .optimize = optimize }).module("numz");
 
     const exe = b.addExecutable(.{
         .name = "example",
@@ -16,6 +17,7 @@ pub fn build(b: *std.Build) void {
             .imports = &.{
                 .{ .name = "yes", .module = yes },
                 .{ .name = "opengl", .module = gl },
+                .{ .name = "numz", .module = numz },
             },
         }),
     });
