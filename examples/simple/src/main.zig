@@ -17,8 +17,10 @@ pub fn main(init: std.process.Init) !void {
     try window.open(platform, .{
         .title = "Window 🇸🇪👺🌶️🫑",
         .size = .{ .width = 600, .height = 400 },
-        .min_size = .{ .width = 300, .height = 200 },
-        .max_size = .{ .width = 900, .height = 600 },
+        .resize_policy = .{ .specified = .{
+            .max_size = .{ .width = 900, .height = 600 },
+            .min_size = .{ .width = 300, .height = 200 },
+        } },
     });
     defer window.close(platform);
     try window.setAlwaysOnTop(platform, true);
@@ -55,6 +57,8 @@ pub fn main(init: std.process.Init) !void {
                     minimize = !minimize;
                     try window.setMinimize(platform, fullscreen);
                 }
+                if (key.sym == .r)
+                    try window.setResizePolicy(platform, .{ .resizable = true });
             },
             .mouse_move => {},
             .mouse_button => |button| {

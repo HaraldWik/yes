@@ -32,9 +32,7 @@ pub const Window = struct {
 
     pub const SizeData = struct {
         size: Platform.Window.Size,
-        min_size: ?Platform.Window.Size,
-        max_size: ?Platform.Window.Size,
-        resizable: bool,
+        resize_policy: Platform.Window.ResizePolicy,
     };
 };
 
@@ -66,9 +64,7 @@ fn windowOpen(context: *anyopaque, platform_window: *Platform.Window, options: P
 
     window.size_data = .{
         .size = options.size,
-        .min_size = options.min_size,
-        .max_size = options.max_size,
-        .resizable = options.resizable,
+        .resize_policy = options.resize_policy,
     };
 
     window.class = std.mem.zeroInit(win32.WNDCLASSEXW, .{
@@ -203,18 +199,21 @@ fn windowPoll(context: *anyopaque, platform_window: *Platform.Window) anyerror!?
         win32.WM_USER + win32.WM_GETMINMAXINFO => {
             var mmi: *win32.MINMAXINFO = @ptrFromInt(@as(usize, @intCast(msg.lParam)));
 
-            const size_data = window.size_data;
+            const max_size: ?Platform.Window.Size, const min_size: ?Platform.Window.Size = switch (window.size_data.resize_policy) {
+                .resizable => |resizable| if (resizable) return null else .{ window.interface.size, window.interface.size },
+                .specified => |specified| .{ specified.max_size, specified.min_size },
+            };
 
-            if (size_data.min_size) |min_size| {
-                const size = if (size_data.resizable) min_size else size_data.size;
-                mmi.ptMinTrackSize.x = @intCast(size.width); // minimum width
-                mmi.ptMinTrackSize.y = @intCast(size.height); // minimum height
-            }
-            if (size_data.max_size) |max_size| {
-                const size = if (size_data.resizable) max_size else size_data.size;
+            if (max_size) |size| {
                 mmi.ptMaxTrackSize.x = @intCast(size.width); // maximum width
                 mmi.ptMaxTrackSize.y = @intCast(size.height); // maximum height
             }
+            if (min_size) |size| {
+                mmi.ptMinTrackSize.x = @intCast(size.width); // minimum width
+                mmi.ptMinTrackSize.y = @intCast(size.height); // minimum height
+            }
+
+            _ = win32.DefWindowProcW(@ptrCast(window.hwnd), win32.WM_GETMINMAXINFO, msg.wParam, msg.lParam);
 
             return null;
         },
@@ -308,6 +307,7 @@ fn windowSetProperty(context: *anyopaque, platform_window: *Platform.Window, pro
         },
         .size => |size| _ = win32.SetWindowPos(@ptrCast(window.hwnd), null, 0, 0, @intCast(size.width), @intCast(size.height), .{ .NOZORDER = 1, .NOMOVE = 1 }),
         .position => |position| _ = win32.SetWindowPos(@ptrCast(window.hwnd), null, position.x, position.y, 0, 0, .{ .NOZORDER = 1, .NOSIZE = 1 }),
+        .resize_policy => |resize_policy| window.size_data.resize_policy = resize_policy,
         .fullscreen => |fullscreen| if (fullscreen) {
             _ = win32.GetWindowPlacement(@ptrCast(window.hwnd), &window.previous_placement);
 

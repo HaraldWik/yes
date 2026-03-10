@@ -200,6 +200,7 @@ fn windowSetProperty(context: *anyopaque, platform_window: *Platform.Window, pro
             try window.handle.changeProperty(connection, .replace, self.atom_table.net_wm_name, self.atom_table.utf8_string, .@"8", title); // Modern way, supports unicode
             try connection.flush();
         },
+        .resize_policy => {},
         .size => {},
         .position => {},
         .fullscreen => {},

@@ -75,6 +75,7 @@ fn windowSetProperty(context: *anyopaque, platform_window: *Platform.Window, pro
         .title => window.title = property.title,
         .size => {},
         .position => {},
+        .resize_policy => {},
         .fullscreen => {},
         .maximize => {},
         .minimize => {},

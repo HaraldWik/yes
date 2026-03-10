@@ -189,31 +189,7 @@ fn windowOpen(context: *anyopaque, platform_window: *Platform.Window, options: P
     errdefer _ = xlib.XDestroyWindow(self.display, window.handle);
 
     try windowSetProperty(context, platform_window, .{ .title = options.title });
-
-    var hints: xlib.XSizeHints = .{};
-    if (options.min_size) |size| {
-        hints.flags |= xlib.PMinSize;
-        hints.min_width = @intCast(size.width);
-        hints.min_height = @intCast(size.height);
-    }
-
-    if (options.max_size) |size| {
-        hints.flags |= xlib.PMaxSize;
-        hints.max_width = @intCast(size.width);
-        hints.max_height = @intCast(size.height);
-    }
-
-    if (!options.resizable) {
-        hints.flags = xlib.PMinSize | xlib.PMaxSize;
-        hints.base_width = @intCast(options.size.width);
-        hints.base_height = @intCast(options.size.height);
-        hints.min_width = @intCast(options.size.width);
-        hints.min_height = @intCast(options.size.height);
-        hints.max_width = @intCast(options.size.width);
-        hints.max_height = @intCast(options.size.height);
-    }
-
-    xlib.XSetWMNormalHints(self.display, window.handle, &hints);
+    try windowSetProperty(context, platform_window, .{ .resize_policy = options.resize_policy });
 
     window.wm_delete_window = xlib.XInternAtom(self.display, "WM_DELETE_WINDOW", @intFromBool(false));
     if (xlib.XSetWMProtocols(self.display, window.handle, &window.wm_delete_window, 1) == xlib.False) return error.SetWMProtocols;
@@ -394,6 +370,35 @@ fn windowSetProperty(context: *anyopaque, platform_window: *Platform.Window, pro
         },
         .size => |size| _ = xlib.XResizeWindow(self.display, window.handle, size.width, size.height),
         .position => |position| _ = xlib.XMoveWindow(self.display, window.handle, @intCast(position.x), @intCast(position.y)),
+        .resize_policy => |resize_policy| {
+            var hints: xlib.XSizeHints = .{};
+
+            switch (resize_policy) {
+                .resizable => |resizable| {
+                    hints.flags = xlib.PMinSize | xlib.PMaxSize;
+
+                    const width: c_int = @intCast(window.interface.size.width);
+                    const height: c_int = @intCast(window.interface.size.height);
+                    hints.min_width = if (!resizable) width else 0;
+                    hints.min_height = if (!resizable) height else 0;
+                    hints.max_width = if (!resizable) width else std.math.maxInt(c_int);
+                    hints.max_height = if (!resizable) height else std.math.maxInt(c_int);
+                },
+                .specified => |specified| {
+                    if (specified.min_size) |size| {
+                        hints.flags |= xlib.PMinSize;
+                        hints.min_width = @intCast(size.width);
+                        hints.min_height = @intCast(size.height);
+                    }
+                    if (specified.max_size) |size| {
+                        hints.flags |= xlib.PMaxSize;
+                        hints.max_width = @intCast(size.width);
+                        hints.max_height = @intCast(size.height);
+                    }
+                },
+            }
+            xlib.XSetWMNormalHints(self.display, window.handle, &hints);
+        },
         .fullscreen => |fullscreen| {
             var event: xlib.XEvent = .{ .xclient = .{
                 .type = xlib.ClientMessage,

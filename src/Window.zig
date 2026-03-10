@@ -57,10 +57,21 @@ pub const SurfaceType = switch (builtin.os.tag) {
     },
 };
 
+pub const ResizePolicy = union(enum) {
+    resizable: bool,
+    specified: Specified,
+
+    pub const Specified = struct {
+        max_size: ?Window.Size,
+        min_size: ?Window.Size,
+    };
+};
+
 pub const Property = union(enum) {
     title: []const u8,
     size: Window.Size,
     position: Window.Position,
+    resize_policy: ResizePolicy,
     fullscreen: bool,
     maximize: bool,
     minimize: bool,
@@ -72,9 +83,7 @@ pub const OpenOptions = struct {
     title: []const u8,
     size: Size,
     position: Position = .{},
-    min_size: ?Size = null,
-    max_size: ?Size = null,
-    resizable: bool = true,
+    resize_policy: ResizePolicy,
     decoration: bool = true,
     surface_type: SurfaceType = .empty,
 };
@@ -94,6 +103,11 @@ pub fn poll(window: *Window, platform: Platform) anyerror!?Event {
     }
     return event;
 }
+
+pub fn setProperties(window: *Window, platform: Platform, properties: []const Property) anyerror!void {
+    for (properties) |property| try platform.vtable.windowSetProperty(platform.ptr, window, property);
+}
+
 pub fn setTitle(window: *Window, platform: Platform, title: []const u8) anyerror!void {
     try platform.vtable.windowSetProperty(platform.ptr, window, .{ .title = title });
 }
@@ -102,6 +116,9 @@ pub fn setSize(window: *Window, platform: Platform, size: Size) anyerror!void {
 }
 pub fn setPosition(window: *Window, platform: Platform, position: Position) anyerror!void {
     try platform.vtable.windowSetProperty(platform.ptr, window, .{ .position = position });
+}
+pub fn setResizePolicy(window: *Window, platform: Platform, resize_policy: ResizePolicy) anyerror!void {
+    try platform.vtable.windowSetProperty(platform.ptr, window, .{ .resize_policy = resize_policy });
 }
 pub fn setFullscreen(window: *Window, platform: Platform, fullscreen: bool) anyerror!void {
     try platform.vtable.windowSetProperty(platform.ptr, window, .{ .fullscreen = fullscreen });
