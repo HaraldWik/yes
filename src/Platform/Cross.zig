@@ -10,20 +10,8 @@ inner: Inner,
 pub const Inner = switch (builtin.os.tag) {
     .windows => Platform.Win32,
     else => union(enum) {
-        xpz: Platform.Xpz,
-        xlib: if (build_options.xlib) Platform.Xlib else void,
+        x: if (build_options.xlib) Platform.Xlib else Platform.Xpz,
         wayland: Platform.Wayland,
-
-        pub fn isX(self: @This()) bool {
-            switch (self) {
-                .xpz, .xlib => true,
-                else => false,
-            }
-        }
-
-        pub fn isWayland(self: @This()) bool {
-            return !self.isX();
-        }
     },
 };
 
@@ -33,8 +21,7 @@ pub const Window = struct {
     pub const Inner = switch (builtin.os.tag) {
         .windows => Platform.Win32.Window,
         else => union {
-            xpz: Platform.Xpz.Window,
-            xlib: if (build_options.xlib) Platform.Xlib.Window else void,
+            x: if (build_options.xlib) Platform.Xlib.Window else Platform.Xpz.Window,
             wayland: Platform.Wayland.Window,
         },
     };
@@ -44,8 +31,7 @@ pub const Window = struct {
         return switch (builtin.os.tag) {
             .windows => .{ .inner = .{} },
             else => switch (cross.inner) {
-                .xpz => .{ .inner = .{ .xpz = .{} } },
-                .xlib => if (build_options.xlib) .{ .inner = .{ .xlib = .{} } } else unreachable,
+                .x => .{ .inner = .{ .x = .{} } },
                 .wayland => .{ .inner = .{ .wayland = .{} } },
             },
         };
@@ -56,8 +42,7 @@ pub const Window = struct {
         return switch (builtin.os.tag) {
             .windows => &self.inner.interface,
             else => switch (cross.inner) {
-                .xpz => &self.inner.xpz.interface,
-                .xlib => if (build_options.xlib) &self.inner.xlib.interface else unreachable,
+                .x => &self.inner.x.interface,
                 .wayland => &self.inner.wayland.interface,
             },
         };
@@ -75,9 +60,9 @@ fn initUnix(allocator: std.mem.Allocator, io: std.Io, minimal: std.process.Init.
     const session_type = Platform.unix.SessionType.detect(minimal) orelse .x11;
     return switch (session_type) {
         .x11 => if (build_options.xlib)
-            .{ .inner = .{ .xlib = try .init() } }
+            .{ .inner = .{ .x = try .init() } }
         else
-            .{ .inner = .{ .xpz = try .init(allocator, io, minimal) } },
+            .{ .inner = .{ .x = try .init(allocator, io, minimal) } },
         .wayland => .{ .inner = .{ .wayland = try .init() } },
         else => error.UnsupportedUnixPlatform,
     };
@@ -87,8 +72,7 @@ pub fn deinit(self: *@This()) void {
     switch (builtin.os.tag) {
         .windows => {},
         else => switch (self.inner) {
-            .xpz => self.inner.xpz.deinit(),
-            .xlib => if (build_options.xlib) self.inner.xlib.deinit() else unreachable,
+            .x => self.inner.x.deinit(),
             .wayland => self.inner.wayland.deinit(),
         },
     }
@@ -98,8 +82,7 @@ pub fn platform(self: *@This()) Platform {
     return switch (builtin.os.tag) {
         .windows => self.inner.platform(),
         else => switch (self.inner) {
-            .xpz => self.inner.xpz.platform(),
-            .xlib => if (build_options.xlib) self.inner.xlib.platform() else unreachable,
+            .x => if (build_options.xlib) self.inner.x.platform(),
             .wayland => self.inner.wayland.platform(),
         },
     };

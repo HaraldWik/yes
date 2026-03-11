@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const build_options = @import("build_options");
 const xlib = @import("xlib");
 const vulkan = @import("../vulkan.zig");
@@ -84,69 +85,38 @@ fn windowOpen(context: *anyopaque, platform_window: *Platform.Window, options: P
     const screen = xlib.DefaultScreen(self.display);
     const screen_window = xlib.RootWindow(self.display, screen);
 
-    const glx_arb_create_context_supported = if (options.surface_type == .opengl) supported: {
-        const ext_str: [*:0]const u8 = xlib.glXQueryExtensionsString(self.display, screen);
-        break :supported std.mem.containsAtLeast(u8, std.mem.span(ext_str), 1, "GLX_ARB_create_context");
-    } else false;
+    switch (builtin.mode) {
+        .Debug, .ReleaseSafe => if (options.surface_type == .opengl) {
+            const glx_arb_create_context_supported = supported: {
+                const ext_str: [*:0]const u8 = xlib.glXQueryExtensionsString(self.display, screen);
+                break :supported std.mem.containsAtLeast(u8, std.mem.span(ext_str), 1, "GLX_ARB_create_context");
+            };
+            std.debug.assert(glx_arb_create_context_supported);
+        },
+        else => {},
+    }
+
     var fbconfig: ?xlib.GLXFBConfig = null;
 
     const visual: *xlib.XVisualInfo = visual: switch (options.surface_type) {
-        .opengl => if (glx_arb_create_context_supported) {
-            const possible_attributes: []const ?[*]const c_int = &.{
-                &.{ // Full “preferred” modern attributes
-                    xlib.GLX_X_RENDERABLE,  1,
-                    xlib.GLX_DRAWABLE_TYPE, xlib.GLX_WINDOW_BIT,
-                    xlib.GLX_RENDER_TYPE,   xlib.GLX_RGBA_BIT,
-                    xlib.GLX_DOUBLEBUFFER,  1,
-                    xlib.GLX_RED_SIZE,      8,
-                    xlib.GLX_GREEN_SIZE,    8,
-                    xlib.GLX_BLUE_SIZE,     8,
-                    xlib.GLX_ALPHA_SIZE,    8,
-                    xlib.GLX_DEPTH_SIZE,    24,
-                    xlib.GLX_STENCIL_SIZE,  8,
-                    xlib.GLX_SAMPLE_BUFFERS, 1, // enable multisampling if available
-                    xlib.GLX_SAMPLES, 4, // 4x MSAA
-                    xlib.GLX_NONE,
-                },
-                &.{ // Medium fallback (drop stencil or multisample)
-                    xlib.GLX_X_RENDERABLE,  1,
-                    xlib.GLX_DRAWABLE_TYPE, xlib.GLX_WINDOW_BIT,
-                    xlib.GLX_RENDER_TYPE,   xlib.GLX_RGBA_BIT,
-                    xlib.GLX_DOUBLEBUFFER,  1,
-                    xlib.GLX_RED_SIZE,      8,
-                    xlib.GLX_GREEN_SIZE,    8,
-                    xlib.GLX_BLUE_SIZE,     8,
-                    xlib.GLX_ALPHA_SIZE,    8,
-                    xlib.GLX_DEPTH_SIZE,    24,
-                    xlib.GLX_NONE,
-                },
-                &.{ // Minimal fallback (just a drawable)
-                    xlib.GLX_X_RENDERABLE,  1,
-                    xlib.GLX_DRAWABLE_TYPE, xlib.GLX_WINDOW_BIT,
-                    xlib.GLX_RENDER_TYPE,   xlib.GLX_RGBA_BIT,
-                    xlib.GLX_NONE,
-                },
-                null,
+        .opengl => {
+            const fbattribs: [*]const c_int = &.{
+                xlib.GLX_X_RENDERABLE,  xlib.True,
+                xlib.GLX_DRAWABLE_TYPE, xlib.GLX_WINDOW_BIT,
+                xlib.GLX_RENDER_TYPE,   xlib.GLX_RGBA_BIT,
+                xlib.GLX_DOUBLEBUFFER,  xlib.True,
+                xlib.GLX_RED_SIZE,      8,
+                xlib.GLX_GREEN_SIZE,    8,
+                xlib.GLX_BLUE_SIZE,     8,
+                xlib.GLX_DEPTH_SIZE,    24,
+                xlib.None,
             };
-            for (possible_attributes) |attributes| {
-                var fb_config_count: c_int = 0;
-                const fbconfigs = xlib.glXChooseFBConfig(self.display, xlib.XDefaultScreen(self.display), attributes, &fb_config_count);
-                if (fbconfigs == null or fb_config_count == 0) continue;
-                fbconfig = fbconfigs[0];
-            }
-            if (fbconfig == null) return error.NoFbFound;
-            break :visual xlib.glXGetVisualFromFBConfig(self.display, fbconfig.?) orelse return error.GlXGetVisualFromFBConfig;
-        } else {
-            var attribute_list = [_]c_int{
-                xlib.GLX_RGBA,
-                xlib.GLX_DOUBLEBUFFER,
-                xlib.GLX_DEPTH_SIZE,
-                24,
-                xlib.GLX_STENCIL_SIZE,
-                8,
-                xlib.GLX_NONE,
-            };
-            break :visual xlib.glXChooseVisual(self.display, screen, &attribute_list) orelse return error.GlXChooseVisual;
+
+            var fbcount: c_int = undefined;
+            const fbconfigs = xlib.glXChooseFBConfig(self.display, screen, fbattribs, &fbcount);
+            fbconfig = fbconfigs[0];
+
+            break :visual xlib.glXGetVisualFromFBConfig(self.display, fbconfig.?);
         },
         else => {
             var visual: xlib.XVisualInfo = .{
@@ -190,70 +160,35 @@ fn windowOpen(context: *anyopaque, platform_window: *Platform.Window, options: P
 
     try windowSetProperty(context, platform_window, .{ .title = options.title });
     try windowSetProperty(context, platform_window, .{ .resize_policy = options.resize_policy });
+    try windowSetProperty(context, platform_window, .{ .decorated = options.decorated });
 
     window.wm_delete_window = xlib.XInternAtom(self.display, "WM_DELETE_WINDOW", @intFromBool(false));
     if (xlib.XSetWMProtocols(self.display, window.handle, &window.wm_delete_window, 1) == xlib.False) return error.SetWMProtocols;
-
-    const MotifWmHints = extern struct {
-        flags: c_ulong,
-        functions: c_ulong,
-        decorations: c_ulong,
-        input_mode: c_ulong,
-        status: c_ulong,
-    };
-
-    var motif_hints: MotifWmHints = .{
-        .flags = 1 << 1,
-        .functions = 0,
-        .decorations = @intFromBool(options.decoration),
-        .input_mode = 0,
-        .status = 0,
-    };
-
-    const motif = xlib.XInternAtom(self.display, "_MOTIF_WM_HINTS", xlib.False);
-
-    _ = xlib.XChangeProperty(self.display, window.handle, motif, motif, 32, xlib.PropModeReplace, @ptrCast(&motif_hints), 5);
 
     if (xlib.XMapWindow(self.display, window.handle) == xlib.False) return error.MapWindow;
     if (xlib.XFlush(self.display) == xlib.False) return error.Flush;
 
     // Create OpenGL context
     switch (options.surface_type) {
-        .opengl => if (glx_arb_create_context_supported) {
+        .opengl => |opengl| {
             const ctx_attribs: [*]const c_int = &.{
-                xlib.GLX_CONTEXT_MAJOR_VERSION_ARB, 4,
-                xlib.GLX_CONTEXT_MINOR_VERSION_ARB, 6,
+                xlib.GLX_CONTEXT_MAJOR_VERSION_ARB, @intCast(opengl.major),
+                xlib.GLX_CONTEXT_MINOR_VERSION_ARB, @intCast(opengl.minor),
                 xlib.GLX_CONTEXT_PROFILE_MASK_ARB,  xlib.GLX_CONTEXT_CORE_PROFILE_BIT_ARB,
-                0,
+                xlib.None,
             };
             const glXCreateContextAttribsARB = @as(?*const fn (
                 display: *xlib.Display,
                 fbconfig: xlib.GLXFBConfig,
-                share_context: ?*anyopaque,
+                share_context: xlib.GLXContext,
                 direct: c_int, // bool
                 attribs: [*]const c_int,
-            ) ?*anyerror, @ptrCast(xlib.glXGetProcAddressARB("glXCreateContextAttribsARB"))) orelse return error.LoadGlXCreateContextAttribsARB;
+            ) callconv(.c) xlib.GLXContext, @ptrCast(xlib.glXGetProcAddressARB("glXCreateContextAttribsARB"))) orelse return error.LoadGlXCreateContextAttribsARB;
 
             window.glx_context = glXCreateContextAttribsARB(self.display, fbconfig.?, null, 1, ctx_attribs);
-        } else {
-            window.glx_context = xlib.glXCreateContext(self.display, visual, null, @intFromBool(true)) orelse return error.CreateGlxContext;
         },
         else => {},
     }
-
-    // { // Initial resize event
-    //     var event: xlib.XEvent = .{ .xconfigure = .{
-    //         .window = window.handle,
-    //         .width = @intCast(options.size.width),
-    //         .height = @intCast(options.size.height + 100),
-    //         .event = window.handle,
-    //         .send_event = xlib.True,
-    //     } };
-    //     event.type = xlib.ConfigureNotify;
-
-    //     _ = xlib.XSendEvent(self.display, window.handle, xlib.False, xlib.StructureNotifyMask, &event);
-    //     _ = xlib.XFlush(self.display);
-    // }
 }
 fn windowClose(context: *anyopaque, platform_window: *Platform.Window) void {
     const self: *@This() = @ptrCast(@alignCast(context));
@@ -300,6 +235,7 @@ fn windowPoll(context: *anyopaque, platform_window: *Platform.Window) anyerror!?
             }
             return .{ .resize = size };
         },
+        xlib.Expose => .{ .resize = window.interface.size },
         xlib.ButtonPress, xlib.ButtonRelease => switch (event.xbutton.button) {
             4...7 => |scroll| if (event.type == xlib.ButtonPress) .{ .mouse_scroll = switch (scroll) {
                 6 => .{ .x = 1 },
@@ -410,7 +346,7 @@ fn windowSetProperty(context: *anyopaque, platform_window: *Platform.Window, pro
             } };
             _ = xlib.XSendEvent(self.display, xlib.DefaultRootWindow(self.display), xlib.False, xlib.SubstructureRedirectMask | xlib.SubstructureNotifyMask, &event);
         },
-        .maximize => |maximize| {
+        .maximized => |maximized| {
             var event: xlib.XEvent = .{
                 .xclient = .{
                     .type = xlib.ClientMessage,
@@ -421,7 +357,7 @@ fn windowSetProperty(context: *anyopaque, platform_window: *Platform.Window, pro
                     .format = 32,
                     .data = .{
                         .l = .{
-                            @intFromBool(maximize),
+                            @intFromBool(maximized),
                             @intCast(self.atom_table.net_wm.state_maximized_horz),
                             @intCast(self.atom_table.net_wm.state_maximized_vert),
                             1, // normal client source
@@ -433,7 +369,7 @@ fn windowSetProperty(context: *anyopaque, platform_window: *Platform.Window, pro
 
             _ = xlib.XSendEvent(self.display, screen, xlib.False, xlib.SubstructureRedirectMask | xlib.SubstructureNotifyMask, &event);
         },
-        .minimize => |minimize| _ = if (minimize)
+        .minimized => |minimized| _ = if (minimized)
             xlib.XIconifyWindow(self.display, window.handle, @intCast(screen))
         else
             xlib.XMapWindow(self.display, window.handle),
@@ -471,6 +407,27 @@ fn windowSetProperty(context: *anyopaque, platform_window: *Platform.Window, pro
                 std.mem.asBytes(&(if (floating) self.atom_table.net_wm.window_type_dialog else self.atom_table.net_wm.window_type_normal)),
                 1,
             );
+        },
+        .decorated => |decorated| {
+            const MotifWmHints = extern struct {
+                flags: c_ulong,
+                functions: c_ulong,
+                decorated: c_ulong,
+                input_mode: c_ulong,
+                status: c_ulong,
+            };
+
+            var motif_hints: MotifWmHints = .{
+                .flags = 1 << 1,
+                .functions = 0,
+                .decorated = @intFromBool(decorated),
+                .input_mode = 0,
+                .status = 0,
+            };
+
+            const motif = xlib.XInternAtom(self.display, "_MOTIF_WM_HINTS", xlib.False);
+
+            _ = xlib.XChangeProperty(self.display, window.handle, motif, motif, 32, xlib.PropModeReplace, @ptrCast(&motif_hints), 5);
         },
     }
 

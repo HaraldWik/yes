@@ -62,8 +62,8 @@ pub const ResizePolicy = union(enum) {
     specified: Specified,
 
     pub const Specified = struct {
-        max_size: ?Window.Size,
-        min_size: ?Window.Size,
+        max_size: ?Window.Size = null,
+        min_size: ?Window.Size = null,
     };
 };
 
@@ -73,18 +73,19 @@ pub const Property = union(enum) {
     position: Window.Position,
     resize_policy: ResizePolicy,
     fullscreen: bool,
-    maximize: bool,
-    minimize: bool,
+    maximized: bool,
+    minimized: bool,
     always_on_top: bool,
     floating: bool,
+    decorated: bool,
 };
 
 pub const OpenOptions = struct {
     title: []const u8,
     size: Size,
-    position: Position = .{},
-    resize_policy: ResizePolicy,
-    decoration: bool = true,
+    position: ?Position = null,
+    resize_policy: ResizePolicy = .{ .resizable = true },
+    decorated: bool = true,
     surface_type: SurfaceType = .empty,
 };
 
@@ -123,15 +124,18 @@ pub fn setResizePolicy(window: *Window, platform: Platform, resize_policy: Resiz
 pub fn setFullscreen(window: *Window, platform: Platform, fullscreen: bool) anyerror!void {
     try platform.vtable.windowSetProperty(platform.ptr, window, .{ .fullscreen = fullscreen });
 }
-pub fn setMaximize(window: *Window, platform: Platform, maximize: bool) anyerror!void {
-    try platform.vtable.windowSetProperty(platform.ptr, window, .{ .maximize = maximize });
+pub fn setMaximized(window: *Window, platform: Platform, maximize: bool) anyerror!void {
+    try platform.vtable.windowSetProperty(platform.ptr, window, .{ .maximized = maximize });
 }
-pub fn setMinimize(window: *Window, platform: Platform, minimize: bool) anyerror!void {
-    try platform.vtable.windowSetProperty(platform.ptr, window, .{ .minimize = minimize });
+pub fn setMinimized(window: *Window, platform: Platform, minimize: bool) anyerror!void {
+    try platform.vtable.windowSetProperty(platform.ptr, window, .{ .minimized = minimize });
 }
 pub fn setAlwaysOnTop(window: *Window, platform: Platform, always_on_top: bool) anyerror!void {
     try platform.vtable.windowSetProperty(platform.ptr, window, .{ .always_on_top = always_on_top });
 }
 pub fn setFloating(window: *Window, platform: Platform, floating: bool) anyerror!void {
     try platform.vtable.windowSetProperty(platform.ptr, window, .{ .floating = floating });
+}
+pub fn setDecorated(window: *Window, platform: Platform, decorated: bool) anyerror!void {
+    try platform.vtable.windowSetProperty(platform.ptr, window, .{ .decorated = decorated });
 }

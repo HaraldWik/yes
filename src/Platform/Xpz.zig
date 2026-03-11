@@ -204,10 +204,11 @@ fn windowSetProperty(context: *anyopaque, platform_window: *Platform.Window, pro
         .size => {},
         .position => {},
         .fullscreen => {},
-        .maximize => {},
-        .minimize => {},
+        .maximized => {},
+        .minimized => {},
         .always_on_top => {},
         .floating => {},
+        .decorated => {},
     }
 }
 

@@ -51,11 +51,11 @@ pub fn main(init: std.process.Init) !void {
                 }
                 if (key.sym == .m) {
                     maximize = !maximize;
-                    try window.setMaximize(platform, fullscreen);
+                    try window.setMaximized(platform, fullscreen);
                 }
                 if (key.sym == .n) {
                     minimize = !minimize;
-                    try window.setMinimize(platform, fullscreen);
+                    try window.setMinimized(platform, fullscreen);
                 }
                 if (key.sym == .r)
                     try window.setResizePolicy(platform, .{ .resizable = true });

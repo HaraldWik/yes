@@ -85,8 +85,8 @@ fn windowOpen(context: *anyopaque, platform_window: *Platform.Window, options: P
         window.class.lpszClassName,
         @ptrCast(title),
         win32.WS_OVERLAPPEDWINDOW,
-        win32.CW_USEDEFAULT,
-        win32.CW_USEDEFAULT,
+        if (options.position) |position| position.x else win32.CW_USEDEFAULT,
+        if (options.position) |position| position.y else win32.CW_USEDEFAULT,
         @intCast(options.size.width),
         @intCast(options.size.height),
         null,
@@ -171,6 +171,8 @@ fn windowOpen(context: *anyopaque, platform_window: *Platform.Window, options: P
 
     _ = win32.ShowWindow(@ptrCast(window.hwnd), .{ .SHOWNORMAL = 1 });
     if (!win32.SUCCEEDED(win32.UpdateWindow(@ptrCast(window.hwnd)))) return error.UpdateWindow;
+
+    try windowSetProperty(context, platform_window, .{ .decorated = options.decorated });
 }
 fn windowClose(context: *anyopaque, platform_window: *Platform.Window) void {
     const self: *@This() = @ptrCast(@alignCast(context));
@@ -337,10 +339,23 @@ fn windowSetProperty(context: *anyopaque, platform_window: *Platform.Window, pro
             _ = win32.SetWindowPlacement(@ptrCast(window.hwnd), &window.previous_placement);
             _ = win32.SetWindowPos(@ptrCast(window.hwnd), null, 0, 0, 0, 0, .{ .DRAWFRAME = 1, .NOMOVE = 1, .NOSIZE = 1, .NOZORDER = 1, .NOOWNERZORDER = 1 });
         },
-        .maximize => |maximize| _ = win32.ShowWindow(@ptrCast(window.hwnd), if (maximize) win32.SW_MAXIMIZE else win32.SW_RESTORE),
-        .minimize => |minimize| _ = win32.ShowWindow(@ptrCast(window.hwnd), if (minimize) win32.SW_MINIMIZE else win32.SW_RESTORE),
+        .maximized => |maximized| _ = win32.ShowWindow(@ptrCast(window.hwnd), if (maximized) win32.SW_MAXIMIZE else win32.SW_RESTORE),
+        .minimized => |minimized| _ = win32.ShowWindow(@ptrCast(window.hwnd), if (minimized) win32.SW_MINIMIZE else win32.SW_RESTORE),
         .always_on_top => |always_on_top| _ = win32.SetWindowPos(@ptrCast(window.hwnd), if (always_on_top) win32.HWND_TOPMOST else win32.HWND_NOTOPMOST, 0, 0, 0, 0, .{ .NOMOVE = 1, .NOSIZE = 1 }),
         .floating => {},
+        .decorated => |decorated| {
+            var style: i32 = @bitCast(win32.GetWindowLongW(@ptrCast(window.hwnd), win32.GWL_STYLE));
+            const WS_CAPTION: i32 = 0x00C00000;
+            const WS_THICKFRAME: i32 = 0x00040000;
+
+            if (decorated)
+                style |= (WS_CAPTION | WS_THICKFRAME)
+            else
+                style &= ~(WS_CAPTION | WS_THICKFRAME);
+
+            _ = win32.SetWindowLongW(@ptrCast(window.hwnd), win32.GWL_STYLE, @bitCast(style));
+            _ = win32.SetWindowPos(@ptrCast(window.hwnd), null, 0, 0, 0, 0, .{ .NOMOVE = 1, .NOSIZE = 1, .NOZORDER = 1, .DRAWFRAME = 1 });
+        },
     }
 }
 fn windowOpenglMakeCurrent(context: *anyopaque, platform_window: *Platform.Window) anyerror!void {

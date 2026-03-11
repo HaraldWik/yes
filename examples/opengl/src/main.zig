@@ -20,12 +20,15 @@ pub fn main(init: std.process.Init) !void {
     try window.open(platform, .{
         .title = "OpenGL Triangle",
         .size = .{ .width = 600, .height = 400 },
-        .min_size = .{ .width = 300, .height = 200 },
-        .max_size = .{ .width = 900, .height = 600 },
+        .resize_policy = .{ .specified = .{
+            .min_size = .{ .width = 300, .height = 200 },
+        } },
         .surface_type = .{ .opengl = .{ .major = 3, .minor = 3 } },
+        .decorated = false,
     });
     defer window.close(platform);
     try window.setAlwaysOnTop(platform, true);
+    try window.setDecorated(platform, true);
 
     try yes.opengl.makeCurrent(platform, window);
     try yes.opengl.swapInterval(platform, window, 1);
