@@ -17,7 +17,7 @@ pub fn build(b: *std.Build) void {
         },
     });
 
-    const xlib_option = b.option(bool, "xlib", "Allow use of xlib platform") orelse false; // Linux
+    const xlib_option = b.option(bool, "xlib", "Allow use of xlib platform") orelse true; // Linux
     const wayland_option = b.option(bool, "wayland", "Links with wayland libraries") orelse false; // Linux
 
     switch (target.result.os.tag) {

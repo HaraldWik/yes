@@ -82,7 +82,7 @@ pub fn platform(self: *@This()) Platform {
     return switch (builtin.os.tag) {
         .windows => self.inner.platform(),
         else => switch (self.inner) {
-            .x => if (build_options.xlib) self.inner.x.platform(),
+            .x => self.inner.x.platform(),
             .wayland => self.inner.wayland.platform(),
         },
     };
