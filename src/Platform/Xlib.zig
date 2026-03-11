@@ -235,7 +235,7 @@ fn windowPoll(context: *anyopaque, platform_window: *Platform.Window) anyerror!?
             }
             return .{ .resize = size };
         },
-        xlib.Expose => .{ .resize = window.interface.size },
+        xlib.Expose => .{ .resize = .{ .width = @intCast(event.xexpose.width), .height = @intCast(event.xexpose.height) } },
         xlib.ButtonPress, xlib.ButtonRelease => switch (event.xbutton.button) {
             4...7 => |scroll| if (event.type == xlib.ButtonPress) .{ .mouse_scroll = switch (scroll) {
                 6 => .{ .x = 1 },
