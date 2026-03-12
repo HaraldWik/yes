@@ -18,22 +18,28 @@ pub fn build(b: *std.Build) void {
     });
 
     const xlib_option = b.option(bool, "xlib", "Allow use of xlib platform") orelse true; // Linux
-    const wayland_option = b.option(bool, "wayland", "Links with wayland libraries") orelse false; // Linux
+    const libwayland_option = b.option(bool, "libwayland", "Links with wayland libraries") orelse true; // Linux
 
     switch (target.result.os.tag) {
         .windows, .wasi => {},
         .macos => {},
         else => {
             if (xlib_option) addXlib(b, mod, target, optimize);
-            // if (wayland_option) addWayland(b, mod, target, optimize);
-            if (xlib_option or wayland_option) addXkbcommon(b, mod, target, optimize);
+            if (libwayland_option) addWayland(b, mod, target, optimize);
+            if (xlib_option or libwayland_option) addXkbcommon(b, mod, target, optimize);
         },
     }
 
     const options = b.addOptions();
     options.addOption(bool, "xlib", xlib_option);
-    options.addOption(bool, "wayland", wayland_option);
+    options.addOption(bool, "libwayland", libwayland_option);
     mod.addOptions("build_options", options);
+
+    const mod_tests = b.addTest(.{ .root_module = mod });
+    const run_mod_tests = b.addRunArtifact(mod_tests);
+
+    const test_step = b.step("test", "Run tests");
+    test_step.dependOn(&run_mod_tests.step);
 }
 
 pub fn addXlib(b: *std.Build, mod: *std.Build.Module, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) void {
@@ -57,49 +63,26 @@ pub fn addXlib(b: *std.Build, mod: *std.Build.Module, target: std.Build.Resolved
 }
 
 pub fn addWayland(b: *std.Build, mod: *std.Build.Module, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) void {
-    const shimizu_build = @import("shimizu");
-    const wayland_dep = b.dependency("wayland", .{});
-    const wayland_protocols_dep = b.dependency("wayland-protocols", .{});
+    const Scanner = @import("wayland").Scanner;
+    const scanner = Scanner.create(b, .{});
 
-    const shimizu_dep = b.dependencyFromBuildZig(shimizu_build, .{
+    const wayland = b.createModule(.{
+        .root_source_file = scanner.result,
         .target = target,
         .optimize = optimize,
     });
 
-    const wayland_unstable_dir = shimizu_build.generateProtocolZig(shimizu_dep.builder, shimizu_dep.artifact("shimizu-scanner"), .{
-        .output_directory_name = "wayland-unstable",
-        .source_files = &.{
-            wayland_protocols_dep.path("unstable/xdg-decoration/xdg-decoration-unstable-v1.xml"),
-        },
-        .interface_versions = &.{
-            .{ .interface = "zxdg_decoration_manager_v1", .version = 1 },
-        },
-        .imports = &.{
-            .{ .file = wayland_dep.path("protocol/wayland.xml"), .import_string = "@import(\"core\")" },
-            .{ .file = wayland_protocols_dep.path("stable/xdg-shell/xdg-shell.xml"), .import_string = "@import(\"wayland-protocols\").xdg_shell" },
-        },
-    });
+    scanner.addSystemProtocol("stable/xdg-shell/xdg-shell.xml");
 
-    // this is just so we get something as output
-    const lib = b.addLibrary(.{
-        .name = "wayland-unstable",
-        .root_module = b.createModule(.{
-            .root_source_file = wayland_unstable_dir.path(b, "root.zig"),
-            .target = target,
-            .optimize = optimize,
-            .imports = &.{
-                .{ .name = "wire", .module = shimizu_dep.module("wire") },
-                .{ .name = "core", .module = shimizu_dep.module("core") },
-                .{ .name = "wayland-protocols", .module = shimizu_dep.module("wayland-protocols") },
-            },
-        }),
-    });
-    lib.installHeadersDirectory(wayland_unstable_dir, "wayland-unstable", .{
-        .include_extensions = &.{".zig"},
-    });
-    b.installArtifact(lib);
+    scanner.generate("wl_compositor", 1);
+    scanner.generate("wl_output", 4);
+    scanner.generate("wl_shm", 1);
+    scanner.generate("wl_seat", 4);
+    scanner.generate("xdg_wm_base", 3);
 
-    mod.linkLibrary(lib);
+    mod.addImport("wayland", wayland);
+    mod.link_libc = true;
+    mod.linkSystemLibrary("wayland-client", .{});
 }
 
 pub fn addXkbcommon(b: *std.Build, mod: *std.Build.Module, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) void {

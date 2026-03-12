@@ -8,7 +8,7 @@ pub const Result = enum(c_int) {
 };
 
 pub const Instance = opaque {
-    pub const GetProcAddress = *const fn (instance: *Instance, name: [*:0]const u8) callconv(.c) *const fn () callconv(.c) void;
+    pub const GetProcAddress = *const fn (instance: *Instance, name: [*:0]const u8) callconv(.c) ?*const fn () callconv(.c) void;
 };
 
 pub const AllocationCallbacks = opaque {};

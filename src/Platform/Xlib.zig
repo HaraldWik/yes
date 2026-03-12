@@ -453,7 +453,7 @@ fn windowVulkanCreateSurface(context: *anyopaque, platform_window: *Platform.Win
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
 
-    const vkCreateXlibSurfaceKHR: vulkan.Surface.CreateProc = @ptrCast(getProcAddress(instance, "vkCreateXlibSurfaceKHR"));
+    const vkCreateXlibSurfaceKHR: vulkan.Surface.CreateProc = @ptrCast(getProcAddress(instance, "vkCreateXlibSurfaceKHR") orelse return error.LoadVkCreateXlibSurfaceKHR);
 
     const create_info: vulkan.Surface.CreateInfo = .{ .xlib = .{
         .display = self.display,

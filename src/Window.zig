@@ -90,6 +90,8 @@ pub const OpenOptions = struct {
 };
 
 pub fn open(window: *Window, platform: Platform, options: OpenOptions) anyerror!void {
+    window.size = options.size;
+    window.position = options.position orelse .{};
     window.surface_type = options.surface_type;
     try platform.vtable.windowOpen(platform.ptr, window, options);
 }

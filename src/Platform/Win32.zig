@@ -387,7 +387,7 @@ fn windowVulkanCreateSurface(context: *anyopaque, platform_window: *Platform.Win
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
 
-    const vkCreateWin32SurfaceKHR: vulkan.Surface.CreateProc = @ptrCast(getProcAddress(instance, "vkCreateWin32SurfaceKHR"));
+    const vkCreateWin32SurfaceKHR: vulkan.Surface.CreateProc = @ptrCast(getProcAddress(instance, "vkCreateWin32SurfaceKHR") orelse return error.LoadVkCreateWin32SurfaceKHR);
 
     const create_info: vulkan.Surface.CreateInfo = .{
         .hinstance = self.instance,
