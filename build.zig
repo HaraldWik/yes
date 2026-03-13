@@ -17,6 +17,7 @@ pub fn build(b: *std.Build) void {
         },
     });
 
+    const opengl_option = b.option(bool, "opengl", "Link with native OpenGL libs") orelse true; // Linux
     const xlib_option = b.option(bool, "xlib", "Allow use of xlib platform") orelse true; // Linux
     const libwayland_option = b.option(bool, "libwayland", "Links with wayland libraries") orelse true; // Linux
 
@@ -27,10 +28,16 @@ pub fn build(b: *std.Build) void {
             if (xlib_option) addXlib(b, mod, target, optimize);
             if (libwayland_option) addWayland(b, mod, target, optimize);
             if (xlib_option or libwayland_option) addXkbcommon(b, mod, target, optimize);
+
+            if (libwayland_option and opengl_option) {
+                mod.linkSystemLibrary("EGL", .{});
+                mod.linkSystemLibrary("wayland-egl", .{});
+            }
         },
     }
 
     const options = b.addOptions();
+    options.addOption(bool, "opengl", opengl_option);
     options.addOption(bool, "xlib", xlib_option);
     options.addOption(bool, "libwayland", libwayland_option);
     mod.addOptions("build_options", options);

@@ -33,7 +33,7 @@ pub fn main(init: std.process.Init) !void {
     try yes.opengl.makeCurrent(platform, window);
     try yes.opengl.swapInterval(platform, window, 1);
 
-    gl.load(yes.opengl.getProcAddress, false);
+    gl.load(yes.opengl.getProcAddressProc(platform), false);
     gl.debug.set(null);
 
     if (gl.String.get(.version, null)) |version| std.log.info("OpenGL version: {s}", .{version});

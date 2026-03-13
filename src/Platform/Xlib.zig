@@ -2,6 +2,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 const build_options = @import("build_options");
 const xlib = @import("xlib");
+const opengl = @import("../opengl.zig");
 const vulkan = @import("../vulkan.zig");
 const Platform = @import("../Platform.zig");
 
@@ -70,10 +71,12 @@ pub fn platform(self: *@This()) Platform {
             .windowClose = windowClose,
             .windowPoll = windowPoll,
             .windowSetProperty = windowSetProperty,
+            .windowSoftwareGetPixels = windowSoftwareGetPixels,
             .windowOpenglMakeCurrent = windowOpenglMakeCurrent,
             .windowOpenglSwapBuffers = windowOpenglSwapBuffers,
             .windowOpenglSwapInterval = windowOpenglSwapInterval,
             .windowVulkanCreateSurface = windowVulkanCreateSurface,
+            .openglGetProcAddress = opengl.glXGetProcAddress,
         },
     };
 }
@@ -170,10 +173,10 @@ fn windowOpen(context: *anyopaque, platform_window: *Platform.Window, options: P
 
     // Create OpenGL context
     switch (options.surface_type) {
-        .opengl => |opengl| {
+        .opengl => |gl| {
             const ctx_attribs: [*]const c_int = &.{
-                xlib.GLX_CONTEXT_MAJOR_VERSION_ARB, @intCast(opengl.major),
-                xlib.GLX_CONTEXT_MINOR_VERSION_ARB, @intCast(opengl.minor),
+                xlib.GLX_CONTEXT_MAJOR_VERSION_ARB, @intCast(gl.major),
+                xlib.GLX_CONTEXT_MINOR_VERSION_ARB, @intCast(gl.minor),
                 xlib.GLX_CONTEXT_PROFILE_MASK_ARB,  xlib.GLX_CONTEXT_CORE_PROFILE_BIT_ARB,
                 xlib.None,
             };
@@ -432,6 +435,17 @@ fn windowSetProperty(context: *anyopaque, platform_window: *Platform.Window, pro
     }
 
     _ = xlib.XFlush(self.display);
+}
+fn windowSoftwareGetPixels(context: *anyopaque, platform_window: *Platform.Window) anyerror![]u8 {
+    const self: *@This() = @ptrCast(@alignCast(context));
+    const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
+
+    _ = self;
+    _ = window;
+
+    std.log.info("no software rendering is currently not supported", .{});
+
+    return &.{};
 }
 fn windowOpenglMakeCurrent(context: *anyopaque, platform_window: *Platform.Window) anyerror!void {
     const self: *@This() = @ptrCast(@alignCast(context));

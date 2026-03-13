@@ -1,6 +1,7 @@
 const std = @import("std");
 const xpz = @import("xpz");
-const vulkan = @import("../root.zig").vulkan;
+const opengl = @import("../opengl.zig");
+const vulkan = @import("../vulkan.zig");
 const Platform = @import("../Platform.zig");
 
 connection: xpz.Connection,
@@ -77,10 +78,12 @@ pub fn platform(self: *@This()) Platform {
             .windowClose = windowClose,
             .windowPoll = windowPoll,
             .windowSetProperty = windowSetProperty,
+            .windowSoftwareGetPixels = windowSoftwareGetPixels,
             .windowOpenglMakeCurrent = windowOpenglMakeCurrent,
             .windowOpenglSwapBuffers = windowOpenglSwapBuffers,
             .windowOpenglSwapInterval = windowOpenglSwapInterval,
             .windowVulkanCreateSurface = windowVulkanCreateSurface,
+            .openglGetProcAddress = opengl.glXGetProcAddress,
         },
     };
 }
@@ -187,7 +190,6 @@ fn windowPoll(context: *anyopaque, platform_window: *Platform.Window) anyerror!?
         else => null,
     };
 }
-
 fn windowSetProperty(context: *anyopaque, platform_window: *Platform.Window, property: Platform.Window.Property) anyerror!void {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
@@ -211,7 +213,17 @@ fn windowSetProperty(context: *anyopaque, platform_window: *Platform.Window, pro
         .decorated => {},
     }
 }
+fn windowSoftwareGetPixels(context: *anyopaque, platform_window: *Platform.Window) anyerror![]u8 {
+    const self: *@This() = @ptrCast(@alignCast(context));
+    const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
 
+    _ = self;
+    _ = window;
+
+    std.log.info("no software rendering is currently not supported");
+
+    return &.{};
+}
 fn windowOpenglMakeCurrent(context: *anyopaque, platform_window: *Platform.Window) anyerror!void {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));

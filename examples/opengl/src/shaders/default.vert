@@ -1,4 +1,4 @@
-#version 330 core
+#version 300 es
 
 vec2 positions[3] = vec2[3](
     vec2( 0.0,  0.5),

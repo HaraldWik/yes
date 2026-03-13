@@ -141,3 +141,8 @@ pub fn setFloating(window: *Window, platform: Platform, floating: bool) anyerror
 pub fn setDecorated(window: *Window, platform: Platform, decorated: bool) anyerror!void {
     try platform.vtable.windowSetProperty(platform.ptr, window, .{ .decorated = decorated });
 }
+
+pub fn getSoftwarePixels(window: *Window, platform: Platform) anyerror![]u8 {
+    if (window.surface_type != .software) return error.WrongSurfaceType;
+    return platform.vtable.windowSoftwareGetPixels(platform.ptr, window);
+}

@@ -1,14 +1,13 @@
 const std = @import("std");
 const win32 = @import("win32").everything;
-const vulkan = @import("../root.zig").vulkan;
+const opengl = @import("../opengl.zig");
+const vulkan = @import("../vulkan.zig");
 const Platform = @import("../Platform.zig");
 // zig build -Dtarget=x86_64-windows && wine zig-out/bin/example.exe
 
 allocator: std.mem.Allocator,
 instance: std.os.windows.HINSTANCE,
-opengl: struct {
-    wglSwapIntervalEXT: ?*const fn (i32) callconv(.winapi) win32.BOOL = null,
-} = .{},
+wglSwapIntervalEXT: ?*const fn (i32) callconv(.winapi) win32.BOOL = null,
 
 pub const Window = struct {
     interface: Platform.Window = .{},
@@ -50,10 +49,12 @@ pub fn platform(self: *@This()) Platform {
             .windowClose = windowClose,
             .windowPoll = windowPoll,
             .windowSetProperty = windowSetProperty,
+            .windowSoftwareGetPixels = windowSoftwareGetPixels,
             .windowOpenglMakeCurrent = windowOpenglMakeCurrent,
             .windowOpenglSwapBuffers = windowOpenglSwapBuffers,
             .windowOpenglSwapInterval = windowOpenglSwapInterval,
             .windowVulkanCreateSurface = windowVulkanCreateSurface,
+            .openglGetProcAddress = openglGetProcAddress,
         },
     };
 }
@@ -138,7 +139,7 @@ fn windowOpen(context: *anyopaque, platform_window: *Platform.Window, options: P
                 var it = std.mem.tokenizeScalar(u8, std.mem.sliceTo(extensions, 0), ' ');
                 while (it.next()) |name| {
                     if (std.mem.eql(u8, name, "WGL_EXT_swap_control"))
-                        self.opengl.wglSwapIntervalEXT = @ptrCast(win32.wglGetProcAddress("wglSwapIntervalEXT") orelse return error.WglSwapIntervalEXT);
+                        self.wglSwapIntervalEXT = @ptrCast(win32.wglGetProcAddress("wglSwapIntervalEXT") orelse return error.WglSwapIntervalEXT);
                     // if (std.mem.eql(u8, name, "WGL_ARB_pixel_format"))
                     // wgl.choosePixelFormatARB = @ptrCast(win32.wglGetProcAddress("wglChoosePixelFormatARB") orelse return error.WglChoosePixelFormatARB);
                     if (std.mem.eql(u8, name, "WGL_ARB_create_context_profile"))
@@ -358,30 +359,41 @@ fn windowSetProperty(context: *anyopaque, platform_window: *Platform.Window, pro
         },
     }
 }
+fn windowSoftwareGetPixels(context: *anyopaque, platform_window: *Platform.Window) anyerror![]u8 {
+    const self: *@This() = @ptrCast(@alignCast(context));
+    const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
+
+    _ = self;
+    _ = window;
+
+    std.log.info("no software rendering is currently not supported", .{});
+
+    return &.{};
+}
 fn windowOpenglMakeCurrent(context: *anyopaque, platform_window: *Platform.Window) anyerror!void {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
     _ = self;
 
-    const opengl = window.surface.opengl;
-    if (!win32.SUCCEEDED(win32.wglMakeCurrent(@ptrCast(opengl.device_context), @ptrCast(opengl.render_context)))) return reportErr(error.WglMakeCurrent);
+    const gl = window.surface.opengl;
+    if (!win32.SUCCEEDED(win32.wglMakeCurrent(@ptrCast(gl.device_context), @ptrCast(gl.render_context)))) return reportErr(error.WglMakeCurrent);
 }
 fn windowOpenglSwapBuffers(context: *anyopaque, platform_window: *Platform.Window) anyerror!void {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
     _ = self;
 
-    const opengl = window.surface.opengl;
-    if (!win32.SUCCEEDED(win32.SwapBuffers(@ptrCast(opengl.device_context)))) return reportErr(error.WglSwapBuffers);
+    const gl = window.surface.opengl;
+    if (!win32.SUCCEEDED(win32.SwapBuffers(@ptrCast(gl.device_context)))) return reportErr(error.WglSwapBuffers);
 }
 fn windowOpenglSwapInterval(context: *anyopaque, platform_window: *Platform.Window, interval: i32) anyerror!void {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
 
     std.debug.assert(window.surface == .opengl);
-    if (self.opengl.wglSwapIntervalEXT == null) return;
+    std.debug.assert(self.wglSwapIntervalEXT != null);
 
-    if (!win32.SUCCEEDED(self.opengl.wglSwapIntervalEXT.?(interval))) return reportErr(error.WglMakeCurrent);
+    if (!win32.SUCCEEDED(self.wglSwapIntervalEXT.?(interval))) return reportErr(error.WglMakeCurrent);
 }
 fn windowVulkanCreateSurface(context: *anyopaque, platform_window: *Platform.Window, instance: *vulkan.Instance, allocator: ?*const vulkan.AllocationCallbacks, getProcAddress: vulkan.Instance.GetProcAddress) anyerror!*vulkan.Surface {
     const self: *@This() = @ptrCast(@alignCast(context));
@@ -397,6 +409,13 @@ fn windowVulkanCreateSurface(context: *anyopaque, platform_window: *Platform.Win
     var surface: ?*vulkan.Surface = null;
     if (vkCreateWin32SurfaceKHR(instance, &create_info, allocator, &surface) != .success) return error.VkCreateWin32SurfaceKHR;
     return surface orelse error.InvalidSurface;
+}
+
+fn openglGetProcAddress(procname: [*:0]const u8) callconv(opengl.APIENTRY) ?opengl.Proc {
+    if (opengl.wglGetProcAddress(procname)) |proc| return @ptrCast(proc);
+    const gl = win32.LoadLibraryA("opengl32.dll") orelse return null;
+    if (win32.GetProcAddress(gl, procname)) |proc| return @ptrCast(proc);
+    return null;
 }
 
 fn wndProc(hwnd: win32.HWND, msg: u32, wParam: usize, lParam: isize) callconv(.winapi) isize {

@@ -11,20 +11,12 @@ pub const Proc = switch (builtin.os.tag) {
 
 pub const Version = packed struct(u16) { major: u8, minor: u8 };
 
-extern "opengl32" fn wglGetProcAddress(param0: [*:0]const u8) callconv(.winapi) ?Proc;
-extern "glx" fn glXGetProcAddress(procname: [*:0]const u8) callconv(.c) ?Proc;
+pub extern "opengl32" fn wglGetProcAddress(param0: [*:0]const u8) callconv(.winapi) ?Proc;
+pub extern "glx" fn glXGetProcAddress(procname: [*:0]const u8) callconv(.c) ?Proc;
+pub extern "egl" fn eglGetProcAddress(procname: [*:0]const u8) callconv(.c) ?Proc;
 
-pub fn getProcAddress(name: [*:0]const u8) ?Proc {
-    return switch (builtin.os.tag) {
-        .windows => proc: {
-            const win32 = @import("win32").everything;
-            if (wglGetProcAddress(name)) |proc| break :proc @ptrCast(proc);
-            const gl = win32.LoadLibraryA("opengl32.dll") orelse return null;
-            if (win32.GetProcAddress(gl, name)) |proc| break :proc @ptrCast(proc);
-            break :proc null;
-        },
-        else => glXGetProcAddress(name),
-    };
+pub fn getProcAddressProc(platform: Platform) *const fn (procname: [*:0]const u8) callconv(APIENTRY) ?Proc {
+    return platform.vtable.openglGetProcAddress;
 }
 
 pub fn makeCurrent(platform: Platform, window: *Platform.Window) !void {
