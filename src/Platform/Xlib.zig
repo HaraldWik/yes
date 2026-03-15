@@ -26,6 +26,12 @@ pub const AtomTable = struct {
         window_type_normal: xlib.Atom,
         window_type_dialog: xlib.Atom,
     },
+    net: struct {
+        active_window: xlib.Atom,
+    },
+    motif_wm: struct {
+        hints: xlib.Atom,
+    },
 
     pub fn load(display: *xlib.Display) @This() {
         return .{
@@ -40,6 +46,12 @@ pub const AtomTable = struct {
                 .window_type = xlib.XInternAtom(display, "_NET_WM_WINDOW_TYPE", xlib.False),
                 .window_type_normal = xlib.XInternAtom(display, "_NET_WM_WINDOW_TYPE_NORMAL", xlib.False),
                 .window_type_dialog = xlib.XInternAtom(display, "_NET_WM_WINDOW_TYPE_DIALOG", xlib.False),
+            },
+            .net = .{
+                .active_window = xlib.XInternAtom(display, " _NET_ACTIVE_WINDOW", xlib.False),
+            },
+            .motif_wm = .{
+                .hints = xlib.XInternAtom(display, "_MOTIF_WM_HINTS", xlib.False),
             },
         };
     }
@@ -424,11 +436,34 @@ fn windowSetProperty(context: *anyopaque, platform_window: *Platform.Window, pro
                 .status = 0,
             };
 
-            const motif = xlib.XInternAtom(self.display, "_MOTIF_WM_HINTS", xlib.False);
-
-            _ = xlib.XChangeProperty(self.display, window.handle, motif, motif, 32, xlib.PropModeReplace, @ptrCast(&motif_hints), 5);
+            _ = xlib.XChangeProperty(self.display, window.handle, self.atom_table.motif_wm.hints, self.atom_table.motif_wm.hints, 32, xlib.PropModeReplace, @ptrCast(&motif_hints), 5);
         },
-        .focus => {}, // TODO: add focus request
+        .focus => |focus| {
+            // Fallback (sometimes works)
+            _ = xlib.XSetInputFocus(self.display, window.handle, xlib.RevertToParent, xlib.CurrentTime);
+
+            var event: xlib.XEvent = undefined;
+            event.xclient = .{
+                .type = xlib.ClientMessage,
+                .serial = 0,
+                .send_event = xlib.True,
+                .display = self.display,
+                .window = window.handle,
+                .message_type = self.atom_table.net.active_window,
+                .format = 32,
+                .data = .{
+                    .l = .{
+                        if (focus == .focused) 1 else 0,
+                        xlib.CurrentTime,
+                        0,
+                        0,
+                        0,
+                    },
+                },
+            };
+
+            _ = xlib.XSendEvent(self.display, screen, xlib.False, xlib.SubstructureRedirectMask | xlib.SubstructureNotifyMask, &event);
+        },
     }
 
     _ = xlib.XFlush(self.display);

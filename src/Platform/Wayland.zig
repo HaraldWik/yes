@@ -252,6 +252,7 @@ fn windowOpen(context: *anyopaque, platform_window: *Platform.Window, options: P
     window.wl_surface.commit();
     if (self.display.roundtrip() != .SUCCESS) return error.Roundtrip;
 
+    if (options.surface_type != .empty) try window.events.append(self.allocator, .{ .focus = .focused });
     try window.events.append(self.allocator, .{ .resize = options.size });
 }
 fn windowClose(context: *anyopaque, platform_window: *Platform.Window) void {
@@ -284,9 +285,10 @@ fn windowPoll(context: *anyopaque, platform_window: *Platform.Window) anyerror!?
 
     if (!window.running) return .close;
 
+    if (self.display.dispatchPending() != .SUCCESS) return error.DispatchPending;
     if (!self.display.prepareRead()) return null;
     self.io_manager.current_window.store(window, .seq_cst);
-    if (self.display.dispatchPending() != .SUCCESS) return error.DispatchPending;
+
     if (self.display.flush() != .SUCCESS) return error.Flush;
 
     if (window.err) |err| return err;
@@ -316,6 +318,7 @@ fn windowPoll(context: *anyopaque, platform_window: *Platform.Window) anyerror!?
                 window.surface.software = software_surface;
             },
             .opengl => |gl| {
+                window.wl_surface.commit();
                 gl.window.resize(@intCast(size.width), @intCast(size.height), 0, 0);
                 window.wl_surface.commit();
             },
@@ -392,12 +395,14 @@ fn windowOpenglMakeCurrent(_: *anyopaque, platform_window: *Platform.Window) any
     const gl = window.surface.opengl;
     if (egl.eglMakeCurrent(gl.display, gl.surface, gl.surface, gl.context) != egl.EGL_TRUE) return error.EglMakeCurrent;
 }
-fn windowOpenglSwapBuffers(_: *anyopaque, platform_window: *Platform.Window) anyerror!void {
+fn windowOpenglSwapBuffers(context: *anyopaque, platform_window: *Platform.Window) anyerror!void {
+    const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
 
     std.debug.assert(window.surface == .opengl);
     const gl = window.surface.opengl;
     if (egl.eglSwapBuffers(gl.display, gl.surface) != egl.EGL_TRUE) return error.EglSwapBuffers;
+    if (self.display.dispatchPending() != .SUCCESS) return error.DispatchPending;
 }
 fn windowOpenglSwapInterval(_: *anyopaque, platform_window: *Platform.Window, interval: i32) anyerror!void {
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));

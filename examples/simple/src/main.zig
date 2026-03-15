@@ -60,25 +60,7 @@ pub fn main(init: std.process.Init) !void {
                 if (key.sym == .r)
                     try window.setResizePolicy(platform, .{ .resizable = true });
             },
-            .mouse_move => {},
-            .mouse_button => |button| {
-                std.log.info("{t:<8} mouse button {t:<8} at {d} x {d}", .{ button.state, button.type, button.position.x, button.position.y });
-                if (button.state == .pressed and button.type == .left)
-                    try window.setTitle(platform, "Window! 👺🌶️🫑");
-                if (button.state == .pressed and button.type == .right)
-                    try window.setTitle(platform, "Window 🇸🇪");
-
-                if (button.state == .released and button.type == .middle) {
-                    fullscreen = !fullscreen;
-                    try window.setFullscreen(platform, fullscreen);
-                }
-            },
-            .mouse_scroll => |scroll| {
-                std.log.info("mouse scroll: {t}: {d:2}", .{ scroll, switch (scroll) {
-                    .x => scroll.x,
-                    .y => scroll.y,
-                } });
-            },
+            else => std.log.info("{any}", .{event}),
         };
     }
 }

@@ -93,33 +93,15 @@ pub fn main(init: std.process.Init) !void {
     gl.c.glBindVertexArray(vao);
 
     gl.c.glBindBuffer(gl.c.GL_ARRAY_BUFFER, vbo);
-    gl.c.glBufferData(
-        gl.c.GL_ARRAY_BUFFER,
-        @intCast(@sizeOf(f32) * vertices.len),
-        vertices[0..].ptr,
-        gl.c.GL_STATIC_DRAW,
-    );
+    gl.c.glBufferData(gl.c.GL_ARRAY_BUFFER, @intCast(@sizeOf(f32) * vertices.len), vertices[0..].ptr, gl.c.GL_STATIC_DRAW);
 
     gl.c.glBindBuffer(gl.c.GL_ELEMENT_ARRAY_BUFFER, ebo);
-    gl.c.glBufferData(
-        gl.c.GL_ELEMENT_ARRAY_BUFFER,
-        @intCast(@sizeOf(u32) * indices.len),
-        indices[0..].ptr,
-        gl.c.GL_STATIC_DRAW,
-    );
+    gl.c.glBufferData(gl.c.GL_ELEMENT_ARRAY_BUFFER, @intCast(@sizeOf(u32) * indices.len), indices[0..].ptr, gl.c.GL_STATIC_DRAW);
     gl.c.glEnableVertexAttribArray(0);
-    gl.c.glVertexAttribPointer(0, // location 0 in shader
-        3, // 3 floats per vertex
-        gl.c.GL_FLOAT, gl.c.GL_FALSE, @intCast(6 * @sizeOf(f32)), // stride: 6 floats per vertex
-        vertices[0..].ptr);
+    gl.c.glVertexAttribPointer(0, 3, gl.c.GL_FLOAT, gl.c.GL_FALSE, 6 * @sizeOf(f32), @ptrFromInt(0));
 
     gl.c.glEnableVertexAttribArray(1);
-    gl.c.glVertexAttribPointer(1, // location 1 in shader
-        3, // 3 floats per vertex
-        gl.c.GL_FLOAT, gl.c.GL_FALSE, @intCast(6 * @sizeOf(f32)), // same stride
-        vertices[0..].ptr + 3 * @sizeOf(f32) // offset to color
-    );
-    gl.c.glBindVertexArray(0);
+    gl.c.glVertexAttribPointer(1, 3, gl.c.GL_FLOAT, gl.c.GL_FALSE, 6 * @sizeOf(f32), @ptrFromInt(3 * @sizeOf(f32)));
 
     main_loop: while (true) {
         const delta_time = getDeltaTime(io);
@@ -136,7 +118,8 @@ pub fn main(init: std.process.Init) !void {
                 gl.c.glUniformMatrix4fv(projection_loc, 1, 0, projection_matrix.d[0..].ptr);
             },
             .key => |key| {
-                if (key.state != .pressed) continue;
+                std.log.info("{t:<8} {t}", .{ key.state, key.sym });
+
                 switch (key.sym) {
                     .w => view_transform.position[2] += 50.0 * delta_time,
                     .s => view_transform.position[2] -= 50.0 * delta_time,
@@ -146,7 +129,7 @@ pub fn main(init: std.process.Init) !void {
                 }
                 gl.c.glUniformMatrix4fv(view_loc, 1, 0, view_transform.toMat4x4().d[0..].ptr);
             },
-            else => {},
+            else => std.log.info("{any}", .{event}),
         };
 
         gl.clear.color(0.0, 0.0, 0.0, 0.0);
