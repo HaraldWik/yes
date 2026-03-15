@@ -217,8 +217,8 @@ fn windowPoll(context: *anyopaque, platform_window: *Platform.Window) anyerror!?
 
     return switch (event.type) {
         xlib.ClientMessage => if (@as(xlib.Atom, @intCast(event.xclient.data.l[0])) == window.wm_delete_window) .close else null,
-        xlib.FocusIn => .{ .focus = .enter },
-        xlib.FocusOut => .{ .focus = .leave },
+        xlib.FocusIn => .{ .focus = .focused },
+        xlib.FocusOut => .{ .focus = .unfocused },
         xlib.ConfigureNotify => {
             var attrs: xlib.XWindowAttributes = undefined;
             _ = xlib.XGetWindowAttributes(self.display, window.handle, &attrs);
@@ -241,10 +241,10 @@ fn windowPoll(context: *anyopaque, platform_window: *Platform.Window) anyerror!?
         xlib.Expose => if (window.interface.surface_type == .opengl) .{ .resize = .{ .width = @intCast(event.xexpose.width), .height = @intCast(event.xexpose.height) } } else null,
         xlib.ButtonPress, xlib.ButtonRelease => switch (event.xbutton.button) {
             4...7 => |scroll| if (event.type == xlib.ButtonPress) .{ .mouse_scroll = switch (scroll) {
-                6 => .{ .x = 1 },
-                7 => .{ .x = -1 },
-                4 => .{ .y = 1 },
-                5 => .{ .y = -1 },
+                6 => .{ .horizontal = 1.0 },
+                7 => .{ .horizontal = -1.0 },
+                4 => .{ .vertical = 1.0 },
+                5 => .{ .vertical = -1.0 },
                 else => unreachable,
             } } else null,
             else => .{ .mouse_button = .{
@@ -253,16 +253,12 @@ fn windowPoll(context: *anyopaque, platform_window: *Platform.Window) anyerror!?
                     xlib.ButtonRelease => .released,
                     else => unreachable,
                 },
-                .type = Platform.Window.Event.MouseButton.Type.fromX(event.xbutton.button) orelse return null,
-                .position = .{
-                    .x = @intCast(event.xbutton.x),
-                    .y = @intCast(event.xbutton.y),
-                },
+                .button = Platform.Window.Event.MouseButton.Button.fromX(event.xbutton.button) orelse return null,
             } },
         },
-        xlib.MotionNotify => .{ .mouse_move = .{
-            .x = @intCast(event.xmotion.x),
-            .y = @intCast(event.xmotion.y),
+        xlib.MotionNotify => .{ .mouse_motion = .{
+            .x = @floatFromInt(event.xmotion.x),
+            .y = @floatFromInt(event.xmotion.y),
         } },
         xlib.KeyPress, xlib.KeyRelease => .{ .key = .{
             .state = switch (event.type) {
@@ -432,6 +428,7 @@ fn windowSetProperty(context: *anyopaque, platform_window: *Platform.Window, pro
 
             _ = xlib.XChangeProperty(self.display, window.handle, motif, motif, 32, xlib.PropModeReplace, @ptrCast(&motif_hints), 5);
         },
+        .focus => {}, // TODO: add focus request
     }
 
     _ = xlib.XFlush(self.display);

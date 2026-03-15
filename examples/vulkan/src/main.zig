@@ -72,7 +72,7 @@ pub fn main(init: std.process.Init) !void {
                 std.log.info("resize: {d}x{d}", .{ size.width, size.height });
                 try swapchain.resize(allocator, device, physical_device, surface, surface_info, size);
             },
-            else => {},
+            else => std.log.info("{any}", .{event}),
         };
 
         const command_buffer = try frame_data.aquire(device, swapchain, command_pool);

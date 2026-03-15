@@ -1,25 +1,19 @@
 #version 300 es
+precision mediump float;
 
-vec2 positions[3] = vec2[3](
-    vec2( 0.0,  0.5),
-    vec2(-0.5, -0.5),
-    vec2( 0.5, -0.5)
-);
+// Vertex attributes
+layout(location = 0) in vec3 a_position; // xyz
+layout(location = 1) in vec3 a_color;    // rgb
 
-vec3 colors[3] = vec3[3](
-    vec3(1.0, 0.0, 0.0),
-    vec3(0.0, 1.0, 0.0),
-    vec3(0.0, 0.0, 1.0)
-);
-
+// Uniforms
 uniform mat4 model;
 uniform mat4 view;
 uniform mat4 projection;
 
-out vec3 frag_color;
+// Pass color to fragment shader
+out vec3 v_color;
 
 void main() {
-    vec4 pos = vec4(positions[gl_VertexID], 0.0, 1.0);
-    gl_Position = projection * view * model * pos;
-    frag_color = colors[gl_VertexID];
+    gl_Position = projection * view * model * vec4(a_position, 1.0);
+    v_color = a_color;
 }

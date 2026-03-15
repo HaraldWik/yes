@@ -7,6 +7,7 @@ const Window = @This();
 
 size: Size = .{},
 position: Position = .{},
+focus: Focus = .focused,
 surface_type: SurfaceType = .empty,
 
 pub const Event = @import("event.zig").Event;
@@ -67,6 +68,11 @@ pub const ResizePolicy = union(enum) {
     };
 };
 
+pub const Focus = enum(u1) {
+    focused,
+    unfocused,
+};
+
 pub const Property = union(enum) {
     title: []const u8,
     size: Window.Size,
@@ -75,6 +81,7 @@ pub const Property = union(enum) {
     fullscreen: bool,
     maximized: bool,
     minimized: bool,
+    focus: Focus,
     always_on_top: bool,
     floating: bool,
     decorated: bool,
@@ -85,11 +92,21 @@ pub const OpenOptions = struct {
     size: Size,
     position: ?Position = null,
     resize_policy: ResizePolicy = .{ .resizable = true },
+    fullscreen: bool = false,
+    maximized: bool = false,
+    minimized: bool = false,
+    focus: Focus = .focused,
+    always_on_top: bool = false,
+    floating: ?bool = null,
     decorated: bool = true,
     surface_type: SurfaceType = .empty,
 };
 
 pub fn open(window: *Window, platform: Platform, options: OpenOptions) anyerror!void {
+    if (builtin.os.tag.isDarwin()) switch (options.surface_type) {
+        .opengl => |gl| if (gl.major == 4) std.debug.assert(gl <= 1),
+        else => {},
+    };
     window.size = options.size;
     window.position = options.position orelse .{};
     window.surface_type = options.surface_type;
@@ -102,6 +119,8 @@ pub fn poll(window: *Window, platform: Platform) anyerror!?Event {
     const event = try platform.vtable.windowPoll(platform.ptr, window) orelse return null;
     switch (event) {
         .resize => |size| window.size = size,
+        .move => |position| window.position = position,
+        .focus => |focus| window.focus = focus,
         else => {},
     }
     return event;
@@ -131,6 +150,9 @@ pub fn setMaximized(window: *Window, platform: Platform, maximize: bool) anyerro
 }
 pub fn setMinimized(window: *Window, platform: Platform, minimize: bool) anyerror!void {
     try platform.vtable.windowSetProperty(platform.ptr, window, .{ .minimized = minimize });
+}
+pub fn setFocus(window: *Window, platform: Platform, focus: Focus) anyerror!void {
+    try platform.vtable.windowSetProperty(platform.ptr, window, .{ .focus = focus });
 }
 pub fn setAlwaysOnTop(window: *Window, platform: Platform, always_on_top: bool) anyerror!void {
     try platform.vtable.windowSetProperty(platform.ptr, window, .{ .always_on_top = always_on_top });

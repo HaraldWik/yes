@@ -228,8 +228,8 @@ fn windowPoll(context: *anyopaque, platform_window: *Platform.Window) anyerror!?
                 return null;
             },
         },
-        win32.WM_USER + win32.WM_SETFOCUS => .{ .focus = .enter },
-        win32.WM_USER + win32.WM_KILLFOCUS => .{ .focus = .leave },
+        win32.WM_USER + win32.WM_SETFOCUS => .{ .focus = .focused },
+        win32.WM_USER + win32.WM_KILLFOCUS => .{ .focus = .unfocused },
         win32.WM_USER + win32.WM_SIZE => .{ .resize = .{
             .width = @intCast(@as(u16, @truncate(@as(u32, @intCast(msg.lParam))))),
             .height = @intCast(@as(u16, @truncate(@as(u32, @intCast(msg.lParam >> 16))))),
@@ -239,13 +239,13 @@ fn windowPoll(context: *anyopaque, platform_window: *Platform.Window) anyerror!?
             .y = @intCast(@as(u16, @truncate(std.math.cast(u32, msg.lParam >> 16) orelse return null))),
         } },
         win32.WM_WINDOWPOSCHANGED => {
-            std.debug.print("what\n", .{});
+            std.debug.panic("WM_WINDOWPOSCHANGED", .{});
             return null;
         },
         // Mouse
-        win32.WM_MOUSEMOVE => .{ .mouse_move = .{
-            .x = @intCast(@as(u16, @truncate(@as(usize, @intCast(msg.lParam))))),
-            .y = @intCast(@as(u16, @truncate(@as(usize, @intCast(msg.lParam >> 16))))),
+        win32.WM_MOUSEMOVE => .{ .mouse_motion = .{
+            .x = @floatFromInt(@as(u16, @truncate(@as(usize, @intCast(msg.lParam))))),
+            .y = @floatFromInt(@as(u16, @truncate(@as(usize, @intCast(msg.lParam >> 16))))),
         } },
         win32.WM_MOUSEWHEEL, win32.WM_MOUSEHWHEEL => {
             const delta: isize = @intCast((msg.wParam >> 16) & 0xFFFF);
@@ -253,8 +253,8 @@ fn windowPoll(context: *anyopaque, platform_window: *Platform.Window) anyerror!?
             if (lines == 545) lines = -1;
             return .{
                 .mouse_scroll = switch (msg.message) {
-                    win32.WM_MOUSEWHEEL => .{ .x = lines },
-                    win32.WM_MOUSEHWHEEL => .{ .y = lines },
+                    win32.WM_MOUSEWHEEL => .{ .horizontal = @floatFromInt(lines) },
+                    win32.WM_MOUSEHWHEEL => .{ .vertical = @floatFromInt(lines) },
                     else => unreachable,
                 },
             };
@@ -266,11 +266,7 @@ fn windowPoll(context: *anyopaque, platform_window: *Platform.Window) anyerror!?
                     win32.WM_RBUTTONUP, win32.WM_MBUTTONUP, win32.WM_LBUTTONUP, win32.WM_XBUTTONUP => .released,
                     else => unreachable,
                 },
-                .type = Platform.Window.Event.MouseButton.Type.fromWin32(button, msg.wParam) orelse return null,
-                .position = .{
-                    .x = @intCast(@as(u16, @truncate(@as(usize, @intCast(msg.lParam))))),
-                    .y = @intCast(@as(u16, @truncate(@as(usize, @intCast(msg.lParam >> 16))))),
-                },
+                .button = Platform.Window.Event.MouseButton.Button.fromWin32(button, msg.wParam) orelse return null,
             },
         },
 
@@ -357,6 +353,7 @@ fn windowSetProperty(context: *anyopaque, platform_window: *Platform.Window, pro
             _ = win32.SetWindowLongW(@ptrCast(window.hwnd), win32.GWL_STYLE, @bitCast(style));
             _ = win32.SetWindowPos(@ptrCast(window.hwnd), null, 0, 0, 0, 0, .{ .NOMOVE = 1, .NOSIZE = 1, .NOZORDER = 1, .DRAWFRAME = 1 });
         },
+        .focus => {}, // TODO: add focus request
     }
 }
 fn windowSoftwareGetPixels(context: *anyopaque, platform_window: *Platform.Window) anyerror![]u8 {

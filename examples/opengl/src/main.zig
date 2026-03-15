@@ -7,6 +7,15 @@ const nz = @import("numz");
 const vertex_shader_source = @embedFile("shaders/default.vert");
 const fragment_shader_source = @embedFile("shaders/default.frag");
 
+const vertices = [_]f32{
+    // position       // color
+    0.0, 0.5, 0.0, 1.0, 0.0, 0.0, // top, red
+    -0.5, -0.5, 0.0, 0.0, 1.0, 0.0, // bottom left, green
+    0.5, -0.5, 0.0, 0.0, 0.0, 1.0, // bottom right, blue
+};
+
+const indices = [_]u32{ 0, 1, 2 };
+
 pub fn main(init: std.process.Init) !void {
     const allocator = init.gpa;
     const io = init.io;
@@ -71,18 +80,46 @@ pub fn main(init: std.process.Init) !void {
 
     var vao: c_uint = 0;
     var vbo: c_uint = 0;
+    var ebo: c_uint = 0;
     gl.c.glGenVertexArrays(1, &vao);
     gl.c.glGenBuffers(1, &vbo);
+    gl.c.glGenBuffers(1, &ebo);
     defer {
+        gl.c.glDeleteBuffers(1, &ebo);
         gl.c.glDeleteBuffers(1, &vbo);
         gl.c.glDeleteVertexArrays(1, &vao);
     }
 
     gl.c.glBindVertexArray(vao);
-    gl.c.glBindBuffer(gl.c.GL_ARRAY_BUFFER, vbo);
 
-    gl.State.enable(.blend, null);
-    gl.c.glBlendFunc(gl.c.GL_SRC_ALPHA, gl.c.GL_ONE_MINUS_SRC_ALPHA);
+    gl.c.glBindBuffer(gl.c.GL_ARRAY_BUFFER, vbo);
+    gl.c.glBufferData(
+        gl.c.GL_ARRAY_BUFFER,
+        @intCast(@sizeOf(f32) * vertices.len),
+        vertices[0..].ptr,
+        gl.c.GL_STATIC_DRAW,
+    );
+
+    gl.c.glBindBuffer(gl.c.GL_ELEMENT_ARRAY_BUFFER, ebo);
+    gl.c.glBufferData(
+        gl.c.GL_ELEMENT_ARRAY_BUFFER,
+        @intCast(@sizeOf(u32) * indices.len),
+        indices[0..].ptr,
+        gl.c.GL_STATIC_DRAW,
+    );
+    gl.c.glEnableVertexAttribArray(0);
+    gl.c.glVertexAttribPointer(0, // location 0 in shader
+        3, // 3 floats per vertex
+        gl.c.GL_FLOAT, gl.c.GL_FALSE, @intCast(6 * @sizeOf(f32)), // stride: 6 floats per vertex
+        vertices[0..].ptr);
+
+    gl.c.glEnableVertexAttribArray(1);
+    gl.c.glVertexAttribPointer(1, // location 1 in shader
+        3, // 3 floats per vertex
+        gl.c.GL_FLOAT, gl.c.GL_FALSE, @intCast(6 * @sizeOf(f32)), // same stride
+        vertices[0..].ptr + 3 * @sizeOf(f32) // offset to color
+    );
+    gl.c.glBindVertexArray(0);
 
     main_loop: while (true) {
         const delta_time = getDeltaTime(io);
@@ -121,7 +158,7 @@ pub fn main(init: std.process.Init) !void {
         gl.c.glUniformMatrix4fv(model_loc, 1, 0, model_transform.toMat4x4().d[0..].ptr);
 
         gl.c.glBindVertexArray(vao);
-        gl.draw.arrays(.triangles, 0, 3);
+        gl.draw.elements(.triangles, indices.len, u32, null);
 
         try yes.opengl.swapBuffers(platform, window);
     }

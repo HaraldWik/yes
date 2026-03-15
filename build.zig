@@ -80,12 +80,14 @@ pub fn addWayland(b: *std.Build, mod: *std.Build.Module, target: std.Build.Resol
     });
 
     scanner.addSystemProtocol("stable/xdg-shell/xdg-shell.xml");
+    scanner.addSystemProtocol("unstable/xdg-decoration/xdg-decoration-unstable-v1.xml");
 
     scanner.generate("wl_compositor", 1);
     scanner.generate("wl_output", 4);
     scanner.generate("wl_shm", 1);
     scanner.generate("wl_seat", 4);
     scanner.generate("xdg_wm_base", 3);
+    scanner.generate("zxdg_decoration_manager_v1", 1);
 
     mod.addImport("wayland", wayland);
     mod.link_libc = true;

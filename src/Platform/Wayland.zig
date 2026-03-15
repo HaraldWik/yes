@@ -3,6 +3,7 @@ const build_options = @import("build_options");
 const wayland = @import("wayland");
 const wl = wayland.client.wl;
 const xdg = wayland.client.xdg;
+const zxdg = wayland.client.zxdg;
 const egl = @cImport({ // TODO: replace
     @cInclude("EGL/egl.h");
     @cInclude("wayland-egl.h");
@@ -19,22 +20,24 @@ display: *wl.Display,
 registry: *wl.Registry,
 
 compositor: *wl.Compositor,
-wm_base: *xdg.WmBase,
+xdg_wm_base: *xdg.WmBase,
 seat: *wl.Seat,
 shm: *wl.Shm,
+zxdg_decoration_manager: ?*zxdg.DecorationManagerV1 = null,
 
 io_manager: *IoManager,
 
 const Globals = struct {
     compositor: ?*wl.Compositor = null,
-    wm_base: ?*xdg.WmBase = null,
+    xdg_wm_base: ?*xdg.WmBase = null,
     seat: ?*wl.Seat = null,
     shm: ?*wl.Shm = null,
+    zxdg_decoration_manager: ?*zxdg.DecorationManagerV1 = null,
 };
 
 const IoManager = struct {
     err: ?anyerror = null,
-    windows: std.Deque(*Window) = .empty,
+    current_window: std.atomic.Value(?*Window) = .init(null),
     keyboard: ?*wl.Keyboard = null,
     pointer: ?*wl.Pointer = null,
     touch: ?*wl.Touch = null,
@@ -42,14 +45,15 @@ const IoManager = struct {
 
 pub const Window = struct {
     interface: Platform.Window = .{},
-    platform: *Wayland = undefined,
+    allocator: std.mem.Allocator = undefined,
     err: ?anyerror = null,
     wl_surface: *wl.Surface = undefined,
     xdg_surface: *xdg.Surface = undefined,
     xdg_toplevel: *xdg.Toplevel = undefined,
-    event_queue: *wl.EventQueue = undefined,
+    zxdg_toplevel_decoration: ?*zxdg.ToplevelDecorationV1 = null,
+    zxdg_toplevel_decoration_mode: ?zxdg.ToplevelDecorationV1.Mode = null,
+    // event_queue: *wl.EventQueue = undefined,
     events: std.ArrayList(Platform.Window.Event) = .empty,
-    configured: bool = false,
     running: bool = true,
     surface: Surface = .empty,
 
@@ -63,7 +67,7 @@ pub const Window = struct {
             display: *anyopaque,
             config: *anyopaque,
             context: *anyopaque,
-            window: *egl.wl_egl_window,
+            window: *wl.EglWindow,
             surface: *anyopaque,
         };
         pub const Software = struct {
@@ -77,17 +81,20 @@ pub fn init(allocator: std.mem.Allocator) !@This() {
     const display = try wl.Display.connect(null);
     const registry = try display.getRegistry();
 
-    var globals: Globals = undefined;
+    var globals: Globals = .{};
     registry.setListener(*Globals, registryListener, &globals);
     if (display.roundtrip() != .SUCCESS) return error.RoundtripFailed;
+
+    const xdg_wm_base = globals.xdg_wm_base orelse return error.NoXdgWmBase;
+    xdg_wm_base.setListener(?*anyopaque, xdgWmBaseListener, null);
 
     const seat = globals.seat orelse return error.NoWlSeat;
 
     const io_manager = try allocator.create(IoManager);
     io_manager.* = .{};
-    io_manager.windows = try .initCapacity(allocator, 1);
 
     seat.setListener(*IoManager, seatListener, io_manager);
+    if (display.flush() != .SUCCESS) return error.Flush;
     if (display.dispatch() != .SUCCESS) return error.Dispatch;
 
     if (io_manager.err) |err| return err;
@@ -98,9 +105,10 @@ pub fn init(allocator: std.mem.Allocator) !@This() {
         .registry = registry,
 
         .compositor = globals.compositor orelse return error.NoWlCompositor,
-        .wm_base = globals.wm_base orelse return error.NoXdgWmBase,
+        .xdg_wm_base = xdg_wm_base,
         .seat = seat,
         .shm = globals.shm orelse return error.NoWlShm,
+        .zxdg_decoration_manager = globals.zxdg_decoration_manager,
 
         .io_manager = io_manager,
     };
@@ -110,11 +118,10 @@ pub fn deinit(self: @This()) void {
     if (self.io_manager.keyboard) |keyboard| keyboard.release();
     if (self.io_manager.pointer) |pointer| pointer.release();
     if (self.io_manager.touch) |touch| touch.release();
-    self.io_manager.windows.deinit(self.allocator);
     self.allocator.destroy(self.io_manager);
     self.shm.destroy();
     self.seat.destroy();
-    self.wm_base.destroy();
+    self.xdg_wm_base.destroy();
     self.compositor.destroy();
     self.registry.destroy();
     self.display.disconnect();
@@ -142,25 +149,40 @@ fn windowOpen(context: *anyopaque, platform_window: *Platform.Window, options: P
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
 
-    window.platform = self;
-    try self.io_manager.windows.pushBack(self.allocator, window);
+    window.allocator = self.allocator;
 
     window.wl_surface = try self.compositor.createSurface();
-    window.xdg_surface = try self.wm_base.getXdgSurface(window.wl_surface);
+    window.xdg_surface = try self.xdg_wm_base.getXdgSurface(window.wl_surface);
     window.xdg_toplevel = try window.xdg_surface.getToplevel();
 
-    window.event_queue = try self.display.createQueue();
-    window.wl_surface.setQueue(window.event_queue);
-    window.xdg_toplevel.setQueue(window.event_queue);
+    // window.event_queue = try self.display.createQueue();
+    // window.wl_surface.setQueue(window.event_queue);
+    // window.xdg_surface.setQueue(window.event_queue);
+    // window.xdg_toplevel.setQueue(window.event_queue);
 
-    window.xdg_surface.setListener(*Window, xdgSurfaceListener, window);
+    var configured: bool = false;
+    window.xdg_surface.setListener(*bool, xdgSurfaceListener, &configured);
     window.xdg_toplevel.setListener(*Window, xdgToplevelListener, window);
+
+    try windowSetProperty(context, platform_window, .{ .title = options.title });
+    try windowSetProperty(context, platform_window, .{ .resize_policy = options.resize_policy });
+    try windowSetProperty(context, platform_window, .{ .decorated = options.decorated });
+
+    if (self.zxdg_decoration_manager) |zxdg_decoration_manager| {
+        window.zxdg_toplevel_decoration = try zxdg_decoration_manager.getToplevelDecoration(window.xdg_toplevel);
+        window.zxdg_toplevel_decoration.?.setListener(*Window, zxdgToplevelDecorationListener, window);
+    }
+
+    window.wl_surface.commit();
+    while (!configured) if (self.display.dispatch() != .SUCCESS) return error.Dispatch;
+    window.wl_surface.commit();
 
     switch (options.surface_type) {
         .software => {
             const software_surface = try allocWindowShm(self.shm, options.size);
             window.wl_surface.attach(software_surface.buffer, 0, 0);
             window.wl_surface.damage(0, 0, @intCast(options.size.width), @intCast(options.size.height));
+            window.surface = .{ .software = software_surface };
         },
         .opengl => |gl| {
             const display = egl.eglGetDisplay(@ptrCast(self.display)) orelse return error.EglGetDisplay;
@@ -193,8 +215,10 @@ fn windowOpen(context: *anyopaque, platform_window: *Platform.Window, options: P
 
             const egl_context = egl.eglCreateContext(display, config, egl.EGL_NO_CONTEXT, attribs.ptr) orelse return error.CreateContext;
 
-            const egl_window: *egl.wl_egl_window = egl.wl_egl_window_create(@ptrCast(window.wl_surface), @intCast(options.size.width), @intCast(options.size.height)) orelse return error.CreateWindow;
+            const egl_window = try wl.EglWindow.create(window.wl_surface, @intCast(options.size.width), @intCast(options.size.height));
             const egl_surface = egl.eglCreateWindowSurface(display, config, @intFromPtr(egl_window), null) orelse return error.CreateWindowSurface;
+
+            _ = egl.eglSwapBuffers(display, egl_surface);
 
             window.surface = .{ .opengl = .{
                 .display = display,
@@ -208,13 +232,7 @@ fn windowOpen(context: *anyopaque, platform_window: *Platform.Window, options: P
     }
 
     window.wl_surface.commit();
-
     if (self.display.roundtrip() != .SUCCESS) return error.Roundtrip;
-    if (!window.configured) return error.NoConfigureReceived;
-
-    try windowSetProperty(context, platform_window, .{ .title = options.title });
-    try windowSetProperty(context, platform_window, .{ .resize_policy = options.resize_policy });
-    try windowSetProperty(context, platform_window, .{ .decorated = options.decorated });
 
     try window.events.append(self.allocator, .{ .resize = options.size });
 }
@@ -229,7 +247,7 @@ fn windowClose(context: *anyopaque, platform_window: *Platform.Window) void {
         },
         .opengl => |gl| {
             _ = egl.eglDestroySurface(gl.display, gl.surface);
-            egl.wl_egl_window_destroy(gl.window);
+            gl.window.destroy();
             _ = egl.eglDestroyContext(gl.display, gl.context);
             _ = egl.eglTerminate(gl.display);
         },
@@ -239,18 +257,34 @@ fn windowClose(context: *anyopaque, platform_window: *Platform.Window) void {
     window.xdg_toplevel.destroy();
     window.xdg_surface.destroy();
     window.wl_surface.destroy();
-    window.event_queue.destroy();
+    // window.event_queue.destroy();
 }
 fn windowPoll(context: *anyopaque, platform_window: *Platform.Window) anyerror!?Platform.Window.Event {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
 
-    if (window.err) |err| return err;
-    if (!window.running) return null;
+    if (!window.running) return .close;
 
-    if (self.display.prepareRead()) return null;
-    if (self.display.readEvents() != .SUCCESS) return error.ReadEvents;
-    if (self.display.dispatchQueue(window.event_queue) != .SUCCESS) return error.DispatchQueuePending;
+    if (!self.display.prepareRead()) return null;
+    self.io_manager.current_window.store(window, .seq_cst);
+    if (self.display.dispatchPending() != .SUCCESS) return error.DispatchPending;
+    if (self.display.flush() != .SUCCESS) return error.Flush;
+
+    if (window.err) |err| return err;
+
+    var pfd: std.posix.pollfd = .{
+        .fd = @intCast(self.display.getFd()),
+        .events = std.posix.POLL.IN,
+        .revents = 0,
+    };
+
+    if (std.posix.poll(@ptrCast(&pfd), 1) catch 0 > 0)
+        _ = self.display.readEvents()
+    else
+        self.display.cancelRead();
+
+    if (self.display.dispatchPending() != .SUCCESS) return error.DispatchPending;
+    self.io_manager.current_window.store(null, .seq_cst);
 
     const event = window.events.pop() orelse return null;
     switch (event) {
@@ -263,8 +297,10 @@ fn windowPoll(context: *anyopaque, platform_window: *Platform.Window) anyerror!?
                 window.surface.software = software_surface;
             },
             .opengl => |gl| {
-                egl.wl_egl_window_resize(gl.window, @intCast(size.width), @intCast(size.height), 0, 0);
+                gl.window.resize(@intCast(size.width), @intCast(size.height), 0, 0);
+                window.wl_surface.commit();
             },
+            .vulkan => window.wl_surface.commit(),
             else => {},
         },
         else => {},
@@ -315,34 +351,41 @@ fn windowSetProperty(context: *anyopaque, platform_window: *Platform.Window, pro
         },
         .always_on_top => {},
         .floating => {},
-        .decorated => {},
+        .decorated => |decorated| if (decorated) {
+            if (window.zxdg_toplevel_decoration_mode != null or self.zxdg_decoration_manager == null) return;
+            window.zxdg_toplevel_decoration = try self.zxdg_decoration_manager.?.getToplevelDecoration(window.xdg_toplevel);
+            window.zxdg_toplevel_decoration.?.setListener(*Window, zxdgToplevelDecorationListener, window);
+        } else if (window.zxdg_toplevel_decoration) |zxdg_toplevel_decoration| {
+            window.zxdg_toplevel_decoration_mode = null;
+            zxdg_toplevel_decoration.destroy();
+        },
+        .focus => {}, // TODO: add focus request
     }
 }
 fn windowSoftwareGetPixels(_: *anyopaque, platform_window: *Platform.Window) anyerror![]u8 {
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
     return window.surface.software.pixels;
 }
-fn windowOpenglMakeCurrent(context: *anyopaque, platform_window: *Platform.Window) anyerror!void {
-    const self: *@This() = @ptrCast(@alignCast(context));
+fn windowOpenglMakeCurrent(_: *anyopaque, platform_window: *Platform.Window) anyerror!void {
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
 
-    _ = self;
-    _ = window;
+    std.debug.assert(window.surface == .opengl);
+    const gl = window.surface.opengl;
+    if (egl.eglMakeCurrent(gl.display, gl.surface, gl.surface, gl.context) != egl.EGL_TRUE) return error.EglMakeCurrent;
 }
-fn windowOpenglSwapBuffers(context: *anyopaque, platform_window: *Platform.Window) anyerror!void {
-    const self: *@This() = @ptrCast(@alignCast(context));
+fn windowOpenglSwapBuffers(_: *anyopaque, platform_window: *Platform.Window) anyerror!void {
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
 
-    _ = self;
-    _ = window;
+    std.debug.assert(window.surface == .opengl);
+    const gl = window.surface.opengl;
+    if (egl.eglSwapBuffers(gl.display, gl.surface) != egl.EGL_TRUE) return error.EglSwapBuffers;
 }
-fn windowOpenglSwapInterval(context: *anyopaque, platform_window: *Platform.Window, interval: i32) anyerror!void {
-    const self: *@This() = @ptrCast(@alignCast(context));
+fn windowOpenglSwapInterval(_: *anyopaque, platform_window: *Platform.Window, interval: i32) anyerror!void {
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
 
-    _ = self;
-    _ = window;
-    _ = interval;
+    std.debug.assert(window.surface == .opengl);
+    const gl = window.surface.opengl;
+    if (egl.eglSwapInterval(gl.display, interval) != egl.EGL_TRUE) return error.EglSwapInterval;
 }
 fn windowVulkanCreateSurface(context: *anyopaque, platform_window: *Platform.Window, instance: *vulkan.Instance, allocator: ?*const vulkan.AllocationCallbacks, getProcAddress: vulkan.Instance.GetProcAddress) anyerror!*vulkan.Surface {
     const self: *@This() = @ptrCast(@alignCast(context));
@@ -365,45 +408,21 @@ fn windowVulkanCreateSurface(context: *anyopaque, platform_window: *Platform.Win
 fn registryListener(registry: *wl.Registry, event: wl.Registry.Event, globals: *Globals) void {
     switch (event) {
         .global => |global| {
-            if (std.mem.orderZ(u8, global.interface, wl.Compositor.interface.name) == .eq) {
-                globals.compositor = registry.bind(global.name, wl.Compositor, 1) catch return;
-            } else if (std.mem.orderZ(u8, global.interface, wl.Shm.interface.name) == .eq) {
-                globals.shm = registry.bind(global.name, wl.Shm, 1) catch return;
-            } else if (std.mem.orderZ(u8, global.interface, xdg.WmBase.interface.name) == .eq) {
-                globals.wm_base = registry.bind(global.name, xdg.WmBase, 1) catch return;
-            } else if (std.mem.orderZ(u8, global.interface, wl.Seat.interface.name) == .eq) {
-                globals.seat = registry.bind(global.name, wl.Seat, 1) catch return;
+            inline for (std.meta.fields(Globals)) |field| {
+                const GlobalType = std.meta.Child(std.meta.Child(field.type));
+                if (std.mem.orderZ(u8, global.interface, GlobalType.interface.name) == .eq) {
+                    @field(globals, field.name) = registry.bind(global.name, GlobalType, 1) catch return;
+                    return;
+                }
             }
         },
         .global_remove => {},
     }
 }
 
-fn xdgSurfaceListener(xdg_surface: *xdg.Surface, event: xdg.Surface.Event, window: *Window) void {
+fn xdgWmBaseListener(wm_base: *xdg.WmBase, event: xdg.WmBase.Event, _: ?*anyopaque) void {
     switch (event) {
-        .configure => |configure| {
-            xdg_surface.ackConfigure(configure.serial);
-            window.wl_surface.commit();
-            window.configured = true;
-        },
-    }
-}
-
-fn xdgToplevelListener(_: *xdg.Toplevel, event: xdg.Toplevel.Event, window: *Window) void {
-    const allocator = window.platform.allocator;
-    switch (event) {
-        .configure => |configure| {
-            const size: Platform.Window.Size = .{ .width = @intCast(configure.width), .height = @intCast(configure.height) };
-            window.events.append(allocator, .{ .resize = size }) catch |err| {
-                window.err = err;
-            };
-        },
-        .close => {
-            window.events.append(allocator, .close) catch |err| {
-                window.err = err;
-            };
-            window.running = false;
-        },
+        .ping => |ping| wm_base.pong(ping.serial),
     }
 }
 
@@ -448,23 +467,109 @@ fn seatListener(seat: *wl.Seat, event: wl.Seat.Event, io_manager: *IoManager) vo
 }
 
 fn keyboardListener(_: *wl.Keyboard, event: wl.Keyboard.Event, io_manager: *IoManager) void {
-    _ = io_manager;
+    const current_window = io_manager.current_window.load(.seq_cst);
     switch (event) {
-        else => std.log.info("keyboard event: {t}", .{event}),
+        .enter => if (current_window) |window| if (window.interface.focus == .unfocused) {
+            window.events.append(window.allocator, .{ .focus = .focused }) catch |err| {
+                window.err = err;
+            };
+        },
+        .leave => if (current_window) |window| if (window.interface.focus == .focused) {
+            window.events.append(window.allocator, .{ .focus = .unfocused }) catch |err| {
+                window.err = err;
+            };
+        },
+        else => {}, // std.log.info("keyboard event: {t}", .{event}),
     }
 }
 
 fn pointerListener(_: *wl.Pointer, event: wl.Pointer.Event, io_manager: *IoManager) void {
-    _ = io_manager;
-    switch (event) {
-        else => std.log.info("pointer event: {t}", .{event}),
-    }
+    const current_window = io_manager.current_window.load(.seq_cst);
+    if (current_window) |window| switch (event) {
+        .enter => if (window.interface.focus == .unfocused) {
+            window.events.append(window.allocator, .{ .focus = .focused }) catch |err| {
+                window.err = err;
+            };
+        },
+        .leave => if (window.interface.focus == .focused) {
+            window.events.append(window.allocator, .{ .focus = .unfocused }) catch |err| {
+                window.err = err;
+            };
+        },
+        .motion => |motion| {
+            const mouse_motion: Platform.Window.Event.MouseMotion = .{ .x = motion.surface_x.toDouble(), .y = motion.surface_y.toDouble() };
+            window.events.append(window.allocator, .{ .mouse_motion = mouse_motion }) catch |err| {
+                window.err = err;
+            };
+        },
+        .button => |button| {
+            const mouse_button: Platform.Window.Event.MouseButton = .{
+                .state = @enumFromInt(@intFromEnum(button.state)),
+                .button = Platform.Window.Event.MouseButton.Button.fromWayland(button.button).?,
+            };
+            window.events.append(window.allocator, .{ .mouse_button = mouse_button }) catch |err| {
+                window.err = err;
+            };
+        },
+        .axis => |axis| {
+            const mouse_scroll: Platform.Window.Event.MouseScroll = switch (axis.axis) {
+                .vertical_scroll => .{ .vertical = -axis.value.toDouble() / 10.0 },
+                .horizontal_scroll => .{ .horizontal = axis.value.toDouble() / 10.0 },
+                _ => unreachable,
+            };
+            window.events.append(window.allocator, .{ .mouse_scroll = mouse_scroll }) catch |err| {
+                window.err = err;
+            };
+        },
+    };
 }
 
 fn touchListener(_: *wl.Touch, event: wl.Touch.Event, io_manager: *IoManager) void {
     _ = io_manager;
     switch (event) {
-        else => std.log.info("touch event: {t}", .{event}),
+        else => {}, //std.log.info("touch event: {t}", .{event}),
+    }
+}
+
+fn xdgSurfaceListener(xdg_surface: *xdg.Surface, event: xdg.Surface.Event, configured: *bool) void {
+    switch (event) {
+        .configure => |configure| {
+            xdg_surface.ackConfigure(configure.serial);
+            configured.* = true;
+        },
+    }
+}
+
+fn xdgToplevelListener(_: *xdg.Toplevel, event: xdg.Toplevel.Event, window: *Window) void {
+    const allocator = window.allocator;
+    switch (event) {
+        .configure => |configure| for (configure.states.slice(xdg.Toplevel.State)) |state| switch (state) {
+            .resizing, .fullscreen, .maximized => {
+                const size: Platform.Window.Size = .{ .width = @intCast(configure.width), .height = @intCast(configure.height) };
+                window.events.append(allocator, .{ .resize = size }) catch |err| {
+                    window.err = err;
+                };
+            },
+            .activated => {
+                if (window.interface.focus == .focused) return;
+                window.events.append(allocator, .{ .focus = .focused }) catch |err| {
+                    window.err = err;
+                };
+            },
+            else => {},
+        },
+        .close => {
+            window.events.append(window.allocator, .close) catch |err| {
+                window.err = err;
+            };
+            window.running = false;
+        },
+    }
+}
+
+fn zxdgToplevelDecorationListener(_: *zxdg.ToplevelDecorationV1, event: zxdg.ToplevelDecorationV1.Event, window: *Window) void {
+    switch (event) {
+        .configure => |configure| window.zxdg_toplevel_decoration_mode = configure.mode,
     }
 }
 

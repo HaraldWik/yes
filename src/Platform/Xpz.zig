@@ -159,10 +159,10 @@ fn windowPoll(context: *anyopaque, platform_window: *Platform.Window) anyerror!?
         .focus_in => .{ .focus = .enter },
         .focus_out => .{ .focus = .leave },
         .button_press, .button_release => |button| switch (button.button()) {
-            .scroll_up => .{ .mouse_scroll = .{ .y = 1 } },
-            .scroll_down => .{ .mouse_scroll = .{ .y = -1 } },
-            .scroll_right => .{ .mouse_scroll = .{ .x = 1 } },
-            .scroll_left => .{ .mouse_scroll = .{ .x = -1 } },
+            .scroll_up => .{ .mouse_scroll = .{ .vertical = 1 } },
+            .scroll_down => .{ .mouse_scroll = .{ .vertical = -1 } },
+            .scroll_right => .{ .mouse_scroll = .{ .horizontal = 1 } },
+            .scroll_left => .{ .mouse_scroll = .{ .horizontal = -1 } },
 
             else => .{
                 .mouse_button = .{
@@ -171,7 +171,7 @@ fn windowPoll(context: *anyopaque, platform_window: *Platform.Window) anyerror!?
                         .button_release => .released,
                         else => unreachable,
                     },
-                    .type = switch (button.button()) {
+                    .button = switch (button.button()) {
                         .left => .left,
                         .right => .right,
                         .middle => .middle,
@@ -179,7 +179,6 @@ fn windowPoll(context: *anyopaque, platform_window: *Platform.Window) anyerror!?
                         .forward => .backward,
                         else => unreachable,
                     },
-                    .position = .{ .x = @intCast(button.x), .y = @intCast(button.y) },
                 },
             },
         },
@@ -211,6 +210,7 @@ fn windowSetProperty(context: *anyopaque, platform_window: *Platform.Window, pro
         .always_on_top => {},
         .floating => {},
         .decorated => {},
+        .focus => {},
     }
 }
 fn windowSoftwareGetPixels(context: *anyopaque, platform_window: *Platform.Window) anyerror![]u8 {

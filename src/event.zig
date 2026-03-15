@@ -3,6 +3,7 @@ const win32 = @import("win32").everything;
 const xkb = @import("xkbcommon");
 const Size = @import("Window.zig").Size;
 const Position = @import("Window.zig").Position;
+const Focus = @import("Window.zig").Focus;
 
 pub const Event = union(enum) {
     close,
@@ -10,16 +11,11 @@ pub const Event = union(enum) {
     move: Position,
     focus: Focus,
     key: Key,
-    mouse_move: Position,
+    mouse_motion: MouseMotion,
     /// Positive Y means wheel scrolled up (away from user).
     /// Positive X means wheel scrolled right.
     mouse_scroll: MouseScroll,
     mouse_button: MouseButton,
-
-    pub const Focus = enum {
-        enter,
-        leave,
-    };
 
     pub const Key = struct {
         state: State,
@@ -313,19 +309,23 @@ pub const Event = union(enum) {
         };
     };
 
+    pub const MouseMotion = struct {
+        x: f64 = 0.0,
+        y: f64 = 0.0,
+    };
+
     pub const MouseScroll = union(enum) {
-        x: isize, // horizontal
-        y: isize, // vertical
+        horizontal: f64, // horizontal
+        vertical: f64, // vertical
     };
 
     pub const MouseButton = struct {
         state: State,
-        type: Type,
-        position: Position,
+        button: Button,
 
         pub const State = Key.State;
 
-        pub const Type = enum {
+        pub const Button = enum {
             left,
             right,
             middle,
