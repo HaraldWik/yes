@@ -9,6 +9,7 @@ const egl = @cImport({ // TODO: replace
     @cInclude("wayland-egl.h");
     @cInclude("wayland-egl-core.h");
 });
+const xkb = @import("xkbcommon");
 const opengl = @import("../opengl.zig");
 const vulkan = @import("../vulkan.zig");
 const Platform = @import("../Platform.zig");
@@ -41,6 +42,18 @@ const IoManager = struct {
     keyboard: ?*wl.Keyboard = null,
     pointer: ?*wl.Pointer = null,
     touch: ?*wl.Touch = null,
+    xkb: struct {
+        context: ?*xkb.xkb_context = null,
+        state: ?*xkb.xkb_state = null,
+        keymap: ?*xkb.xkb_keymap = null,
+        keymap_data: []align(std.heap.page_size_min) u8 = undefined,
+        modifiers: struct {
+            depressed: u32 = 0,
+            latched: u32 = 0,
+            locked: u32 = 0,
+            group: u32 = 0,
+        } = .{},
+    } = .{},
 };
 
 pub const Window = struct {
@@ -91,7 +104,9 @@ pub fn init(allocator: std.mem.Allocator) !@This() {
     const seat = globals.seat orelse return error.NoWlSeat;
 
     const io_manager = try allocator.create(IoManager);
-    io_manager.* = .{};
+    io_manager.* = .{ .xkb = .{
+        .context = xkb.xkb_context_new(xkb.XKB_CONTEXT_NO_FLAGS) orelse return error.CreateXkbContext,
+    } };
 
     seat.setListener(*IoManager, seatListener, io_manager);
     if (display.flush() != .SUCCESS) return error.Flush;
@@ -115,6 +130,9 @@ pub fn init(allocator: std.mem.Allocator) !@This() {
 }
 
 pub fn deinit(self: @This()) void {
+    if (self.io_manager.xkb.state) |state| xkb.xkb_state_unref(state);
+    if (self.io_manager.xkb.keymap) |keymap| xkb.xkb_keymap_unref(keymap);
+    if (self.io_manager.xkb.context) |context| xkb.xkb_context_unref(context);
     if (self.io_manager.keyboard) |keyboard| keyboard.release();
     if (self.io_manager.pointer) |pointer| pointer.release();
     if (self.io_manager.touch) |touch| touch.release();
@@ -258,6 +276,7 @@ fn windowClose(context: *anyopaque, platform_window: *Platform.Window) void {
     window.xdg_surface.destroy();
     window.wl_surface.destroy();
     // window.event_queue.destroy();
+    window.events.deinit(window.allocator);
 }
 fn windowPoll(context: *anyopaque, platform_window: *Platform.Window) anyerror!?Platform.Window.Event {
     const self: *@This() = @ptrCast(@alignCast(context));
@@ -469,6 +488,40 @@ fn seatListener(seat: *wl.Seat, event: wl.Seat.Event, io_manager: *IoManager) vo
 fn keyboardListener(_: *wl.Keyboard, event: wl.Keyboard.Event, io_manager: *IoManager) void {
     const current_window = io_manager.current_window.load(.seq_cst);
     switch (event) {
+        .keymap => |keymap| {
+            if (keymap.format != .xkb_v1) return;
+            defer _ = std.posix.system.close(keymap.fd);
+
+            if (io_manager.xkb.state != null) xkb.xkb_state_unref(io_manager.xkb.state);
+            if (io_manager.xkb.keymap != null) {
+                xkb.xkb_keymap_unref(io_manager.xkb.keymap);
+                if (io_manager.xkb.keymap_data.len != 0) std.posix.munmap(io_manager.xkb.keymap_data);
+            }
+
+            io_manager.xkb.keymap_data = std.posix.mmap(null, keymap.size, .{ .READ = true }, .{ .TYPE = .PRIVATE }, keymap.fd, 0) catch return;
+            io_manager.xkb.keymap = xkb.xkb_keymap_new_from_buffer(io_manager.xkb.context.?, io_manager.xkb.keymap_data.ptr, io_manager.xkb.keymap_data.len, xkb.XKB_KEYMAP_FORMAT_TEXT_V1, xkb.XKB_KEYMAP_COMPILE_NO_FLAGS) orelse return;
+            io_manager.xkb.state = xkb.xkb_state_new(io_manager.xkb.keymap.?) orelse return;
+            _ = xkb.xkb_state_update_mask(
+                io_manager.xkb.state.?,
+                io_manager.xkb.modifiers.depressed,
+                io_manager.xkb.modifiers.latched,
+                io_manager.xkb.modifiers.locked,
+                io_manager.xkb.modifiers.group,
+                0,
+                0,
+            );
+        },
+        .modifiers => |modifiers| {
+            io_manager.xkb.modifiers = .{
+                .depressed = modifiers.mods_depressed,
+                .latched = modifiers.mods_latched,
+                .locked = modifiers.mods_locked,
+                .group = modifiers.group,
+            };
+            if (io_manager.xkb.state == null or io_manager.xkb.keymap == null) return;
+
+            _ = xkb.xkb_state_update_mask(io_manager.xkb.state.?, modifiers.mods_depressed, modifiers.mods_latched, modifiers.mods_locked, modifiers.group, 0, 0);
+        },
         .enter => if (current_window) |window| if (window.interface.focus == .unfocused) {
             window.events.append(window.allocator, .{ .focus = .focused }) catch |err| {
                 window.err = err;
@@ -479,6 +532,19 @@ fn keyboardListener(_: *wl.Keyboard, event: wl.Keyboard.Event, io_manager: *IoMa
                 window.err = err;
             };
         },
+        .key => |key| if (current_window) |window| {
+            if (io_manager.xkb.state == null or io_manager.xkb.keymap == null) return;
+            const sym = xkb.xkb_state_key_get_one_sym(io_manager.xkb.state.?, key.key + 8);
+            const window_event: Platform.Window.Event.Key = .{
+                .state = @enumFromInt(@intFromEnum(key.state)),
+                .code = key.key + 8,
+                .sym = Platform.Window.Event.Key.Sym.fromXkb(sym) orelse return,
+            };
+            window.events.append(window.allocator, .{ .key = window_event }) catch |err| {
+                window.err = err;
+            };
+        },
+
         else => {}, // std.log.info("keyboard event: {t}", .{event}),
     }
 }
