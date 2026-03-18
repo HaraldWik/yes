@@ -25,7 +25,7 @@ pub const VTable = struct {
     windowPoll: *const fn (*anyopaque, window: *Window) anyerror!?Window.Event,
     windowSetProperty: *const fn (*anyopaque, window: *Window, property: Window.Property) anyerror!void,
 
-    windowSoftwareGetPixels: *const fn (*anyopaque, window: *Window) anyerror![]u8,
+    windowFramebuffer: *const fn (*anyopaque, window: *Window) anyerror!Window.Framebuffer,
 
     windowOpenglMakeCurrent: *const fn (*anyopaque, window: *Window) anyerror!void,
     windowOpenglSwapBuffers: *const fn (*anyopaque, window: *Window) anyerror!void,

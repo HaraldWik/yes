@@ -72,7 +72,7 @@ pub const Window = struct {
 
     pub const Surface = union(enum) {
         empty,
-        software: Software,
+        framebuffer: Software,
         opengl: OpenGL,
         vulkan,
 
@@ -85,7 +85,7 @@ pub const Window = struct {
         };
         pub const Software = struct {
             buffer: *wl.Buffer,
-            pixels: []u8,
+            pixels: [*]align(std.heap.page_size_min) u8,
         };
     };
 };
@@ -153,7 +153,7 @@ pub fn platform(self: *@This()) Platform {
             .windowClose = windowClose,
             .windowPoll = windowPoll,
             .windowSetProperty = windowSetProperty,
-            .windowSoftwareGetPixels = windowSoftwareGetPixels,
+            .windowFramebuffer = windowFramebuffer,
             .windowOpenglMakeCurrent = windowOpenglMakeCurrent,
             .windowOpenglSwapBuffers = windowOpenglSwapBuffers,
             .windowOpenglSwapInterval = windowOpenglSwapInterval,
@@ -196,12 +196,7 @@ fn windowOpen(context: *anyopaque, platform_window: *Platform.Window, options: P
     window.wl_surface.commit();
 
     switch (options.surface_type) {
-        .software => {
-            const software_surface = try allocWindowShm(self.shm, options.size);
-            window.wl_surface.attach(software_surface.buffer, 0, 0);
-            window.wl_surface.damage(0, 0, @intCast(options.size.width), @intCast(options.size.height));
-            window.surface = .{ .software = software_surface };
-        },
+        .framebuffer => try windowAllocShm(window, self.shm),
         .opengl => |gl| {
             const display = egl.eglGetDisplay(@ptrCast(self.display)) orelse return error.EglGetDisplay;
 
@@ -261,7 +256,7 @@ fn windowClose(context: *anyopaque, platform_window: *Platform.Window) void {
     _ = self;
 
     switch (window.surface) {
-        .software => |software| {
+        .framebuffer => |software| {
             software.buffer.destroy();
         },
         .opengl => |gl| {
@@ -310,12 +305,9 @@ fn windowPoll(context: *anyopaque, platform_window: *Platform.Window) anyerror!?
     const event = window.events.pop() orelse return null;
     switch (event) {
         .resize => |size| switch (window.surface) {
-            .software => if (!size.eql(.{})) {
-                const software_surface = try allocWindowShm(self.shm, size);
-                window.wl_surface.attach(software_surface.buffer, 0, 0);
-                window.wl_surface.damage(0, 0, @intCast(size.width), @intCast(size.height));
-                window.wl_surface.commit();
-                window.surface.software = software_surface;
+            .framebuffer => if (!size.eql(.{})) {
+                window.interface.size = size;
+                try windowAllocShm(window, self.shm);
             },
             .opengl => |gl| {
                 window.wl_surface.commit();
@@ -384,9 +376,9 @@ fn windowSetProperty(context: *anyopaque, platform_window: *Platform.Window, pro
         .focus => {}, // TODO: add focus request
     }
 }
-fn windowSoftwareGetPixels(_: *anyopaque, platform_window: *Platform.Window) anyerror![]u8 {
+fn windowFramebuffer(_: *anyopaque, platform_window: *Platform.Window) anyerror!Platform.Window.Framebuffer {
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
-    return window.surface.software.pixels;
+    return .{ .pixels = window.surface.framebuffer.pixels };
 }
 fn windowOpenglMakeCurrent(_: *anyopaque, platform_window: *Platform.Window) anyerror!void {
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
@@ -644,14 +636,14 @@ fn zxdgToplevelDecorationListener(_: *zxdg.ToplevelDecorationV1, event: zxdg.Top
     }
 }
 
-fn allocWindowShm(shm: *wl.Shm, size: Platform.Window.Size) !Window.Surface.Software {
+fn windowAllocShm(window: *Window, shm: *wl.Shm) !void {
+    const size = window.interface.size;
+
     const channels = 4;
     const length = size.width * size.height * channels;
 
-    var fd_name: [10:0]u8 = undefined;
-    @memcpy(fd_name[4..], "wl_shm");
-    std.debug.print("alloc shm name: {s}", .{fd_name});
-    std.mem.writeInt(u32, fd_name[0..4], size.width % size.height * length, if (size.width % 2 == 0) .little else .big);
+    var fd_name_buf: [64]u8 = undefined;
+    const fd_name = try std.fmt.bufPrintSentinel(&fd_name_buf, "/yes_window_shm_{d}_{d}", .{ size.width, size.height }, 0);
     const fd: std.posix.fd_t = std.posix.system.shm_open(
         fd_name[0..].ptr,
         @bitCast(std.posix.O{
@@ -665,7 +657,7 @@ fn allocWindowShm(shm: *wl.Shm, size: Platform.Window.Size) !Window.Surface.Soft
     _ = std.posix.system.shm_unlink(fd_name[0..].ptr);
     _ = std.posix.system.ftruncate(@intCast(fd), length);
 
-    const pixels = try std.posix.mmap(
+    var pixels = try std.posix.mmap(
         null,
         length,
         .{ .READ = true, .WRITE = true },
@@ -673,8 +665,13 @@ fn allocWindowShm(shm: *wl.Shm, size: Platform.Window.Size) !Window.Surface.Soft
         fd,
         0,
     );
+
     const pool: *wl.ShmPool = try shm.createPool(@intCast(fd), @intCast(length));
     defer pool.destroy();
-    const buffer: *wl.Buffer = try pool.createBuffer(0, @intCast(size.width), @intCast(size.height), @intCast(size.width * channels), .rgba8888);
-    return .{ .buffer = buffer, .pixels = pixels[0..length] };
+    const buffer: *wl.Buffer = try pool.createBuffer(0, @intCast(size.width), @intCast(size.height), @intCast(size.width * channels), .argb8888);
+    window.wl_surface.attach(buffer, 0, 0);
+    window.wl_surface.damage(0, 0, @intCast(size.width), @intCast(size.height));
+    window.wl_surface.commit();
+
+    window.surface = .{ .framebuffer = .{ .buffer = buffer, .pixels = pixels.ptr } };
 }

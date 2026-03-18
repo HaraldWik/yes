@@ -34,10 +34,33 @@ pub const Position = extern struct {
     }
 };
 
+pub const Framebuffer = struct {
+    pixels: switch (builtin.os.tag) {
+        .windows => [*]align(std.heap.page_size_min) u8,
+        .macos, .ios => [*]u8,
+        else => [*]align(std.heap.page_size_min) u8,
+    },
+
+    const Format = struct {
+        r: usize,
+        g: usize,
+        b: usize,
+        a: usize,
+
+        pub const rgba: @This() = .{ .r = 0, .g = 1, .b = 2, .a = 3 };
+        pub const argb: @This() = .{ .r = 1, .g = 2, .b = 3, .a = 0 };
+        pub const bgra: @This() = .{ .r = 2, .g = 1, .b = 0, .a = 3 };
+    };
+
+    pub const format: Format = switch (builtin.os.tag) {
+        .windows, .macos, .ios => .bgra, // little-endian BGRA
+        else => if (builtin.cpu.arch.endian() == .big) .argb else .bgra,
+    };
+};
 pub const SurfaceType = switch (builtin.os.tag) {
     .windows => union(enum) {
         empty,
-        software,
+        framebuffer,
         opengl: opengl.Version,
         vulkan,
         /// Example version 12 or 11
@@ -45,14 +68,14 @@ pub const SurfaceType = switch (builtin.os.tag) {
     },
     .macos, .ios => union(enum) {
         empty,
-        software,
+        framebuffer,
         /// Max version is 4.1
         opengl: opengl.Version,
         metal,
     },
     else => union(enum) {
         empty,
-        software,
+        framebuffer,
         opengl: opengl.Version,
         vulkan,
     },
@@ -164,7 +187,10 @@ pub fn setDecorated(window: *Window, platform: Platform, decorated: bool) anyerr
     try platform.vtable.windowSetProperty(platform.ptr, window, .{ .decorated = decorated });
 }
 
-pub fn getSoftwarePixels(window: *Window, platform: Platform) anyerror![]u8 {
-    if (window.surface_type != .software) return error.WrongSurfaceType;
-    return platform.vtable.windowSoftwareGetPixels(platform.ptr, window);
+/// Returns a pointer to the current framebuffer for the given window.
+/// Note: The framebuffer pointer may change after a resize event,
+/// so it’s best to retrieve it either each time it’s needed or on each resize event.
+pub fn framebuffer(window: *Window, platform: Platform) anyerror!Framebuffer {
+    if (window.surface_type != .framebuffer) return error.WrongSurfaceType;
+    return platform.vtable.windowFramebuffer(platform.ptr, window);
 }

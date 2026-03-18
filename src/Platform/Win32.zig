@@ -49,7 +49,7 @@ pub fn platform(self: *@This()) Platform {
             .windowClose = windowClose,
             .windowPoll = windowPoll,
             .windowSetProperty = windowSetProperty,
-            .windowSoftwareGetPixels = windowSoftwareGetPixels,
+            .windowFramebuffer = windowFramebuffer,
             .windowOpenglMakeCurrent = windowOpenglMakeCurrent,
             .windowOpenglSwapBuffers = windowOpenglSwapBuffers,
             .windowOpenglSwapInterval = windowOpenglSwapInterval,
@@ -356,7 +356,7 @@ fn windowSetProperty(context: *anyopaque, platform_window: *Platform.Window, pro
         .focus => {}, // TODO: add focus request
     }
 }
-fn windowSoftwareGetPixels(context: *anyopaque, platform_window: *Platform.Window) anyerror![]u8 {
+fn windowFramebuffer(context: *anyopaque, platform_window: *Platform.Window) anyerror!Platform.Window.Framebuffer {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
 
@@ -365,7 +365,7 @@ fn windowSoftwareGetPixels(context: *anyopaque, platform_window: *Platform.Windo
 
     std.log.info("no software rendering is currently not supported", .{});
 
-    return &.{};
+    return undefined;
 }
 fn windowOpenglMakeCurrent(context: *anyopaque, platform_window: *Platform.Window) anyerror!void {
     const self: *@This() = @ptrCast(@alignCast(context));
