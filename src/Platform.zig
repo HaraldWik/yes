@@ -16,6 +16,10 @@ pub const Xpz = @import("Platform/Xpz.zig");
 pub const Xlib = @import("Platform/Xlib.zig");
 /// Default Wayland Client
 pub const Wayland = @import("Platform/Wayland.zig");
+/// Currently just a dummy platform
+pub const Cocoa = @import("Platform/Cocoa.zig");
+
+pub const Web = @import("Platform/Web.zig");
 
 pub const unix = @import("Platform/unix.zig");
 

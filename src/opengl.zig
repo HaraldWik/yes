@@ -44,7 +44,12 @@ fn invalid() callconv(.c) void {
 }
 
 comptime {
-    if (build_options.xlib and !build_options.opengl) {
+    const need_fake_exports = switch (builtin.os.tag) {
+        .windows, .macos, .ios, .tvos => false,
+        else => !builtin.cpu.arch.isWasm(),
+    };
+
+    if (need_fake_exports and build_options.xlib and !build_options.opengl) {
         @export(&invalid, .{ .name = "glXGetProcAddress" });
         @export(&invalid, .{ .name = "glXQueryExtensionsString" });
         @export(&invalid, .{ .name = "glXChooseFBConfig" });
@@ -55,7 +60,7 @@ comptime {
         @export(&invalid, .{ .name = "glXSwapBuffers" });
     }
 
-    if (build_options.libwayland and !build_options.opengl) {
+    if (need_fake_exports and build_options.libwayland and !build_options.opengl) {
         @export(&invalid, .{ .name = "eglGetProcAddress" });
         @export(&invalid, .{ .name = "eglGetDisplay" });
         @export(&invalid, .{ .name = "eglInitialize" });
