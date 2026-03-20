@@ -2,7 +2,7 @@ const std = @import("std");
 
 const Key = @import("event.zig").Event.Key;
 
-keys: [std.meta.fields(Key.Sym).len]Key.State,
+keys: [std.math.maxInt(std.meta.Tag(Key.Sym))]Key.State,
 
 pub const empty: @This() = .{ .keys = @splat(Key.State.released) };
 
