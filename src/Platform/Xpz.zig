@@ -83,7 +83,7 @@ pub fn platform(self: *@This()) Platform {
             .windowOpenglSwapBuffers = windowOpenglSwapBuffers,
             .windowOpenglSwapInterval = windowOpenglSwapInterval,
             .windowVulkanCreateSurface = windowVulkanCreateSurface,
-            .openglGetProcAddress = opengl.glXGetProcAddress,
+            .openglGetProcAddress = undefined,
         },
     };
 }
@@ -102,7 +102,7 @@ fn windowOpen(context: *anyopaque, platform_window: *Platform.Window, options: P
         .border_width = 1,
         .visual_id = self.root_screen.visual_id,
         .attributes = .{
-            .background_pixel = 0x00000000, // ARGB color
+            .background_pixel = 0xffffffff, // ARGB color
             // .events = .all,
             .events = .{
                 .key_press = true,
@@ -156,8 +156,8 @@ fn windowPoll(context: *anyopaque, platform_window: *Platform.Window) anyerror!?
         .close => .close,
         .expose => |expose| .{ .resize = .{ .width = @intCast(expose.width), .height = @intCast(expose.height) } },
         .configure_notify => |notify| .{ .move = .{ .x = @intCast(notify.x), .y = @intCast(notify.y) } },
-        .focus_in => .{ .focus = .enter },
-        .focus_out => .{ .focus = .leave },
+        .focus_in => .{ .focus = .focused },
+        .focus_out => .{ .focus = .unfocused },
         .button_press, .button_release => |button| switch (button.button()) {
             .scroll_up => .{ .mouse_scroll = .{ .vertical = 1 } },
             .scroll_down => .{ .mouse_scroll = .{ .vertical = -1 } },
@@ -220,7 +220,7 @@ fn windowFramebuffer(context: *anyopaque, platform_window: *Platform.Window) any
     _ = self;
     _ = window;
 
-    std.log.info("no software rendering is currently not supported");
+    std.log.info("no software rendering is currently not supported", .{});
 
     return undefined;
 }

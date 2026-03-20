@@ -4,7 +4,11 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const yes = b.dependency("yes", .{ .target = target, .optimize = optimize, .xlib = true }).module("yes");
+    const yes = b.dependency("yes", .{
+        .target = target,
+        .optimize = optimize,
+        .opengl = true, // VERY IMPORTANT when using OpenGL
+    }).module("yes");
     const gl = b.dependency("zig_opengl", .{ .target = target, .optimize = optimize }).module("zig_opengl");
     const numz = b.dependency("numz", .{ .target = target, .optimize = optimize }).module("numz");
 

@@ -17,21 +17,24 @@ pub fn build(b: *std.Build) void {
         },
     });
 
-    const opengl_option = b.option(bool, "opengl", "Link with native OpenGL libs") orelse true; // Linux
+    const opengl_option = b.option(bool, "opengl", "Link with native OpenGL libs") orelse false;
     const xlib_option = b.option(bool, "xlib", "Allow use of xlib platform") orelse true; // Linux
     const libwayland_option = b.option(bool, "libwayland", "Links with wayland libraries") orelse true; // Linux
 
     switch (target.result.os.tag) {
-        .windows, .wasi => {},
+        .windows => {},
         .macos => {},
         else => {
             if (xlib_option) addXlib(b, mod, target, optimize);
             if (libwayland_option) addWayland(b, mod, target, optimize);
             if (xlib_option or libwayland_option) addXkbcommon(b, mod, target, optimize);
 
+            if (xlib_option and opengl_option) {
+                mod.linkSystemLibrary("glx", .{});
+            }
             if (libwayland_option and opengl_option) {
-                mod.linkSystemLibrary("EGL", .{});
-                mod.linkSystemLibrary("wayland-egl", .{});
+                mod.linkSystemLibrary("EGL", .{ .weak = true });
+                mod.linkSystemLibrary("wayland-egl", .{ .weak = true });
             }
         },
     }
@@ -65,7 +68,6 @@ pub fn addXlib(b: *std.Build, mod: *std.Build.Module, target: std.Build.Resolved
     xlib.addIncludePath(xlib_dep.path("include/X11/"));
     xlib.linkSystemLibrary("X11", .{});
     xlib.linkSystemLibrary("Xrandr", .{});
-    xlib.linkSystemLibrary("glx", .{});
     mod.addImport("xlib", xlib);
 }
 
