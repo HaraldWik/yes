@@ -1,9 +1,9 @@
 const std = @import("std");
 const win32 = @import("win32").everything;
 const xkb = @import("xkbcommon");
-const Size = @import("Window.zig").Size;
-const Position = @import("Window.zig").Position;
-const Focus = @import("Window.zig").Focus;
+const Size = @import("../Window.zig").Size;
+const Position = @import("../Window.zig").Position;
+const Focus = @import("../Window.zig").Focus;
 
 pub const Event = union(enum) {
     close,

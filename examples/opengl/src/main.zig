@@ -120,17 +120,15 @@ pub fn main(init: std.process.Init) !void {
             .key => |key| {
                 std.log.info("{t:<8} {t}", .{ key.state, key.sym });
 
-                switch (key.sym) {
-                    .w => view_transform.position[2] += 50.0 * delta_time,
-                    .s => view_transform.position[2] -= 50.0 * delta_time,
-                    .a => view_transform.position[0] += 50.0 * delta_time,
-                    .d => view_transform.position[0] -= 50.0 * delta_time,
-                    else => {},
-                }
                 gl.c.glUniformMatrix4fv(view_loc, 1, 0, view_transform.toMat4x4().d[0..].ptr);
             },
             else => std.log.info("{any}", .{event}),
         };
+
+        if (window.keyboard.get(.w) == .pressed) view_transform.position[2] += 5.0 * delta_time;
+        if (window.keyboard.get(.s) == .pressed) view_transform.position[2] -= 5.0 * delta_time;
+        if (window.keyboard.get(.a) == .pressed) view_transform.position[0] += 5.0 * delta_time;
+        if (window.keyboard.get(.d) == .pressed) view_transform.position[0] -= 5.0 * delta_time;
 
         gl.clear.color(0.0, 0.0, 0.0, 0.0);
         gl.clear.buffer(.{ .color = true, .depth = true });

@@ -9,8 +9,10 @@ size: Size = .{},
 position: Position = .{},
 focus: Focus = .focused,
 surface_type: SurfaceType = .empty,
+keyboard: Keyboard = .empty,
 
-pub const Event = @import("event.zig").Event;
+pub const Event = @import("Window/event.zig").Event;
+pub const Keyboard = @import("Window/Keyboard.zig");
 
 pub const Size = extern struct {
     width: u32 = 0,
@@ -143,7 +145,14 @@ pub fn poll(window: *Window, platform: Platform) anyerror!?Event {
     switch (event) {
         .resize => |size| window.size = size,
         .move => |position| window.position = position,
-        .focus => |focus| window.focus = focus,
+        .focus => |focus| {
+            if (focus == .unfocused) window.keyboard = .empty;
+            window.focus = focus;
+        },
+        .key => |key| {
+            if (key.state == window.keyboard.get(key.sym)) return window.poll(platform);
+            window.keyboard.set(key.sym, key.state);
+        },
         else => {},
     }
     return event;

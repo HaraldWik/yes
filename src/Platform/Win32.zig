@@ -100,7 +100,7 @@ fn windowOpen(context: *anyopaque, platform_window: *Platform.Window, options: P
 
     switch (options.surface_type) {
         .empty => {},
-        .software => {},
+        .framebuffer => {},
         .opengl => |version| {
             const dc: win32.HDC = win32.GetDC(@ptrCast(window.hwnd)) orelse return error.GetDeviceContext;
 

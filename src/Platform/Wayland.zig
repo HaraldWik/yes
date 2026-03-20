@@ -541,8 +541,7 @@ fn keyboardListener(_: *wl.Keyboard, event: wl.Keyboard.Event, io_manager: *IoMa
                 window.err = err;
             };
         },
-
-        else => {}, // std.log.info("keyboard event: {t}", .{event}),
+        .repeat_info => {},
     }
 }
 
