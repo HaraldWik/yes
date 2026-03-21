@@ -70,17 +70,27 @@ pub const Event = union(enum) {
 
             // --- Punctuation / symbols ---
             space = ' ',
+            exclam = '!',
+            double_quote = '"',
+            hash = '#',
+            percent = '%',
+            ampersand = '&',
+            left_paren = '(',
+            right_paren = ')',
+            asterisk = '*',
             minus = '-',
             equal = '=',
+            question = '?',
             left_bracket = '[',
             right_bracket = ']',
             backslash = '\\',
             semicolon = ';',
-            quote = '\'',
+            apostrophe = '\'',
             comma = ',',
             period = '.',
             slash = '/',
             grave = '`',
+            currency = 0xA4,
 
             // Control keys
             backspace,
@@ -127,6 +137,7 @@ pub const Event = union(enum) {
             f12,
 
             // Numpad
+            num_lock,
             numpad_0,
             numpad_1,
             numpad_2,
@@ -145,6 +156,14 @@ pub const Event = union(enum) {
             numpad_multiply,
             numpad_divide,
             numpad_decimal,
+
+            @"ä" = 'ä',
+            @"å" = 'å',
+            @"ö" = 'ö',
+            @"ü" = 'ü',
+            @"ß" = 'ß',
+
+            iso_level3_shift,
 
             pub fn fromWin32(key: win32.VIRTUAL_KEY, lparam: isize) ?@This() {
                 const scancode: u32 = (@as(u32, @intCast(lparam)) >> 16) & 0xFF;
@@ -288,6 +307,7 @@ pub const Event = union(enum) {
                     xkb.XKB_KEY_F12 => .f12,
 
                     // Numpad
+                    xkb.XKB_KEY_Num_Lock => .num_lock,
                     xkb.XKB_KEY_KP_0 => .numpad_0,
                     xkb.XKB_KEY_KP_1 => .numpad_1,
                     xkb.XKB_KEY_KP_2 => .numpad_2,
@@ -303,7 +323,12 @@ pub const Event = union(enum) {
                     xkb.XKB_KEY_KP_Multiply => .numpad_multiply,
                     xkb.XKB_KEY_KP_Divide => .numpad_divide,
                     xkb.XKB_KEY_KP_Decimal => .numpad_decimal,
-                    else => std.enums.fromInt(@This(), key),
+
+                    xkb.XKB_KEY_ISO_Level3_Shift => .iso_level3_shift,
+                    else => std.enums.fromInt(@This(), key) orelse {
+                        std.log.err("missing key: {d}", .{key});
+                        return null;
+                    },
                 };
             }
         };

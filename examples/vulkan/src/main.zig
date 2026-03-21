@@ -16,6 +16,7 @@ pub fn main(init: std.process.Init) !void {
     try window.open(platform, .{
         .title = "vulkan triangle",
         .size = .{ .width = 600, .height = 400 },
+        .resize_policy = .{ .resizable = false },
         .surface_type = .vulkan,
     });
     defer window.close(platform);

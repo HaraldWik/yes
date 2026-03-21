@@ -186,11 +186,6 @@ fn windowOpen(context: *anyopaque, platform_window: *Platform.Window, options: P
     try windowSetProperty(context, platform_window, .{ .resize_policy = options.resize_policy });
     try windowSetProperty(context, platform_window, .{ .decorated = options.decorated });
 
-    if (self.zxdg_decoration_manager) |zxdg_decoration_manager| {
-        window.zxdg_toplevel_decoration = try zxdg_decoration_manager.getToplevelDecoration(window.xdg_toplevel);
-        window.zxdg_toplevel_decoration.?.setListener(*Window, zxdgToplevelDecorationListener, window);
-    }
-
     window.wl_surface.commit();
     while (!configured) if (self.display.dispatch() != .SUCCESS) return error.Dispatch;
     window.wl_surface.commit();
@@ -365,11 +360,10 @@ fn windowSetProperty(context: *anyopaque, platform_window: *Platform.Window, pro
         },
         .always_on_top => {},
         .floating => {},
-        .decorated => |decorated| if (decorated) {
-            if (window.zxdg_toplevel_decoration_mode != null or self.zxdg_decoration_manager == null) return;
+        .decorated => |decorated| if (window.zxdg_toplevel_decoration) |zxdg_toplevel_decoration| if (decorated) {
             window.zxdg_toplevel_decoration = try self.zxdg_decoration_manager.?.getToplevelDecoration(window.xdg_toplevel);
             window.zxdg_toplevel_decoration.?.setListener(*Window, zxdgToplevelDecorationListener, window);
-        } else if (window.zxdg_toplevel_decoration) |zxdg_toplevel_decoration| {
+        } else {
             window.zxdg_toplevel_decoration_mode = null;
             zxdg_toplevel_decoration.destroy();
         },
