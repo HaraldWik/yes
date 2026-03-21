@@ -160,8 +160,8 @@ fn windowOpen(context: *anyopaque, platform_window: *Platform.Window, options: P
     window.handle = xlib.XCreateWindow(
         self.display,
         screen_window,
-        0,
-        0,
+        if (options.position) |position| @intCast(position.x) else 0,
+        if (options.position) |position| @intCast(position.y) else 0,
         @intCast(options.size.width),
         @intCast(options.size.height),
         0,
@@ -175,12 +175,16 @@ fn windowOpen(context: *anyopaque, platform_window: *Platform.Window, options: P
 
     try windowSetProperty(context, platform_window, .{ .title = options.title });
     try windowSetProperty(context, platform_window, .{ .resize_policy = options.resize_policy });
-    try windowSetProperty(context, platform_window, .{ .decorated = options.decorated });
 
     window.wm_delete_window = xlib.XInternAtom(self.display, "WM_DELETE_WINDOW", @intFromBool(false));
     if (xlib.XSetWMProtocols(self.display, window.handle, &window.wm_delete_window, 1) == xlib.False) return error.SetWMProtocols;
-
     if (xlib.XMapWindow(self.display, window.handle) == xlib.False) return error.MapWindow;
+    try windowSetProperty(context, platform_window, .{ .always_on_top = options.always_on_top });
+    if (options.fullscreen) try windowSetProperty(context, platform_window, .{ .fullscreen = options.fullscreen });
+    if (options.maximized) try windowSetProperty(context, platform_window, .{ .maximized = options.maximized });
+    if (options.minimized) try windowSetProperty(context, platform_window, .{ .minimized = options.minimized });
+    if (!options.decorated) try windowSetProperty(context, platform_window, .{ .decorated = options.decorated });
+    if (options.floating) |floating| try windowSetProperty(context, platform_window, .{ .floating = floating });
     if (xlib.XFlush(self.display) == xlib.False) return error.Flush;
 
     // Create OpenGL context
