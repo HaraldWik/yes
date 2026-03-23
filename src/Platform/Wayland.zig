@@ -616,19 +616,19 @@ fn xdgToplevelListener(_: *xdg.Toplevel, event: xdg.Toplevel.Event, window: *Win
     const allocator = window.allocator;
     switch (event) {
         .configure => |configure| for (configure.states.slice(xdg.Toplevel.State)) |state| switch (state) {
-            .resizing, .fullscreen, .maximized => {
-                const size: PlatformWindow.Size = .{ .width = @intCast(configure.width), .height = @intCast(configure.height) };
-                window.events.append(allocator, .{ .resize = size }) catch |err| {
-                    window.err = err;
-                };
-            },
             .activated => {
                 if (window.interface.focus == .focused) return;
                 window.events.append(allocator, .{ .focus = .focused }) catch |err| {
                     window.err = err;
                 };
             },
-            else => {},
+            else => {
+                const size: PlatformWindow.Size = .{ .width = @intCast(configure.width), .height = @intCast(configure.height) };
+                if (size.eql(.{})) return;
+                window.events.append(allocator, .{ .resize = size }) catch |err| {
+                    window.err = err;
+                };
+            },
         },
         .close => {
             window.events.append(window.allocator, .close) catch |err| {
