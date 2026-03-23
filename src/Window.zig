@@ -14,7 +14,7 @@ keyboard: Keyboard = .empty,
 pub const Event = @import("Window/event.zig").Event;
 pub const Keyboard = @import("Window/Keyboard.zig");
 
-pub const Size = extern struct {
+pub const Size = packed struct(u64) {
     width: u32 = 0,
     height: u32 = 0,
 
@@ -25,14 +25,24 @@ pub const Size = extern struct {
     pub fn aspect(self: @This()) f32 {
         return @as(f32, @floatFromInt(self.width)) / @as(f32, @floatFromInt(self.height));
     }
+
+    /// Can be constructed into @Vector or [2]u32
+    pub fn toTuple(self: @This()) struct { u32, u32 } {
+        return .{ self.width, self.height };
+    }
 };
 
-pub const Position = extern struct {
+pub const Position = packed struct(i64) {
     x: i32 = 0,
     y: i32 = 0,
 
     pub fn eql(a: @This(), b: @This()) bool {
         return a.x == b.x and a.y == b.y;
+    }
+
+    /// Can be constructed into @Vector or [2]i32
+    pub fn toTuple(self: @This()) struct { i32, i32 } {
+        return .{ self.x, self.y };
     }
 };
 
