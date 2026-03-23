@@ -1,6 +1,7 @@
 const std = @import("std");
 const vulkan = @import("../root.zig").vulkan;
 const Platform = @import("../Platform.zig");
+const PlatformWindow = @import("../Window.zig");
 
 pub const Window = struct {};
 
@@ -78,6 +79,7 @@ fn windowSetProperty(context: *anyopaque, platform_window: *Platform.Window, pro
         .floating => {},
         .decorated => {},
         .focus => {},
+        .cursor => {},
     }
 }
 fn windowFramebuffer(context: *anyopaque, platform_window: *Platform.Window) anyerror!Platform.Window.Framebuffer {

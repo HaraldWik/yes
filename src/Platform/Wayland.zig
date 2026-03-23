@@ -4,6 +4,7 @@ const wayland = @import("wayland");
 const wl = wayland.client.wl;
 const xdg = wayland.client.xdg;
 const zxdg = wayland.client.zxdg;
+const wp = wayland.client.wp;
 const egl = @cImport({ // TODO: replace
     @cInclude("EGL/egl.h");
     @cInclude("wayland-egl.h");
@@ -13,6 +14,7 @@ const xkb = @import("xkbcommon");
 const opengl = @import("../opengl.zig");
 const vulkan = @import("../vulkan.zig");
 const Platform = @import("../Platform.zig");
+const PlatformWindow = @import("../Window.zig");
 
 const Wayland = @This();
 
@@ -25,6 +27,7 @@ xdg_wm_base: *xdg.WmBase,
 seat: *wl.Seat,
 shm: *wl.Shm,
 zxdg_decoration_manager: ?*zxdg.DecorationManagerV1 = null,
+wp_cursor_shape_manager: ?*wp.CursorShapeManagerV1,
 
 io_manager: *IoManager,
 
@@ -34,6 +37,7 @@ const Globals = struct {
     seat: ?*wl.Seat = null,
     shm: ?*wl.Shm = null,
     zxdg_decoration_manager: ?*zxdg.DecorationManagerV1 = null,
+    wp_cursor_shape_manager: ?*wp.CursorShapeManagerV1 = null,
 };
 
 const IoManager = struct {
@@ -57,18 +61,20 @@ const IoManager = struct {
 };
 
 pub const Window = struct {
-    interface: Platform.Window = .{},
+    interface: PlatformWindow = .{},
     allocator: std.mem.Allocator = undefined,
     err: ?anyerror = null,
     wl_surface: *wl.Surface = undefined,
     xdg_surface: *xdg.Surface = undefined,
     xdg_toplevel: *xdg.Toplevel = undefined,
     zxdg_toplevel_decoration: ?*zxdg.ToplevelDecorationV1 = null,
-    zxdg_toplevel_decoration_mode: ?zxdg.ToplevelDecorationV1.Mode = null,
+    zxdg_toplevel_decoration_mode: zxdg.ToplevelDecorationV1.Mode = .client_side,
+    wp_cursor_shape_device: ?*wp.CursorShapeDeviceV1 = null,
     // event_queue: *wl.EventQueue = undefined,
-    events: std.ArrayList(Platform.Window.Event) = .empty,
+    events: std.ArrayList(PlatformWindow.Event) = .empty,
     running: bool = true,
     surface: Surface = .empty,
+    cursor: PlatformWindow.Cursor = .default,
 
     pub const Surface = union(enum) {
         empty,
@@ -101,7 +107,9 @@ pub fn init(allocator: std.mem.Allocator) !@This() {
     const xdg_wm_base = globals.xdg_wm_base orelse return error.NoXdgWmBase;
     xdg_wm_base.setListener(?*anyopaque, xdgWmBaseListener, null);
 
+    const compositor = globals.compositor orelse return error.NoCompositor;
     const seat = globals.seat orelse return error.NoWlSeat;
+    const shm = globals.shm orelse return error.NoShm;
 
     const io_manager = try allocator.create(IoManager);
     io_manager.* = .{ .xkb = .{
@@ -119,11 +127,12 @@ pub fn init(allocator: std.mem.Allocator) !@This() {
         .display = display,
         .registry = registry,
 
-        .compositor = globals.compositor orelse return error.NoWlCompositor,
+        .compositor = compositor,
         .xdg_wm_base = xdg_wm_base,
         .seat = seat,
-        .shm = globals.shm orelse return error.NoWlShm,
+        .shm = shm,
         .zxdg_decoration_manager = globals.zxdg_decoration_manager,
+        .wp_cursor_shape_manager = globals.wp_cursor_shape_manager,
 
         .io_manager = io_manager,
     };
@@ -163,7 +172,7 @@ pub fn platform(self: *@This()) Platform {
     };
 }
 
-fn windowOpen(context: *anyopaque, platform_window: *Platform.Window, options: Platform.Window.OpenOptions) anyerror!void {
+fn windowOpen(context: *anyopaque, platform_window: *PlatformWindow, options: PlatformWindow.OpenOptions) anyerror!void {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
 
@@ -185,6 +194,10 @@ fn windowOpen(context: *anyopaque, platform_window: *Platform.Window, options: P
     try windowSetProperty(context, platform_window, .{ .title = options.title });
     try windowSetProperty(context, platform_window, .{ .resize_policy = options.resize_policy });
     try windowSetProperty(context, platform_window, .{ .decorated = options.decorated });
+    if (self.io_manager.pointer) |pointer| {
+        if (self.wp_cursor_shape_manager) |wp_cursor_shape_manager|
+            window.wp_cursor_shape_device = try wp_cursor_shape_manager.getPointer(pointer);
+    }
 
     window.wl_surface.commit();
     while (!configured) if (self.display.dispatch() != .SUCCESS) return error.Dispatch;
@@ -245,7 +258,7 @@ fn windowOpen(context: *anyopaque, platform_window: *Platform.Window, options: P
     if (options.surface_type != .empty) try window.events.append(self.allocator, .{ .focus = .focused });
     try window.events.append(self.allocator, .{ .resize = options.size });
 }
-fn windowClose(context: *anyopaque, platform_window: *Platform.Window) void {
+fn windowClose(context: *anyopaque, platform_window: *PlatformWindow) void {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
     _ = self;
@@ -263,13 +276,15 @@ fn windowClose(context: *anyopaque, platform_window: *Platform.Window) void {
         else => {},
     }
 
+    if (window.zxdg_toplevel_decoration) |zxdg_toplevel_decoration| zxdg_toplevel_decoration.destroy();
+    if (window.wp_cursor_shape_device) |wp_cursor_shape_device| wp_cursor_shape_device.destroy();
     window.xdg_toplevel.destroy();
     window.xdg_surface.destroy();
     window.wl_surface.destroy();
     // window.event_queue.destroy();
     window.events.deinit(window.allocator);
 }
-fn windowPoll(context: *anyopaque, platform_window: *Platform.Window) anyerror!?Platform.Window.Event {
+fn windowPoll(context: *anyopaque, platform_window: *PlatformWindow) anyerror!?PlatformWindow.Event {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
 
@@ -282,6 +297,7 @@ fn windowPoll(context: *anyopaque, platform_window: *Platform.Window) anyerror!?
     if (self.display.flush() != .SUCCESS) return error.Flush;
 
     if (window.err) |err| return err;
+    if (self.io_manager.err) |err| return err;
 
     var pfd: std.posix.pollfd = .{
         .fd = @intCast(self.display.getFd()),
@@ -316,7 +332,7 @@ fn windowPoll(context: *anyopaque, platform_window: *Platform.Window) anyerror!?
     }
     return event;
 }
-fn windowSetProperty(context: *anyopaque, platform_window: *Platform.Window, property: Platform.Window.Property) anyerror!void {
+fn windowSetProperty(context: *anyopaque, platform_window: *PlatformWindow, property: PlatformWindow.Property) anyerror!void {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
 
@@ -330,13 +346,13 @@ fn windowSetProperty(context: *anyopaque, platform_window: *Platform.Window, pro
         .position => {},
         .resize_policy => |resize_policy| switch (resize_policy) {
             .resizable => |resizable| {
-                const size: Platform.Window.Size = if (resizable) .{} else window.interface.size;
+                const size: PlatformWindow.Size = if (resizable) .{} else window.interface.size;
                 window.xdg_toplevel.setMaxSize(@intCast(size.width), @intCast(size.height));
                 window.xdg_toplevel.setMinSize(@intCast(size.width), @intCast(size.height));
             },
             .specified => |specified| {
-                const max_size: Platform.Window.Size = if (specified.max_size) |size| size else .{};
-                const min_size: Platform.Window.Size = if (specified.min_size) |size| size else .{};
+                const max_size: PlatformWindow.Size = if (specified.max_size) |size| size else .{};
+                const min_size: PlatformWindow.Size = if (specified.min_size) |size| size else .{};
                 window.xdg_toplevel.setMaxSize(@intCast(max_size.width), @intCast(max_size.height));
                 window.xdg_toplevel.setMinSize(@intCast(min_size.width), @intCast(min_size.height));
             },
@@ -364,24 +380,29 @@ fn windowSetProperty(context: *anyopaque, platform_window: *Platform.Window, pro
             window.zxdg_toplevel_decoration = try self.zxdg_decoration_manager.?.getToplevelDecoration(window.xdg_toplevel);
             window.zxdg_toplevel_decoration.?.setListener(*Window, zxdgToplevelDecorationListener, window);
         } else {
-            window.zxdg_toplevel_decoration_mode = null;
+            window.zxdg_toplevel_decoration_mode = .client_side;
             zxdg_toplevel_decoration.destroy();
         },
         .focus => {}, // TODO: add focus request
+        .cursor => |cursor| if (window.wp_cursor_shape_device) |wp_cursor_shape_device| {
+            window.cursor = cursor;
+            const shape: wp.CursorShapeDeviceV1.Shape = @enumFromInt(@intFromEnum(cursor));
+            wp_cursor_shape_device.setShape(0, shape);
+        },
     }
 }
-fn windowFramebuffer(_: *anyopaque, platform_window: *Platform.Window) anyerror!Platform.Window.Framebuffer {
+fn windowFramebuffer(_: *anyopaque, platform_window: *PlatformWindow) anyerror!PlatformWindow.Framebuffer {
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
     return .{ .pixels = window.surface.framebuffer.pixels };
 }
-fn windowOpenglMakeCurrent(_: *anyopaque, platform_window: *Platform.Window) anyerror!void {
+fn windowOpenglMakeCurrent(_: *anyopaque, platform_window: *PlatformWindow) anyerror!void {
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
 
     std.debug.assert(window.surface == .opengl);
     const gl = window.surface.opengl;
     if (egl.eglMakeCurrent(gl.display, gl.surface, gl.surface, gl.context) != egl.EGL_TRUE) return error.EglMakeCurrent;
 }
-fn windowOpenglSwapBuffers(context: *anyopaque, platform_window: *Platform.Window) anyerror!void {
+fn windowOpenglSwapBuffers(context: *anyopaque, platform_window: *PlatformWindow) anyerror!void {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
 
@@ -390,14 +411,14 @@ fn windowOpenglSwapBuffers(context: *anyopaque, platform_window: *Platform.Windo
     if (egl.eglSwapBuffers(gl.display, gl.surface) != egl.EGL_TRUE) return error.EglSwapBuffers;
     if (self.display.dispatchPending() != .SUCCESS) return error.DispatchPending;
 }
-fn windowOpenglSwapInterval(_: *anyopaque, platform_window: *Platform.Window, interval: i32) anyerror!void {
+fn windowOpenglSwapInterval(_: *anyopaque, platform_window: *PlatformWindow, interval: i32) anyerror!void {
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
 
     std.debug.assert(window.surface == .opengl);
     const gl = window.surface.opengl;
     if (egl.eglSwapInterval(gl.display, interval) != egl.EGL_TRUE) return error.EglSwapInterval;
 }
-fn windowVulkanCreateSurface(context: *anyopaque, platform_window: *Platform.Window, instance: *vulkan.Instance, allocator: ?*const vulkan.AllocationCallbacks, getProcAddress: vulkan.Instance.GetProcAddress) anyerror!*vulkan.Surface {
+fn windowVulkanCreateSurface(context: *anyopaque, platform_window: *PlatformWindow, instance: *vulkan.Instance, allocator: ?*const vulkan.AllocationCallbacks, getProcAddress: vulkan.Instance.GetProcAddress) anyerror!*vulkan.Surface {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
 
@@ -471,7 +492,7 @@ fn seatListener(seat: *wl.Seat, event: wl.Seat.Event, io_manager: *IoManager) vo
             }
         },
         .name => |name| {
-            std.log.info("seat name: {s}", .{name.name});
+            std.log.debug("seat name: {s}", .{name.name});
         },
     }
 }
@@ -526,10 +547,10 @@ fn keyboardListener(_: *wl.Keyboard, event: wl.Keyboard.Event, io_manager: *IoMa
         .key => |key| if (current_window) |window| {
             if (io_manager.xkb.state == null or io_manager.xkb.keymap == null) return;
             const sym = xkb.xkb_state_key_get_one_sym(io_manager.xkb.state.?, key.key + 8);
-            const window_event: Platform.Window.Event.Key = .{
+            const window_event: PlatformWindow.Event.Key = .{
                 .state = @enumFromInt(@intFromEnum(key.state)),
                 .code = key.key + 8,
-                .sym = Platform.Window.Event.Key.Sym.fromXkb(sym) orelse return,
+                .sym = PlatformWindow.Event.Key.Sym.fromXkb(sym) orelse return,
             };
             window.events.append(window.allocator, .{ .key = window_event }) catch |err| {
                 window.err = err;
@@ -540,35 +561,30 @@ fn keyboardListener(_: *wl.Keyboard, event: wl.Keyboard.Event, io_manager: *IoMa
 }
 
 fn pointerListener(_: *wl.Pointer, event: wl.Pointer.Event, io_manager: *IoManager) void {
-    const current_window = io_manager.current_window.load(.seq_cst);
-    if (current_window) |window| switch (event) {
-        .enter => if (window.interface.focus == .unfocused) {
-            window.events.append(window.allocator, .{ .focus = .focused }) catch |err| {
-                window.err = err;
-            };
+    const window = io_manager.current_window.load(.seq_cst) orelse return;
+    switch (event) {
+        .enter => if (window.wp_cursor_shape_device) |wp_cursor_shape_device| {
+            const shape: wp.CursorShapeDeviceV1.Shape = @enumFromInt(@intFromEnum(window.cursor));
+            wp_cursor_shape_device.setShape(0, shape);
         },
-        .leave => if (window.interface.focus == .focused) {
-            window.events.append(window.allocator, .{ .focus = .unfocused }) catch |err| {
-                window.err = err;
-            };
-        },
+        .leave => {},
         .motion => |motion| {
-            const mouse_motion: Platform.Window.Event.MouseMotion = .{ .x = motion.surface_x.toDouble(), .y = motion.surface_y.toDouble() };
+            const mouse_motion: PlatformWindow.Event.MouseMotion = .{ .x = motion.surface_x.toDouble(), .y = motion.surface_y.toDouble() };
             window.events.append(window.allocator, .{ .mouse_motion = mouse_motion }) catch |err| {
                 window.err = err;
             };
         },
         .button => |button| {
-            const mouse_button: Platform.Window.Event.MouseButton = .{
+            const mouse_button: PlatformWindow.Event.MouseButton = .{
                 .state = @enumFromInt(@intFromEnum(button.state)),
-                .button = Platform.Window.Event.MouseButton.Button.fromWayland(button.button).?,
+                .button = PlatformWindow.Event.MouseButton.Button.fromWayland(button.button).?,
             };
             window.events.append(window.allocator, .{ .mouse_button = mouse_button }) catch |err| {
                 window.err = err;
             };
         },
         .axis => |axis| {
-            const mouse_scroll: Platform.Window.Event.MouseScroll = switch (axis.axis) {
+            const mouse_scroll: PlatformWindow.Event.MouseScroll = switch (axis.axis) {
                 .vertical_scroll => .{ .vertical = -axis.value.toDouble() / 10.0 },
                 .horizontal_scroll => .{ .horizontal = axis.value.toDouble() / 10.0 },
                 _ => unreachable,
@@ -577,7 +593,7 @@ fn pointerListener(_: *wl.Pointer, event: wl.Pointer.Event, io_manager: *IoManag
                 window.err = err;
             };
         },
-    };
+    }
 }
 
 fn touchListener(_: *wl.Touch, event: wl.Touch.Event, io_manager: *IoManager) void {
@@ -601,7 +617,7 @@ fn xdgToplevelListener(_: *xdg.Toplevel, event: xdg.Toplevel.Event, window: *Win
     switch (event) {
         .configure => |configure| for (configure.states.slice(xdg.Toplevel.State)) |state| switch (state) {
             .resizing, .fullscreen, .maximized => {
-                const size: Platform.Window.Size = .{ .width = @intCast(configure.width), .height = @intCast(configure.height) };
+                const size: PlatformWindow.Size = .{ .width = @intCast(configure.width), .height = @intCast(configure.height) };
                 window.events.append(allocator, .{ .resize = size }) catch |err| {
                     window.err = err;
                 };

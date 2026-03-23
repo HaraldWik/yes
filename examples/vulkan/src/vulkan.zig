@@ -367,7 +367,7 @@ pub const Swapchain = struct {
     image_views: []vk.VkImageView,
     present_mode: ?vk.VkPresentModeKHR = null,
 
-    pub fn init(self: *@This(), allocator: std.mem.Allocator, device: Device, physical_device: PhysicalDevice, surface: Surface, surface_info: Surface.Info, size: yes.Platform.Window.Size) !void {
+    pub fn init(self: *@This(), allocator: std.mem.Allocator, device: Device, physical_device: PhysicalDevice, surface: Surface, surface_info: Surface.Info, size: yes.Window.Size) !void {
         self.extent.width = @intCast(size.width);
         self.extent.height = @intCast(size.height);
 
@@ -475,7 +475,7 @@ pub const Swapchain = struct {
         vk.vkDestroySwapchainKHR(device.handle, self.handle, null);
     }
 
-    pub fn resize(self: *@This(), allocator: std.mem.Allocator, device: Device, physical_device: PhysicalDevice, surface: Surface, surface_info: Surface.Info, size: yes.Platform.Window.Size) !void {
+    pub fn resize(self: *@This(), allocator: std.mem.Allocator, device: Device, physical_device: PhysicalDevice, surface: Surface, surface_info: Surface.Info, size: yes.Window.Size) !void {
         try device.waitIdle();
         self.deinit(allocator, device);
         try self.init(allocator, device, physical_device, surface, surface_info, size);

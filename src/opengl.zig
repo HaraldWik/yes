@@ -2,6 +2,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 const build_options = @import("build_options");
 const Platform = @import("Platform.zig");
+const Window = @import("Window.zig");
 
 pub const APIENTRY: std.builtin.CallingConvention = if (builtin.os.tag == .windows) .winapi else .c;
 
@@ -21,19 +22,19 @@ pub fn getProcAddressProc(platform: Platform) *const fn (procname: [*:0]const u8
     return platform.vtable.openglGetProcAddress;
 }
 
-pub fn makeCurrent(platform: Platform, window: *Platform.Window) !void {
+pub fn makeCurrent(platform: Platform, window: *Window) !void {
     if (!build_options.opengl) invalid();
     if (window.surface_type != .opengl) return error.WrongSurfaceType;
     try platform.vtable.windowOpenglMakeCurrent(platform.ptr, window);
 }
 
-pub fn swapBuffers(platform: Platform, window: *Platform.Window) !void {
+pub fn swapBuffers(platform: Platform, window: *Window) !void {
     if (!build_options.opengl) invalid();
     if (window.surface_type != .opengl) return error.WrongSurfaceType;
     try platform.vtable.windowOpenglSwapBuffers(platform.ptr, window);
 }
 
-pub fn swapInterval(platform: Platform, window: *Platform.Window, interval: i32) !void {
+pub fn swapInterval(platform: Platform, window: *Window, interval: i32) !void {
     if (!build_options.opengl) invalid();
     if (window.surface_type != .opengl) return error.WrongSurfaceType;
     try platform.vtable.windowOpenglSwapInterval(platform.ptr, window, interval);

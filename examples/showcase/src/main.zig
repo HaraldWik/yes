@@ -28,6 +28,7 @@ pub fn main(init: std.process.Init) !void {
     var maximize: bool = false;
     var minimize: bool = false;
 
+    var cursor_index: usize = 0;
     main: while (true) {
         while (try window.poll(platform)) |event| switch (event) {
             .close => break :main,
@@ -58,6 +59,31 @@ pub fn main(init: std.process.Init) !void {
                 if (key.sym == .r)
                     try window.setResizePolicy(platform, .{ .resizable = true });
             },
+            .mouse_button => |button| {
+                if (button.state == .pressed and button.button == .left) {
+                    cursor_index += 1;
+                    const cursor: yes.Window.Cursor = switch (cursor_index) {
+                        0 => .arrow,
+                        1 => .text,
+                        2 => .hand,
+                        3 => .grab,
+                        4 => .crosshair,
+                        5 => .wait,
+                        6 => .resize_ns,
+                        7 => .resize_ew,
+                        8 => .resize_nesw,
+                        9 => .resize_nwse,
+                        10 => .forbidden,
+                        11 => .move,
+                        else => blk: {
+                            cursor_index = 0;
+                            break :blk .arrow;
+                        },
+                    };
+                    try window.setCursor(platform, cursor);
+                }
+            },
+            .mouse_motion => {},
             else => std.log.info("{any}", .{event}),
         };
     }

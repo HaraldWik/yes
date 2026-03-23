@@ -1,6 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const Platform = @import("Platform.zig");
+const Window = @import("Window.zig");
 
 pub const Result = enum(c_int) {
     success = 0,
@@ -55,7 +56,7 @@ pub const Surface = opaque {
 
     pub const CreateProc = *const fn (instance: *Instance, create_info: *const Surface.CreateInfo, allocator: ?*const AllocationCallbacks, surface: *?*Surface) callconv(.c) Result;
 
-    pub fn create(platform: Platform, window: *Platform.Window, instance: *Instance, allocator: ?*const AllocationCallbacks, getProcAddress: Instance.GetProcAddress) !*@This() {
+    pub fn create(platform: Platform, window: *Window, instance: *Instance, allocator: ?*const AllocationCallbacks, getProcAddress: Instance.GetProcAddress) !*@This() {
         if (window.surface_type != .vulkan) return error.WrongSurfaceType;
         return platform.vtable.windowVulkanCreateSurface(platform.ptr, window, instance, allocator, getProcAddress);
     }

@@ -59,6 +59,8 @@ pub fn addXlib(b: *std.Build, mod: *std.Build.Module, target: std.Build.Resolved
             \\#include <X11/Xlib.h>
             \\#include <X11/Xutil.h>
             \\#include <X11/Xatom.h>
+            \\#include <X11/cursorfont.h>
+            \\#include <X11/Xcursor/Xcursor.h>
             \\#include <GL/glx.h>
             \\#include <X11/extensions/Xrandr.h>
         ),
@@ -68,6 +70,7 @@ pub fn addXlib(b: *std.Build, mod: *std.Build.Module, target: std.Build.Resolved
     xlib.addIncludePath(xlib_dep.path("include/X11/"));
     xlib.linkSystemLibrary("X11", .{});
     xlib.linkSystemLibrary("Xrandr", .{});
+    xlib.linkSystemLibrary("Xcursor", .{});
     mod.addImport("xlib", xlib);
 }
 
@@ -83,6 +86,8 @@ pub fn addWayland(b: *std.Build, mod: *std.Build.Module, target: std.Build.Resol
 
     scanner.addSystemProtocol("stable/xdg-shell/xdg-shell.xml");
     scanner.addSystemProtocol("unstable/xdg-decoration/xdg-decoration-unstable-v1.xml");
+    scanner.addSystemProtocol("staging/cursor-shape/cursor-shape-v1.xml");
+    scanner.addSystemProtocol("unstable/tablet/tablet-unstable-v2.xml");
 
     scanner.generate("wl_compositor", 1);
     scanner.generate("wl_output", 4);
@@ -90,6 +95,9 @@ pub fn addWayland(b: *std.Build, mod: *std.Build.Module, target: std.Build.Resol
     scanner.generate("wl_seat", 4);
     scanner.generate("xdg_wm_base", 3);
     scanner.generate("zxdg_decoration_manager_v1", 1);
+    scanner.generate("wp_cursor_shape_manager_v1", 2);
+
+    scanner.generate("zwp_tablet_manager_v2", 1);
 
     mod.addImport("wayland", wayland);
     mod.link_libc = true;

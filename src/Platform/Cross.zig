@@ -2,6 +2,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 const build_options = @import("build_options");
 const Platform = @import("../Platform.zig");
+const PlatformWindow = @import("../Window.zig");
 
 const Cross = @This();
 
@@ -50,7 +51,7 @@ pub const Window = struct {
         };
     }
 
-    pub fn interface(self: *@This(), p: Platform) *Platform.Window {
+    pub fn interface(self: *@This(), p: Platform) *PlatformWindow {
         const cross: *Cross = @ptrCast(@alignCast(p.ptr));
         return switch (builtin.os.tag) {
             .windows => &self.inner.interface,
@@ -67,7 +68,7 @@ pub const Window = struct {
 
 pub fn init(allocator: std.mem.Allocator, io: std.Io, minimal: std.process.Init.Minimal) !@This() {
     return switch (builtin.os.tag) {
-        .windows => .{ .inner = try Platform.Win32.get(allocator) },
+        .windows => .{ .inner = try Platform.Win32.init(allocator) },
         .macos, .ios, .tvos => .{ .inner = try Platform.Cocoa.init() },
         else => if (is_wasm)
             .{ .inner = try Platform.Web.init() }

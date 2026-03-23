@@ -3,6 +3,7 @@ const xpz = @import("xpz");
 const opengl = @import("../opengl.zig");
 const vulkan = @import("../vulkan.zig");
 const Platform = @import("../Platform.zig");
+const PlatformWindow = @import("../Window.zig");
 
 connection: xpz.Connection,
 root_screen: xpz.Screen,
@@ -27,7 +28,7 @@ pub const AtomTable = struct {
 };
 
 pub const Window = struct {
-    interface: Platform.Window = .{},
+    interface: PlatformWindow = .{},
     handle: xpz.Window = @enumFromInt(0),
 };
 
@@ -88,7 +89,7 @@ pub fn platform(self: *@This()) Platform {
     };
 }
 
-fn windowOpen(context: *anyopaque, platform_window: *Platform.Window, options: Platform.Window.OpenOptions) anyerror!void {
+fn windowOpen(context: *anyopaque, platform_window: *PlatformWindow, options: PlatformWindow.OpenOptions) anyerror!void {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
 
@@ -131,7 +132,7 @@ fn windowOpen(context: *anyopaque, platform_window: *Platform.Window, options: P
     try windowSetProperty(context, platform_window, .{ .title = options.title });
 }
 
-fn windowClose(context: *anyopaque, platform_window: *Platform.Window) void {
+fn windowClose(context: *anyopaque, platform_window: *PlatformWindow) void {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
 
@@ -140,7 +141,7 @@ fn windowClose(context: *anyopaque, platform_window: *Platform.Window) void {
     window.handle.destroy(connection);
 }
 
-fn windowPoll(context: *anyopaque, platform_window: *Platform.Window) anyerror!?Platform.Window.Event {
+fn windowPoll(context: *anyopaque, platform_window: *PlatformWindow) anyerror!?PlatformWindow.Event {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
     _ = window;
@@ -189,7 +190,7 @@ fn windowPoll(context: *anyopaque, platform_window: *Platform.Window) anyerror!?
         else => null,
     };
 }
-fn windowSetProperty(context: *anyopaque, platform_window: *Platform.Window, property: Platform.Window.Property) anyerror!void {
+fn windowSetProperty(context: *anyopaque, platform_window: *PlatformWindow, property: PlatformWindow.Property) anyerror!void {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
 
@@ -211,9 +212,10 @@ fn windowSetProperty(context: *anyopaque, platform_window: *Platform.Window, pro
         .floating => {},
         .decorated => {},
         .focus => {},
+        .cursor => {},
     }
 }
-fn windowFramebuffer(context: *anyopaque, platform_window: *Platform.Window) anyerror!Platform.Window.Framebuffer {
+fn windowFramebuffer(context: *anyopaque, platform_window: *PlatformWindow) anyerror!PlatformWindow.Framebuffer {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
 
@@ -224,21 +226,21 @@ fn windowFramebuffer(context: *anyopaque, platform_window: *Platform.Window) any
 
     return undefined;
 }
-fn windowOpenglMakeCurrent(context: *anyopaque, platform_window: *Platform.Window) anyerror!void {
+fn windowOpenglMakeCurrent(context: *anyopaque, platform_window: *PlatformWindow) anyerror!void {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
 
     _ = self;
     _ = window;
 }
-fn windowOpenglSwapBuffers(context: *anyopaque, platform_window: *Platform.Window) anyerror!void {
+fn windowOpenglSwapBuffers(context: *anyopaque, platform_window: *PlatformWindow) anyerror!void {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
 
     _ = self;
     _ = window;
 }
-fn windowOpenglSwapInterval(context: *anyopaque, platform_window: *Platform.Window, interval: i32) anyerror!void {
+fn windowOpenglSwapInterval(context: *anyopaque, platform_window: *PlatformWindow, interval: i32) anyerror!void {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
 
@@ -246,7 +248,7 @@ fn windowOpenglSwapInterval(context: *anyopaque, platform_window: *Platform.Wind
     _ = window;
     _ = interval;
 }
-fn windowVulkanCreateSurface(context: *anyopaque, platform_window: *Platform.Window, instance: *vulkan.Instance, allocator: ?*const vulkan.AllocationCallbacks, getProcAddress: vulkan.Instance.GetProcAddress) anyerror!*vulkan.Surface {
+fn windowVulkanCreateSurface(context: *anyopaque, platform_window: *PlatformWindow, instance: *vulkan.Instance, allocator: ?*const vulkan.AllocationCallbacks, getProcAddress: vulkan.Instance.GetProcAddress) anyerror!*vulkan.Surface {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
 

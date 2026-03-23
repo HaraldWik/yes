@@ -1,3 +1,4 @@
+const Window = @import("Window.zig");
 const opengl = @import("opengl.zig");
 const vulkan = @import("vulkan.zig");
 
@@ -39,5 +40,3 @@ pub const VTable = struct {
 
     openglGetProcAddress: *const fn (procname: [*:0]const u8) callconv(opengl.APIENTRY) ?opengl.Proc,
 };
-
-pub const Window = @import("Window.zig");

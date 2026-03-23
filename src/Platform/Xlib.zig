@@ -5,6 +5,7 @@ const xlib = @import("xlib");
 const opengl = @import("../opengl.zig");
 const vulkan = @import("../vulkan.zig");
 const Platform = @import("../Platform.zig");
+const PlatformWindow = @import("../Window.zig");
 
 comptime {
     if (!build_options.xlib) @compileError("xlib backend not available unless build options xlib is set to true");
@@ -12,6 +13,7 @@ comptime {
 
 display: *xlib.Display,
 atom_table: AtomTable,
+cursor_table: CursorTable,
 
 pub const AtomTable = struct {
     utf8_string: xlib.Atom,
@@ -57,21 +59,85 @@ pub const AtomTable = struct {
     }
 };
 
+pub const CursorTable = struct {
+    left_ptr: xlib.Cursor,
+    xterm: xlib.Cursor,
+    hand2: xlib.Cursor,
+    openhand: xlib.Cursor,
+    crosshair: xlib.Cursor,
+    watch: xlib.Cursor,
+    sb_v_double_arrow: xlib.Cursor,
+    sb_h_double_arrow: xlib.Cursor,
+    bottom_left_corner: xlib.Cursor,
+    top_left_corner: xlib.Cursor,
+    no: xlib.Cursor,
+    fleur: xlib.Cursor,
+
+    pub const Cursor = union(enum) {
+        font: xlib.Cursor,
+        image: xlib.XcursorImage,
+    };
+
+    pub fn load(display: *xlib.Display) @This() {
+        return .{
+            .left_ptr = xlib.XCreateFontCursor(display, xlib.XC_left_ptr),
+            .xterm = xlib.XCreateFontCursor(display, xlib.XC_xterm),
+            .hand2 = xlib.XCreateFontCursor(display, xlib.XC_hand2),
+            .openhand = 0, // xlib.XCreateFontCursor(display, xlib.XC_openhand),
+            .crosshair = xlib.XCreateFontCursor(display, xlib.XC_crosshair),
+            .watch = xlib.XCreateFontCursor(display, xlib.XC_watch),
+            .sb_v_double_arrow = xlib.XCreateFontCursor(display, xlib.XC_sb_v_double_arrow),
+            .sb_h_double_arrow = xlib.XCreateFontCursor(display, xlib.XC_sb_h_double_arrow),
+            .bottom_left_corner = xlib.XCreateFontCursor(display, xlib.XC_bottom_left_corner),
+            .top_left_corner = xlib.XCreateFontCursor(display, xlib.XC_top_left_corner),
+            .no = 0, // xlib.XCreateFontCursor(display, xlib.XC_no),
+            .fleur = xlib.XCreateFontCursor(display, xlib.XC_fleur),
+        };
+    }
+
+    pub fn deinit(self: @This(), display: *xlib.Display) void {
+        inline for (std.meta.fields(@This())) |field| {
+            const cursor: xlib.Cursor = @field(self, field.name);
+            if (cursor != 0) _ = xlib.XFreeCursor(display, cursor);
+        }
+    }
+
+    pub fn get(self: @This(), cursor: PlatformWindow.Cursor) xlib.Cursor {
+        // XDefineCursor
+        return switch (cursor) {
+            .arrow => self.left_ptr,
+            .text => self.xterm,
+            .hand => self.hand2,
+            .grab => self.left_ptr, // self.openhand,
+            .crosshair => self.crosshair,
+            .wait => self.watch,
+            .resize_ns => self.sb_v_double_arrow,
+            .resize_ew => self.sb_h_double_arrow,
+            .resize_nesw => self.bottom_left_corner,
+            .resize_nwse => self.top_left_corner,
+            .forbidden => self.left_ptr, // self.no,
+            .move => self.fleur,
+            _ => @intFromEnum(cursor),
+        };
+    }
+};
+
 pub const Window = struct {
-    interface: Platform.Window = .{},
+    interface: PlatformWindow = .{},
     handle: xlib.Window = 0,
     wm_delete_window: xlib.Atom = 0,
     colormap: xlib.Colormap = 0,
     glx_context: ?*anyopaque = null,
-    move_event: ?Platform.Window.Position = null,
+    move_event: ?PlatformWindow.Position = null,
 };
 
 pub fn init() !@This() {
     const display: *xlib.Display = xlib.XOpenDisplay(null) orelse return error.OpenDisplay;
-    return .{ .display = display, .atom_table = .load(display) };
+    return .{ .display = display, .atom_table = .load(display), .cursor_table = .load(display) };
 }
 
 pub fn deinit(self: @This()) void {
+    self.cursor_table.deinit(self.display);
     _ = xlib.XCloseDisplay(self.display);
 }
 
@@ -93,7 +159,7 @@ pub fn platform(self: *@This()) Platform {
     };
 }
 
-fn windowOpen(context: *anyopaque, platform_window: *Platform.Window, options: Platform.Window.OpenOptions) anyerror!void {
+fn windowOpen(context: *anyopaque, platform_window: *PlatformWindow, options: PlatformWindow.OpenOptions) anyerror!void {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
 
@@ -209,7 +275,7 @@ fn windowOpen(context: *anyopaque, platform_window: *Platform.Window, options: P
         else => {},
     }
 }
-fn windowClose(context: *anyopaque, platform_window: *Platform.Window) void {
+fn windowClose(context: *anyopaque, platform_window: *PlatformWindow) void {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
 
@@ -217,7 +283,7 @@ fn windowClose(context: *anyopaque, platform_window: *Platform.Window) void {
     _ = xlib.XDestroyWindow(self.display, window.handle);
     window.* = undefined;
 }
-fn windowPoll(context: *anyopaque, platform_window: *Platform.Window) anyerror!?Platform.Window.Event {
+fn windowPoll(context: *anyopaque, platform_window: *PlatformWindow) anyerror!?PlatformWindow.Event {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
 
@@ -244,17 +310,17 @@ fn windowPoll(context: *anyopaque, platform_window: *Platform.Window) anyerror!?
             var child: xlib.Window = 0;
             _ = xlib.XTranslateCoordinates(self.display, window.handle, xlib.XDefaultRootWindow(self.display), 0, 0, &root_x, &root_y, &child);
 
-            const size: Platform.Window.Size = .{ .width = @intCast(attrs.width), .height = @intCast(attrs.height) };
-            const position: Platform.Window.Position = .{ .x = @intCast(root_x), .y = @intCast(root_y) };
+            const size: PlatformWindow.Size = .{ .width = @intCast(attrs.width), .height = @intCast(attrs.height) };
+            const position: PlatformWindow.Position = .{ .x = @intCast(root_x), .y = @intCast(root_y) };
 
             if (window.interface.size.eql(size)) return .{ .move = position };
             if (window.interface.position.x != position.x or window.interface.position.y != position.y) {
                 window.move_event = position;
                 window.interface.position = position;
             }
-            return if (window.interface.surface_type != .opengl) .{ .resize = size } else null;
+            return if (window.interface.surface_type != .opengl and window.interface.surface_type != .vulkan) .{ .resize = size } else null;
         },
-        xlib.Expose => if (window.interface.surface_type == .opengl) .{ .resize = .{ .width = @intCast(event.xexpose.width), .height = @intCast(event.xexpose.height) } } else null,
+        xlib.Expose => if (window.interface.surface_type == .vulkan or window.interface.surface_type == .opengl) .{ .resize = .{ .width = @intCast(event.xexpose.width), .height = @intCast(event.xexpose.height) } } else null,
         xlib.ButtonPress, xlib.ButtonRelease => switch (event.xbutton.button) {
             4...7 => |scroll| if (event.type == xlib.ButtonPress) .{ .mouse_scroll = switch (scroll) {
                 6 => .{ .horizontal = 1.0 },
@@ -269,7 +335,7 @@ fn windowPoll(context: *anyopaque, platform_window: *Platform.Window) anyerror!?
                     xlib.ButtonRelease => .released,
                     else => unreachable,
                 },
-                .button = Platform.Window.Event.MouseButton.Button.fromX(event.xbutton.button) orelse return null,
+                .button = PlatformWindow.Event.MouseButton.Button.fromX(event.xbutton.button) orelse return null,
             } },
         },
         xlib.MotionNotify => .{ .mouse_motion = .{
@@ -283,12 +349,12 @@ fn windowPoll(context: *anyopaque, platform_window: *Platform.Window) anyerror!?
                 else => unreachable,
             },
             .code = @intCast(event.xkey.keycode),
-            .sym = Platform.Window.Event.Key.Sym.fromXkb(xlib.XLookupKeysym(&event.xkey, @intCast(event.xkey.state & xlib.ShiftMask))) orelse return null,
+            .sym = PlatformWindow.Event.Key.Sym.fromXkb(xlib.XLookupKeysym(&event.xkey, @intCast(event.xkey.state & xlib.ShiftMask))) orelse return null,
         } },
         else => null,
     };
 }
-fn windowSetProperty(context: *anyopaque, platform_window: *Platform.Window, property: Platform.Window.Property) anyerror!void {
+fn windowSetProperty(context: *anyopaque, platform_window: *PlatformWindow, property: PlatformWindow.Property) anyerror!void {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
 
@@ -468,11 +534,14 @@ fn windowSetProperty(context: *anyopaque, platform_window: *Platform.Window, pro
 
             _ = xlib.XSendEvent(self.display, screen, xlib.False, xlib.SubstructureRedirectMask | xlib.SubstructureNotifyMask, &event);
         },
+        .cursor => |cursor| {
+            _ = xlib.XDefineCursor(self.display, window.handle, self.cursor_table.get(cursor));
+        },
     }
 
     _ = xlib.XFlush(self.display);
 }
-fn windowFramebuffer(context: *anyopaque, platform_window: *Platform.Window) anyerror!Platform.Window.Framebuffer {
+fn windowFramebuffer(context: *anyopaque, platform_window: *PlatformWindow) anyerror!PlatformWindow.Framebuffer {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
 
@@ -483,23 +552,23 @@ fn windowFramebuffer(context: *anyopaque, platform_window: *Platform.Window) any
 
     return undefined;
 }
-fn windowOpenglMakeCurrent(context: *anyopaque, platform_window: *Platform.Window) anyerror!void {
+fn windowOpenglMakeCurrent(context: *anyopaque, platform_window: *PlatformWindow) anyerror!void {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
     if (xlib.glXMakeCurrent(self.display, window.handle, @ptrCast(window.glx_context)) == xlib.False) return error.GlxMakeCurrent;
 }
-fn windowOpenglSwapBuffers(context: *anyopaque, platform_window: *Platform.Window) anyerror!void {
+fn windowOpenglSwapBuffers(context: *anyopaque, platform_window: *PlatformWindow) anyerror!void {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
     xlib.glXSwapBuffers(@ptrCast(self.display), window.handle);
 }
-fn windowOpenglSwapInterval(context: *anyopaque, platform_window: *Platform.Window, interval: i32) anyerror!void {
+fn windowOpenglSwapInterval(context: *anyopaque, platform_window: *PlatformWindow, interval: i32) anyerror!void {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
     const glXSwapIntervalEXT: *const fn (display: *xlib.Display, drawable: xlib.Drawable, interval: i32) callconv(.c) void = @ptrCast(xlib.glXGetProcAddress("glXSwapIntervalEXT") orelse return error.SwapIntervalLoad);
     glXSwapIntervalEXT(self.display, window.handle, interval);
 }
-fn windowVulkanCreateSurface(context: *anyopaque, platform_window: *Platform.Window, instance: *vulkan.Instance, allocator: ?*const vulkan.AllocationCallbacks, getProcAddress: vulkan.Instance.GetProcAddress) anyerror!*vulkan.Surface {
+fn windowVulkanCreateSurface(context: *anyopaque, platform_window: *PlatformWindow, instance: *vulkan.Instance, allocator: ?*const vulkan.AllocationCallbacks, getProcAddress: vulkan.Instance.GetProcAddress) anyerror!*vulkan.Surface {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
 

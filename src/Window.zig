@@ -98,6 +98,24 @@ pub const Focus = enum(u1) {
     unfocused,
 };
 
+pub const Cursor = enum(u32) {
+    arrow = 1,
+    text = 9,
+    hand = 16,
+    grab = 17,
+    crosshair = 8,
+    wait = 6,
+    resize_ns = 27, // horizontal
+    resize_ew = 26, // vertical
+    resize_nesw = 28, // top-left  ↘ bottom-right
+    resize_nwse = 29, // top-right ↙ bottom-left
+    forbidden = 15,
+    move = 13,
+    _, // Incase you want a platform specific one
+
+    pub const default: @This() = .arrow;
+};
+
 pub const Property = union(enum) {
     title: []const u8,
     size: Window.Size,
@@ -110,6 +128,7 @@ pub const Property = union(enum) {
     always_on_top: bool,
     floating: bool,
     decorated: bool,
+    cursor: Cursor,
 };
 
 pub const OpenOptions = struct {
@@ -194,6 +213,9 @@ pub fn setFloating(window: *Window, platform: Platform, floating: bool) anyerror
 }
 pub fn setDecorated(window: *Window, platform: Platform, decorated: bool) anyerror!void {
     try platform.vtable.windowSetProperty(platform.ptr, window, .{ .decorated = decorated });
+}
+pub fn setCursor(window: *Window, platform: Platform, cursor: Cursor) anyerror!void {
+    try platform.vtable.windowSetProperty(platform.ptr, window, .{ .cursor = cursor });
 }
 
 /// Returns a pointer to the current framebuffer for the given window.

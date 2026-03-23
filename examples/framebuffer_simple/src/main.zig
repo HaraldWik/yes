@@ -27,7 +27,7 @@ pub fn main(init: std.process.Init) !void {
             .close => break :main,
             .resize => |size| {
                 const framebuffer = try window.framebuffer(platform);
-                const format = yes.Platform.Window.Framebuffer.format;
+                const format = yes.Window.Framebuffer.format;
 
                 for (0..size.width * size.height) |i| {
                     const x = i % size.width;
