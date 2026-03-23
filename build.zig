@@ -61,6 +61,7 @@ pub fn addXlib(b: *std.Build, mod: *std.Build.Module, target: std.Build.Resolved
             \\#include <X11/Xatom.h>
             \\#include <X11/cursorfont.h>
             \\#include <X11/Xcursor/Xcursor.h>
+            \\#include <X11/extensions/XInput2.h>
             \\#include <GL/glx.h>
             \\#include <X11/extensions/Xrandr.h>
         ),
@@ -71,6 +72,8 @@ pub fn addXlib(b: *std.Build, mod: *std.Build.Module, target: std.Build.Resolved
     xlib.linkSystemLibrary("X11", .{});
     xlib.linkSystemLibrary("Xrandr", .{});
     xlib.linkSystemLibrary("Xcursor", .{});
+    xlib.linkSystemLibrary("Xi", .{});
+
     mod.addImport("xlib", xlib);
 }
 

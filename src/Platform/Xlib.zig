@@ -14,6 +14,7 @@ comptime {
 display: *xlib.Display,
 atom_table: AtomTable,
 cursor_table: CursorTable,
+xinput2_supported: bool,
 
 pub const AtomTable = struct {
     utf8_string: xlib.Atom,
@@ -133,7 +134,19 @@ pub const Window = struct {
 
 pub fn init() !@This() {
     const display: *xlib.Display = xlib.XOpenDisplay(null) orelse return error.OpenDisplay;
-    return .{ .display = display, .atom_table = .load(display), .cursor_table = .load(display) };
+
+    const xinput2_supported: bool = blk: {
+        var opcode: c_int = 0;
+        var event: c_int = 0;
+        var err: c_int = 0;
+        if (xlib.XQueryExtension(display, "XInputExtension", &opcode, &event, &err) == 0) break :blk false;
+
+        var major: c_int = 2;
+        var minor: c_int = 0;
+        break :blk xlib.XIQueryVersion(display, &major, &minor) == xlib.Success;
+    };
+
+    return .{ .display = display, .atom_table = .load(display), .cursor_table = .load(display), .xinput2_supported = xinput2_supported };
 }
 
 pub fn deinit(self: @This()) void {
@@ -274,6 +287,21 @@ fn windowOpen(context: *anyopaque, platform_window: *PlatformWindow, options: Pl
         },
         else => {},
     }
+
+    if (!self.xinput2_supported) return;
+
+    var mask: [xlib.XIMaskLen(xlib.XI_Motion)]u8 = @splat(0);
+    var evmask: xlib.XIEventMask = .{
+        .deviceid = xlib.XIAllDevices,
+        .mask_len = @intCast(mask.len),
+        .mask = &mask,
+    };
+
+    const event = xlib.XI_Motion;
+    const index = @divTrunc(event, 8);
+    mask[index] |= (1 << event % 8);
+    _ = xlib.XISelectEvents(self.display, window.handle, &evmask, 1);
+    _ = xlib.XFlush(self.display);
 }
 fn windowClose(context: *anyopaque, platform_window: *PlatformWindow) void {
     const self: *@This() = @ptrCast(@alignCast(context));
@@ -295,6 +323,14 @@ fn windowPoll(context: *anyopaque, platform_window: *PlatformWindow) anyerror!?P
     var event: xlib.XEvent = undefined;
     while (xlib.XPending(self.display) > 0) {
         if (xlib.XNextEvent(self.display, &event) != xlib.XCSUCCESS) return null;
+    }
+
+    if (event.xcookie.type == xlib.GenericEvent and xlib.XGetEventData(self.display, &event.xcookie) != 0) {
+        const xie: *xlib.XIDeviceEvent = @ptrCast(@alignCast(event.xcookie.data));
+
+        const mouse_motion: PlatformWindow.Event.MouseMotion = .{ .x = xie.event_x, .y = xie.event_y };
+        xlib.XFreeEventData(self.display, &event.xcookie);
+        return .{ .mouse_motion = mouse_motion };
     }
 
     return switch (event.type) {

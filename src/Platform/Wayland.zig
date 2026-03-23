@@ -68,7 +68,7 @@ pub const Window = struct {
     xdg_surface: *xdg.Surface = undefined,
     xdg_toplevel: *xdg.Toplevel = undefined,
     zxdg_toplevel_decoration: ?*zxdg.ToplevelDecorationV1 = null,
-    zxdg_toplevel_decoration_mode: zxdg.ToplevelDecorationV1.Mode = .client_side,
+    zxdg_toplevel_decoration_mode: ?zxdg.ToplevelDecorationV1.Mode = null,
     wp_cursor_shape_device: ?*wp.CursorShapeDeviceV1 = null,
     // event_queue: *wl.EventQueue = undefined,
     events: std.ArrayList(PlatformWindow.Event) = .empty,
@@ -380,7 +380,7 @@ fn windowSetProperty(context: *anyopaque, platform_window: *PlatformWindow, prop
             window.zxdg_toplevel_decoration = try self.zxdg_decoration_manager.?.getToplevelDecoration(window.xdg_toplevel);
             window.zxdg_toplevel_decoration.?.setListener(*Window, zxdgToplevelDecorationListener, window);
         } else {
-            window.zxdg_toplevel_decoration_mode = .client_side;
+            window.zxdg_toplevel_decoration_mode = null;
             zxdg_toplevel_decoration.destroy();
         },
         .focus => {}, // TODO: add focus request
