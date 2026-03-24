@@ -47,7 +47,7 @@ pub fn platform(self: *@This()) Platform {
             .windowOpenglSwapBuffers = windowOpenglSwapBuffers,
             .windowOpenglSwapInterval = windowOpenglSwapInterval,
             .windowVulkanCreateSurface = windowVulkanCreateSurface,
-            .openglGetProcAddress = undefined,
+            .openglGetProcAddress = @ptrCast(&glfw.glfwGetProcAddress),
         },
     };
 }
