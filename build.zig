@@ -20,6 +20,26 @@ pub fn build(b: *std.Build) void {
     const opengl_option = b.option(bool, "opengl", "Link with native OpenGL libs") orelse false;
     const xlib_option = b.option(bool, "xlib", "Allow use of xlib platform") orelse true; // Linux
     const libwayland_option = b.option(bool, "libwayland", "Links with wayland libraries") orelse true; // Linux
+    const glfw_option = b.option(bool, "glfw", "Allow usage of glfw backend") orelse false;
+
+    if (glfw_option) {
+        const glfw_dep = b.lazyDependency("glfw", .{}).?;
+        const glfw = b.addTranslateC(.{
+            .root_source_file = b.addWriteFiles().add("glfw.h",
+                \\#include <GLFW/glfw3.h>
+                \\#define GLFW_EXPOSE_NATIVE_X11
+                \\#define GLFW_EXPOSE_NATIVE_WAYLAND
+                \\#include <GLFW/glfw3native.h>
+            ),
+            .target = target,
+            .optimize = optimize,
+        });
+        glfw.addIncludePath(glfw_dep.path("include"));
+        const glfw_lib = b.lazyDependency("glfw_lib", .{}).?.artifact("glfw3");
+
+        mod.addImport("glfw", glfw.createModule());
+        mod.linkLibrary(glfw_lib);
+    }
 
     switch (target.result.os.tag) {
         .windows => {},
@@ -43,6 +63,7 @@ pub fn build(b: *std.Build) void {
     options.addOption(bool, "opengl", opengl_option);
     options.addOption(bool, "xlib", xlib_option);
     options.addOption(bool, "libwayland", libwayland_option);
+    options.addOption(bool, "glfw", glfw_option);
     mod.addOptions("build_options", options);
 
     const mod_tests = b.addTest(.{ .root_module = mod });

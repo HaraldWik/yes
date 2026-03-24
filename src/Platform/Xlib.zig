@@ -335,8 +335,8 @@ fn windowPoll(context: *anyopaque, platform_window: *PlatformWindow) anyerror!?P
 
     return switch (event.type) {
         xlib.ClientMessage => if (@as(xlib.Atom, @intCast(event.xclient.data.l[0])) == window.wm_delete_window) .close else null,
-        xlib.FocusIn => .{ .focus = .focused },
-        xlib.FocusOut => .{ .focus = .unfocused },
+        xlib.FocusIn => .{ .focus = true },
+        xlib.FocusOut => .{ .focus = false },
         xlib.ConfigureNotify => {
             var attrs: xlib.XWindowAttributes = undefined;
             _ = xlib.XGetWindowAttributes(self.display, window.handle, &attrs);
@@ -559,7 +559,7 @@ fn windowSetProperty(context: *anyopaque, platform_window: *PlatformWindow, prop
                 .format = 32,
                 .data = .{
                     .l = .{
-                        if (focus == .focused) 1 else 0,
+                        if (focus) 1 else 0,
                         xlib.CurrentTime,
                         0,
                         0,

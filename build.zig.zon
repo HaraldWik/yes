@@ -33,20 +33,17 @@
             .lazy = true,
         },
 
-        // .wayland = .{
-        //     .url = "git+https://github.com/wayland-mirror/wayland/#1ab6b693b16e1d9734496fe60c8a6ed277e4dec3",
-        //     .hash = "N-V-__8AAFL0GACxHb3Q_xuatHOFPnAcgBEdNcfE1vcr-iT2",
-        //     // .lazy = true,
-        // },
-        // .@"wayland-protocols" = .{
-        //     .url = "https://gitlab.freedesktop.org/wayland/wayland-protocols/-/archive/1.38/wayland-protocols-1.38.tar.gz",
-        //     .hash = "1220668467dd0d0970eb95e53b9e503f5a68801528d5978652ffc275f987aff0a4d8",
-        // },
-
-        // .egl = .{
-        //     .url = "git+https://github.com/KhronosGroup/EGL-Registry/#3ae2b7c48690d2ce13cc6db3db02dfc0572be65e",
-        //     .hash = "N-V-__8AAMlebQAc6dRDTEIyEn_i5KeO8qNg3YdK_Sg1KgDT",
-        // },
+        // If you want a more stable window experience or smth add the glfw = true build option
+        .glfw_lib = .{
+            .url = "git+https://codeberg.org/Games-by-Mason/glfw_zig#398e67ad42750ae16e4d11d4abb1e7455c0d0139",
+            .hash = "glfw-3.4.0-a4Mg88DIBgAhxrur_Nm1I6n3nFdyVhaG8CK01QBiyCZe",
+            .lazy = true,
+        },
+        .glfw = .{
+            .url = "git+https://github.com/glfw/glfw#fdd14e65b1c29e4e6df875fb5669ec00d6793531",
+            .hash = "N-V-__8AACo0SgD2fozxq6O88t3f1Bd5GT89PObFv1OsPK0y",
+            .lazy = true,
+        },
     },
     .paths = .{
         "build.zig",

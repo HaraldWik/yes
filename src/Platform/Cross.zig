@@ -10,7 +10,7 @@ inner: Inner,
 
 const is_wasm = builtin.cpu.arch.isWasm();
 
-pub const Inner = switch (builtin.os.tag) {
+pub const Inner = if (build_options.glfw) Platform.Glfw else switch (builtin.os.tag) {
     .windows => Platform.Win32,
     .macos, .ios, .tvos => Platform.Cocoa,
     else => if (is_wasm)
@@ -25,7 +25,7 @@ pub const Inner = switch (builtin.os.tag) {
 pub const Window = struct {
     inner: @This().Inner,
 
-    pub const Inner = switch (builtin.os.tag) {
+    pub const Inner = if (build_options.glfw) Platform.Glfw.Window else switch (builtin.os.tag) {
         .windows => Platform.Win32.Window,
         .macos, .ios, .tvos => Platform.Cocoa.Window,
         else => if (is_wasm)
@@ -39,7 +39,7 @@ pub const Window = struct {
 
     pub fn empty(p: Platform) @This() {
         const cross: *Cross = @ptrCast(@alignCast(p.ptr));
-        return switch (builtin.os.tag) {
+        return if (build_options.glfw) .{ .inner = .{} } else switch (builtin.os.tag) {
             .windows => .{ .inner = .{} },
             .macos, .ios, .tvos => .{ .inner = .{} },
             else => if (is_wasm)
@@ -53,7 +53,7 @@ pub const Window = struct {
 
     pub fn interface(self: *@This(), p: Platform) *PlatformWindow {
         const cross: *Cross = @ptrCast(@alignCast(p.ptr));
-        return switch (builtin.os.tag) {
+        return if (build_options.glfw) &self.inner.interface else switch (builtin.os.tag) {
             .windows => &self.inner.interface,
             .macos, .ios, .tvos => &self.inner.interface,
             else => if (is_wasm)
@@ -67,7 +67,7 @@ pub const Window = struct {
 };
 
 pub fn init(allocator: std.mem.Allocator, io: std.Io, minimal: std.process.Init.Minimal) !@This() {
-    return switch (builtin.os.tag) {
+    return if (build_options.glfw) .{ .inner = try Platform.Glfw.init(allocator) } else switch (builtin.os.tag) {
         .windows => .{ .inner = try Platform.Win32.init(allocator) },
         .macos, .ios, .tvos => .{ .inner = try Platform.Cocoa.init() },
         else => if (is_wasm)
@@ -90,7 +90,7 @@ fn initUnix(allocator: std.mem.Allocator, io: std.Io, minimal: std.process.Init.
 }
 
 pub fn deinit(self: *@This()) void {
-    switch (builtin.os.tag) {
+    if (build_options.glfw) self.inner.deinit() else switch (builtin.os.tag) {
         .windows => {},
         .macos, .ios, .tvos => self.inner.deinit(),
         else => if (is_wasm)
@@ -103,7 +103,7 @@ pub fn deinit(self: *@This()) void {
 }
 
 pub fn platform(self: *@This()) Platform {
-    return switch (builtin.os.tag) {
+    return if (build_options.glfw) self.inner.platform() else switch (builtin.os.tag) {
         .windows => self.inner.platform(),
         .macos, .ios, .tvos => self.inner.platform(),
         else => if (is_wasm)

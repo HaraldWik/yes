@@ -7,7 +7,7 @@ const Window = @This();
 
 size: Size = .{},
 position: Position = .{},
-focus: Focus = .focused,
+focused: bool = false,
 surface_type: SurfaceType = .empty,
 keyboard: Keyboard = .empty,
 
@@ -103,11 +103,6 @@ pub const ResizePolicy = union(enum) {
     };
 };
 
-pub const Focus = enum(u1) {
-    focused,
-    unfocused,
-};
-
 pub const Cursor = enum(u32) {
     arrow = 1,
     text = 9,
@@ -134,7 +129,7 @@ pub const Property = union(enum) {
     fullscreen: bool,
     maximized: bool,
     minimized: bool,
-    focus: Focus,
+    focus: bool,
     always_on_top: bool,
     floating: bool,
     decorated: bool,
@@ -149,7 +144,7 @@ pub const OpenOptions = struct {
     fullscreen: bool = false,
     maximized: bool = false,
     minimized: bool = false,
-    focus: Focus = .focused,
+    focused: bool = true,
     always_on_top: bool = false,
     floating: ?bool = null,
     decorated: bool = true,
@@ -164,6 +159,7 @@ pub fn open(window: *Window, platform: Platform, options: OpenOptions) anyerror!
     window.size = options.size;
     window.position = options.position orelse .{};
     window.surface_type = options.surface_type;
+    window.focused = options.focused;
     try platform.vtable.windowOpen(platform.ptr, window, options);
 }
 pub fn close(window: *Window, platform: Platform) void {
@@ -175,8 +171,8 @@ pub fn poll(window: *Window, platform: Platform) anyerror!?Event {
         .resize => |size| window.size = size,
         .move => |position| window.position = position,
         .focus => |focus| {
-            if (focus == .unfocused) window.keyboard = .empty;
-            window.focus = focus;
+            if (!focus) window.keyboard = .empty;
+            window.focused = focus;
         },
         .key => |key| {
             if (key.state == window.keyboard.get(key.sym)) return window.poll(platform);
@@ -212,8 +208,8 @@ pub fn setMaximized(window: *Window, platform: Platform, maximize: bool) anyerro
 pub fn setMinimized(window: *Window, platform: Platform, minimize: bool) anyerror!void {
     try platform.vtable.windowSetProperty(platform.ptr, window, .{ .minimized = minimize });
 }
-pub fn setFocus(window: *Window, platform: Platform, focus: Focus) anyerror!void {
-    try platform.vtable.windowSetProperty(platform.ptr, window, .{ .focus = focus });
+pub fn setFocused(window: *Window, platform: Platform, focused: bool) anyerror!void {
+    try platform.vtable.windowSetProperty(platform.ptr, window, .{ .focused = focused });
 }
 pub fn setAlwaysOnTop(window: *Window, platform: Platform, always_on_top: bool) anyerror!void {
     try platform.vtable.windowSetProperty(platform.ptr, window, .{ .always_on_top = always_on_top });

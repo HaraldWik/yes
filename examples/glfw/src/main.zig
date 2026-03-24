@@ -2,19 +2,14 @@ const std = @import("std");
 const builtin = @import("builtin");
 const yes = @import("yes");
 
-// example args "zig build run -- --xdg=x11"
-// example args "zig build run -- --xdg=wayland"
-
 pub fn main(init: std.process.Init) !void {
     const allocator = init.gpa;
-    const io = init.io;
+    var glfw_platform: yes.Platform.Glfw = try .init(allocator);
+    defer glfw_platform.deinit();
+    const platform = glfw_platform.platform();
 
-    var cross_platform: yes.Platform.Cross = try .init(allocator, io, init.minimal);
-    defer cross_platform.deinit();
-    const platform = cross_platform.platform();
-
-    var cross_window: yes.Platform.Cross.Window = .empty(platform);
-    const window = cross_window.interface(platform);
+    var glfw_window: yes.Platform.Glfw.Window = .{};
+    const window = &glfw_window.interface;
     try window.open(platform, .{
         .title = "Window!",
         .size = .{ .width = 600, .height = 400 },

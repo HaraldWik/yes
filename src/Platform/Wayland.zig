@@ -255,7 +255,7 @@ fn windowOpen(context: *anyopaque, platform_window: *PlatformWindow, options: Pl
     window.wl_surface.commit();
     if (self.display.roundtrip() != .SUCCESS) return error.Roundtrip;
 
-    if (options.surface_type != .empty) try window.events.append(self.allocator, .{ .focus = .focused });
+    if (options.surface_type != .empty) try window.events.append(self.allocator, .{ .focus = true });
     try window.events.append(self.allocator, .{ .resize = options.size });
 }
 fn windowClose(context: *anyopaque, platform_window: *PlatformWindow) void {
@@ -291,27 +291,28 @@ fn windowPoll(context: *anyopaque, platform_window: *PlatformWindow) anyerror!?P
     if (!window.running) return .close;
 
     if (self.display.dispatchPending() != .SUCCESS) return error.DispatchPending;
-    if (!self.display.prepareRead()) return null;
-    self.io_manager.current_window.store(window, .seq_cst);
+    if (self.display.prepareRead()) {
+        self.io_manager.current_window.store(window, .seq_cst);
 
-    if (self.display.flush() != .SUCCESS) return error.Flush;
+        if (self.display.flush() != .SUCCESS) return error.Flush;
 
-    if (window.err) |err| return err;
-    if (self.io_manager.err) |err| return err;
+        if (window.err) |err| return err;
+        if (self.io_manager.err) |err| return err;
 
-    var pfd: std.posix.pollfd = .{
-        .fd = @intCast(self.display.getFd()),
-        .events = std.posix.POLL.IN,
-        .revents = 0,
-    };
+        var pfd: std.posix.pollfd = .{
+            .fd = @intCast(self.display.getFd()),
+            .events = std.posix.POLL.IN,
+            .revents = 0,
+        };
 
-    if (std.posix.poll(@ptrCast(&pfd), 1) catch 0 > 0)
-        _ = self.display.readEvents()
-    else
-        self.display.cancelRead();
+        if (std.posix.poll(@ptrCast(&pfd), 1) catch 0 > 0)
+            _ = self.display.readEvents()
+        else
+            self.display.cancelRead();
 
-    if (self.display.dispatchPending() != .SUCCESS) return error.DispatchPending;
-    self.io_manager.current_window.store(null, .seq_cst);
+        if (self.display.dispatchPending() != .SUCCESS) return error.DispatchPending;
+        self.io_manager.current_window.store(null, .seq_cst);
+    }
 
     const event = window.events.pop() orelse return null;
     switch (event) {
@@ -534,13 +535,13 @@ fn keyboardListener(_: *wl.Keyboard, event: wl.Keyboard.Event, io_manager: *IoMa
 
             _ = xkb.xkb_state_update_mask(io_manager.xkb.state.?, modifiers.mods_depressed, modifiers.mods_latched, modifiers.mods_locked, modifiers.group, 0, 0);
         },
-        .enter => if (current_window) |window| if (window.interface.focus == .unfocused) {
-            window.events.append(window.allocator, .{ .focus = .focused }) catch |err| {
+        .enter => if (current_window) |window| if (!window.interface.focused) {
+            window.events.append(window.allocator, .{ .focus = true }) catch |err| {
                 window.err = err;
             };
         },
-        .leave => if (current_window) |window| if (window.interface.focus == .focused) {
-            window.events.append(window.allocator, .{ .focus = .unfocused }) catch |err| {
+        .leave => if (current_window) |window| if (window.interface.focused) {
+            window.events.append(window.allocator, .{ .focus = false }) catch |err| {
                 window.err = err;
             };
         },
@@ -615,20 +616,19 @@ fn xdgSurfaceListener(xdg_surface: *xdg.Surface, event: xdg.Surface.Event, confi
 fn xdgToplevelListener(_: *xdg.Toplevel, event: xdg.Toplevel.Event, window: *Window) void {
     const allocator = window.allocator;
     switch (event) {
-        .configure => |configure| for (configure.states.slice(xdg.Toplevel.State)) |state| switch (state) {
-            .activated => {
-                if (window.interface.focus == .focused) return;
-                window.events.append(allocator, .{ .focus = .focused }) catch |err| {
-                    window.err = err;
-                };
-            },
-            else => {
-                const size: PlatformWindow.Size = .{ .width = @intCast(configure.width), .height = @intCast(configure.height) };
-                if (size.eql(.{})) return;
+        .configure => |configure| {
+            const size: PlatformWindow.Size = .{ .width = @intCast(configure.width), .height = @intCast(configure.height) };
+            if (!size.eql(.{}))
                 window.events.append(allocator, .{ .resize = size }) catch |err| {
                     window.err = err;
                 };
-            },
+
+            for (configure.states.slice(xdg.Toplevel.State)) |state| if (state == .activated and window.interface.focused) {
+                if (window.interface.focused == true) return;
+                window.events.append(allocator, .{ .focus = true }) catch |err| {
+                    window.err = err;
+                };
+            };
         },
         .close => {
             window.events.append(window.allocator, .close) catch |err| {

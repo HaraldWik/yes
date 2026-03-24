@@ -26,6 +26,7 @@ pub fn main(init: std.process.Init) !void {
         while (try window.poll(platform)) |event| switch (event) {
             .close => break :main,
             .resize => |size| {
+                std.log.info("resize: {d}x{d}", .{ size.width, size.height });
                 const framebuffer = try window.framebuffer(platform);
                 const format = yes.Window.Framebuffer.format;
 

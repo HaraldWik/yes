@@ -22,10 +22,14 @@ pub fn main(init: std.process.Init) !void {
     defer window.close(platform);
 
     // Instance
-    const instance: vk.Instance = try .init(allocator, yes.vulkan.getRequiredInstanceExtensions([*:0]const u8, switch (cross_platform.inner) {
-        .x => .x11,
-        .wayland => .wayland,
-    }), &.{"VK_LAYER_KHRONOS_validation"});
+    const instance: vk.Instance = try .init(
+        allocator,
+        yes.vulkan.getRequiredInstanceExtensions([*:0]const u8, if (@typeInfo(@TypeOf(cross_platform)) == .@"union") switch (cross_platform.inner) {
+            .x => .x11,
+            .wayland => .wayland,
+        } else .wayland),
+        &.{"VK_LAYER_KHRONOS_validation"},
+    );
     defer instance.deinit();
 
     // VK_EXT_debug_utils

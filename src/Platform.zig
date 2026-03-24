@@ -22,6 +22,8 @@ pub const Cocoa = @import("Platform/Cocoa.zig");
 
 pub const Web = @import("Platform/Web.zig");
 
+pub const Glfw = @import("Platform/Glfw.zig");
+
 pub const unix = @import("Platform/unix.zig");
 
 pub const VTable = struct {

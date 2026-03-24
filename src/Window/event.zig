@@ -3,13 +3,12 @@ const win32 = @import("win32").everything;
 const xkb = @import("xkbcommon");
 const Size = @import("../Window.zig").Size;
 const Position = @import("../Window.zig").Position;
-const Focus = @import("../Window.zig").Focus;
 
 pub const Event = union(enum) {
     close,
     resize: Size,
     move: Position,
-    focus: Focus,
+    focus: bool,
     key: Key,
     mouse_motion: MouseMotion,
     /// Positive Y means wheel scrolled up (away from user).
