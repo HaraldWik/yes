@@ -162,6 +162,7 @@ pub fn platform(self: *@This()) Platform {
             .windowClose = windowClose,
             .windowPoll = windowPoll,
             .windowSetProperty = windowSetProperty,
+            .windowNative = windowNative,
             .windowFramebuffer = windowFramebuffer,
             .windowOpenglMakeCurrent = windowOpenglMakeCurrent,
             .windowOpenglSwapBuffers = windowOpenglSwapBuffers,
@@ -544,7 +545,7 @@ fn windowSetProperty(context: *anyopaque, platform_window: *PlatformWindow, prop
 
             _ = xlib.XChangeProperty(self.display, window.handle, self.atom_table.motif_wm.hints, self.atom_table.motif_wm.hints, 32, xlib.PropModeReplace, @ptrCast(&motif_hints), 5);
         },
-        .focus => |focus| {
+        .focused => |focus| {
             // Fallback (sometimes works)
             _ = xlib.XSetInputFocus(self.display, window.handle, xlib.RevertToParent, xlib.CurrentTime);
 
@@ -576,6 +577,20 @@ fn windowSetProperty(context: *anyopaque, platform_window: *PlatformWindow, prop
     }
 
     _ = xlib.XFlush(self.display);
+}
+fn windowNative(context: *anyopaque, platform_window: *PlatformWindow) PlatformWindow.Native {
+    const self: *@This() = @ptrCast(@alignCast(context));
+    const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
+
+    const screen = xlib.DefaultScreen(self.display);
+
+    return .{
+        .x11 = .{
+            .display = self.display,
+            .window = @intCast(window.handle),
+            .screen = @intCast(screen),
+        },
+    };
 }
 fn windowFramebuffer(context: *anyopaque, platform_window: *PlatformWindow) anyerror!PlatformWindow.Framebuffer {
     const self: *@This() = @ptrCast(@alignCast(context));

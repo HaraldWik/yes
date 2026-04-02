@@ -162,6 +162,7 @@ pub fn platform(self: *@This()) Platform {
             .windowClose = windowClose,
             .windowPoll = windowPoll,
             .windowSetProperty = windowSetProperty,
+            .windowNative = windowNative,
             .windowFramebuffer = windowFramebuffer,
             .windowOpenglMakeCurrent = windowOpenglMakeCurrent,
             .windowOpenglSwapBuffers = windowOpenglSwapBuffers,
@@ -384,13 +385,24 @@ fn windowSetProperty(context: *anyopaque, platform_window: *PlatformWindow, prop
             window.zxdg_toplevel_decoration_mode = null;
             zxdg_toplevel_decoration.destroy();
         },
-        .focus => {}, // TODO: add focus request
+        .focused => {}, // TODO: add focus request
         .cursor => |cursor| if (window.wp_cursor_shape_device) |wp_cursor_shape_device| {
             window.cursor = cursor;
             const shape: wp.CursorShapeDeviceV1.Shape = @enumFromInt(@intFromEnum(cursor));
             wp_cursor_shape_device.setShape(0, shape);
         },
     }
+}
+fn windowNative(context: *anyopaque, platform_window: *PlatformWindow) PlatformWindow.Native {
+    const self: *@This() = @ptrCast(@alignCast(context));
+    const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
+    return .{
+        .wayland = .{
+            .display = self.display,
+            .surface = window.wl_surface,
+            .compositor = self.compositor,
+        },
+    };
 }
 fn windowFramebuffer(_: *anyopaque, platform_window: *PlatformWindow) anyerror!PlatformWindow.Framebuffer {
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
@@ -666,7 +678,7 @@ fn windowAllocShm(window: *Window, shm: *wl.Shm) !void {
     _ = std.posix.system.shm_unlink(fd_name[0..].ptr);
     _ = std.posix.system.ftruncate(@intCast(fd), length);
 
-    var pixels = try std.posix.mmap(
+    const pixels = try std.posix.mmap(
         null,
         length,
         .{ .READ = true, .WRITE = true },

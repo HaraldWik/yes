@@ -42,6 +42,7 @@ pub fn platform(self: *@This()) Platform {
             .windowClose = windowClose,
             .windowPoll = windowPoll,
             .windowSetProperty = windowSetProperty,
+            .windowNative = windowNative,
             .windowFramebuffer = windowFramebuffer,
             .windowOpenglMakeCurrent = windowOpenglMakeCurrent,
             .windowOpenglSwapBuffers = windowOpenglSwapBuffers,
@@ -134,7 +135,7 @@ fn windowSetProperty(context: *anyopaque, platform_window: *PlatformWindow, prop
         .always_on_top => {},
         .floating => {},
         .decorated => {},
-        .focus => {},
+        .focused => {},
         .cursor => |cursor| {
             const cursor_mode: c_int = switch (cursor) {
                 .arrow => glfw.GLFW_ARROW_CURSOR,
@@ -149,6 +150,17 @@ fn windowSetProperty(context: *anyopaque, platform_window: *PlatformWindow, prop
             glfw.glfwSetInputMode(window.handle, glfw.GLFW_CURSOR, cursor_mode);
         },
     }
+}
+fn windowNative(context: *anyopaque, platform_window: *PlatformWindow) PlatformWindow.Native {
+    const self: *@This() = @ptrCast(@alignCast(context));
+    const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
+
+    return .{
+        .x11 = .{
+            .display = self.display,
+            .window = @intCast(window.handle),
+        },
+    };
 }
 fn windowFramebuffer(context: *anyopaque, platform_window: *PlatformWindow) anyerror!PlatformWindow.Framebuffer {
     const self: *@This() = @ptrCast(@alignCast(context));

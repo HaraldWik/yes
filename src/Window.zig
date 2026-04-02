@@ -46,6 +46,57 @@ pub const Position = packed struct(i64) {
     }
 };
 
+pub const Native = switch (builtin.os.tag) {
+    .windows => struct {
+        hinstance: std.os.windows.HINSTANCE,
+        hwnd: std.os.windows.HWND,
+    },
+    .macos => struct {
+        ns_app: *anyopaque, // NSApplication*
+        ns_window: *anyopaque, // NSWindow*
+        ns_view: *anyopaque, // NSView* (or CAMetalLayer host)
+    },
+    .ios => struct {
+        ui_app: *anyopaque, // UIApplication*
+        ui_window: *anyopaque, // UIWindow*
+        ui_view: *anyopaque, // UIView*
+    },
+
+    .linux, .freebsd, .netbsd, .openbsd => if (builtin.abi == .android) struct {
+        app: *anyopaque, // android_app*
+        window: *anyopaque, // ANativeWindow*
+        activity: *anyopaque, // ANativeActivity*
+    } else union(enum) {
+        wayland: struct {
+            display: *anyopaque,
+            surface: *anyopaque,
+            compositor: *anyopaque,
+        },
+        x11: struct {
+            display: *anyopaque,
+            window: u64,
+            screen: i32,
+        },
+        drm: struct {
+            fd: std.posix.fd_t,
+            crtc_id: u32,
+            connector_id: u32,
+        },
+    },
+
+    .haiku => struct {
+        app: *anyopaque, // BApplication*
+        window: *anyopaque, // BWindow*
+        view: *anyopaque, // BView*
+    },
+
+    .emscripten => struct {
+        canvas: []const u8, // HTML canvas selector (e.g. "#canvas")
+    },
+
+    else => struct {},
+};
+
 pub const Framebuffer = struct {
     pixels: switch (builtin.os.tag) {
         .windows => [*]align(std.heap.page_size_min) u8,
@@ -129,7 +180,7 @@ pub const Property = union(enum) {
     fullscreen: bool,
     maximized: bool,
     minimized: bool,
-    focus: bool,
+    focused: bool,
     always_on_top: bool,
     floating: bool,
     decorated: bool,
@@ -185,6 +236,10 @@ pub fn poll(window: *Window, platform: Platform) anyerror!?Event {
 
 pub fn setProperties(window: *Window, platform: Platform, properties: []const Property) anyerror!void {
     for (properties) |property| try platform.vtable.windowSetProperty(platform.ptr, window, property);
+}
+
+pub fn native(window: *Window, platform: Platform) Native {
+    return platform.vtable.windowNative(platform.ptr, window);
 }
 
 pub fn setTitle(window: *Window, platform: Platform, title: []const u8) anyerror!void {

@@ -8,7 +8,7 @@ const PlatformWindow = @import("../Window.zig");
 // zig build -Dtarget=x86_64-windows && wine zig-out/bin/example.exe
 
 allocator: std.mem.Allocator,
-instance: std.os.windows.HINSTANCE,
+hinstance: std.os.windows.HINSTANCE,
 wglSwapIntervalEXT: ?*const fn (i32) callconv(.winapi) win32.BOOL = null,
 cursors: struct {
     arrow: ?std.os.windows.HCURSOR = null,
@@ -59,7 +59,7 @@ pub fn init(allocator: std.mem.Allocator) !@This() {
     const instance: std.os.windows.HINSTANCE = @ptrCast(win32.GetModuleHandleW(null) orelse return error.GetInstanceHandle);
     return .{
         .allocator = allocator,
-        .instance = instance,
+        .hinstance = instance,
     };
 }
 
@@ -77,6 +77,7 @@ pub fn platform(self: *@This()) Platform {
             .windowClose = windowClose,
             .windowPoll = windowPoll,
             .windowSetProperty = windowSetProperty,
+            .windowNative = windowNative,
             .windowFramebuffer = windowFramebuffer,
             .windowOpenglMakeCurrent = windowOpenglMakeCurrent,
             .windowOpenglSwapBuffers = windowOpenglSwapBuffers,
@@ -100,7 +101,7 @@ fn windowOpen(context: *anyopaque, platform_window: *PlatformWindow, options: Pl
         .cbSize = @sizeOf(win32.WNDCLASSEXW),
         .lpszClassName = win32.L("WindowClass"),
         .lpfnWndProc = wndProc,
-        .hInstance = self.instance,
+        .hInstance = self.hinstance,
         .hCursor = win32.LoadCursorW(null, win32.IDC_ARROW),
         .style = win32.WNDCLASS_STYLES{
             .OWNDC = if (window.surface == .opengl) 1 else 0,
@@ -120,7 +121,7 @@ fn windowOpen(context: *anyopaque, platform_window: *PlatformWindow, options: Pl
         @intCast(options.size.height),
         null,
         null,
-        self.instance,
+        self.hinstance,
         null,
     ) orelse return reportErr(error.CreateWindowFailed));
 
@@ -204,7 +205,7 @@ fn windowOpen(context: *anyopaque, platform_window: *PlatformWindow, options: Pl
     if (options.fullscreen) try windowSetProperty(context, platform_window, .{ .fullscreen = options.fullscreen });
     if (options.maximized) try windowSetProperty(context, platform_window, .{ .maximized = options.maximized });
     if (options.minimized) try windowSetProperty(context, platform_window, .{ .minimized = options.minimized });
-    try windowSetProperty(context, platform_window, .{ .focus = options.focus });
+    try windowSetProperty(context, platform_window, .{ .focused = options.focused });
     try windowSetProperty(context, platform_window, .{ .always_on_top = options.always_on_top });
     if (options.floating) |floating| try windowSetProperty(context, platform_window, .{ .floating = floating });
     try windowSetProperty(context, platform_window, .{ .decorated = options.decorated });
@@ -220,7 +221,7 @@ fn windowClose(context: *anyopaque, platform_window: *PlatformWindow) void {
     }
 
     _ = win32.DestroyWindow(@ptrCast(window.hwnd));
-    _ = win32.UnregisterClassW(window.class.lpszClassName, @ptrCast(self.instance));
+    _ = win32.UnregisterClassW(window.class.lpszClassName, @ptrCast(self.hinstance));
 }
 fn windowPoll(context: *anyopaque, platform_window: *PlatformWindow) anyerror!?PlatformWindow.Event {
     const self: *@This() = @ptrCast(@alignCast(context));
@@ -263,8 +264,8 @@ fn windowPoll(context: *anyopaque, platform_window: *PlatformWindow) anyerror!?P
                 return null;
             },
         },
-        win32.WM_USER + win32.WM_SETFOCUS => .{ .focus = .focused },
-        win32.WM_USER + win32.WM_KILLFOCUS => .{ .focus = .unfocused },
+        win32.WM_USER + win32.WM_SETFOCUS => .{ .focus = true },
+        win32.WM_USER + win32.WM_KILLFOCUS => .{ .focus = false },
         win32.WM_USER + win32.WM_SIZE => .{ .resize = .{
             .width = @intCast(@as(u16, @truncate(@as(u32, @intCast(msg.lParam))))),
             .height = @intCast(@as(u16, @truncate(@as(u32, @intCast(msg.lParam >> 16))))),
@@ -392,7 +393,7 @@ fn windowSetProperty(context: *anyopaque, platform_window: *PlatformWindow, prop
             _ = win32.SetWindowLongW(@ptrCast(window.hwnd), win32.GWL_STYLE, @bitCast(style));
             _ = win32.SetWindowPos(@ptrCast(window.hwnd), null, 0, 0, 0, 0, .{ .NOMOVE = 1, .NOSIZE = 1, .NOZORDER = 1, .DRAWFRAME = 1 });
         },
-        .focus => {}, // TODO: add focus request
+        .focused => {}, // TODO: add focus request
         .cursor => |cursor| {
             const idc = switch (cursor) {
                 .arrow => win32.IDC_ARROW,
@@ -410,7 +411,7 @@ fn windowSetProperty(context: *anyopaque, platform_window: *PlatformWindow, prop
                 _ => return,
             };
             inline for (std.meta.fields(@TypeOf(self.cursors))) |field| {
-                @field(self.cursors, field.name) = @ptrCast(win32.LoadCursorW(self.instance, idc));
+                @field(self.cursors, field.name) = @ptrCast(win32.LoadCursorW(self.hinstance, idc));
             }
 
             //.arrow = @ptrCast(win32.LoadCursorW(instance, win32.IDC_ARROW)),
@@ -428,6 +429,14 @@ fn windowSetProperty(context: *anyopaque, platform_window: *PlatformWindow, prop
             //.grabbing = @ptrCast(win32.LoadCursorW(instance, win32.IDC_HAND)), // fallback
         },
     }
+}
+fn windowNative(context: *anyopaque, platform_window: *PlatformWindow) PlatformWindow.Native {
+    const self: *@This() = @ptrCast(@alignCast(context));
+    const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
+    return .{
+        .hinstance = self.hinstance,
+        .hwnd = window.hwnd,
+    };
 }
 fn windowFramebuffer(context: *anyopaque, platform_window: *PlatformWindow) anyerror!PlatformWindow.Framebuffer {
     const self: *@This() = @ptrCast(@alignCast(context));
@@ -472,7 +481,7 @@ fn windowVulkanCreateSurface(context: *anyopaque, platform_window: *PlatformWind
     const vkCreateWin32SurfaceKHR: vulkan.Surface.CreateProc = @ptrCast(getProcAddress(instance, "vkCreateWin32SurfaceKHR") orelse return error.LoadVkCreateWin32SurfaceKHR);
 
     const create_info: vulkan.Surface.CreateInfo = .{
-        .hinstance = self.instance,
+        .hinstance = self.hinstance,
         .hwnd = window.hwnd,
     };
 

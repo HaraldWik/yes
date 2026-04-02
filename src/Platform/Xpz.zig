@@ -211,7 +211,7 @@ fn windowSetProperty(context: *anyopaque, platform_window: *PlatformWindow, prop
         .always_on_top => {},
         .floating => {},
         .decorated => {},
-        .focus => {},
+        .focused => {},
         .cursor => {},
     }
 }

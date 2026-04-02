@@ -487,7 +487,7 @@ pub const Pipeline = struct {
     layout: vk.VkPipelineLayout,
 
     pub fn init(device: Device, surface_info: Surface.Info, vertex_shader_module: ShaderModule, fragment_shader_module: ShaderModule) !@This() {
-        var shader_stages: []const vk.VkPipelineShaderStageCreateInfo = &.{
+        const shader_stages: []const vk.VkPipelineShaderStageCreateInfo = &.{
             .{
                 .sType = vk.VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
                 .stage = vk.VK_SHADER_STAGE_VERTEX_BIT,

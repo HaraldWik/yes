@@ -24,10 +24,7 @@ pub fn main(init: std.process.Init) !void {
     // Instance
     const instance: vk.Instance = try .init(
         allocator,
-        yes.vulkan.getRequiredInstanceExtensions([*:0]const u8, if (@typeInfo(@TypeOf(cross_platform)) == .@"union") switch (cross_platform.inner) {
-            .x => .x11,
-            .wayland => .wayland,
-        } else .wayland),
+        yes.vulkan.getRequiredInstanceExtensions([*:0]const u8, platform, window),
         &.{"VK_LAYER_KHRONOS_validation"},
     );
     defer instance.deinit();

@@ -18,8 +18,8 @@
             .lazy = true,
         },
         .wayland = .{
-            .url = "git+https://github.com/HaraldWik/zig-wayland#33c9d1e91a0ae56ab5cc6e00099d7d17ba27f2ee",
-            .hash = "wayland-0.5.0-dev-lQa1knn9AQCdGp_EeD3BGa-TXReAlX5GDobgCqQm-_t1",
+            .url = "git+https://github.com/HaraldWik/zig-wayland#7233349e81de71a89a1e389057923506291f7105",
+            .hash = "wayland-0.5.0-dev-lQa1knX9AQBbTyO_CdFb3VDugVoOJR8iQ5mbzZZcx6RK",
         },
 
         .xkbcommon = .{

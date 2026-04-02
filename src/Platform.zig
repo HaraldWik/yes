@@ -31,6 +31,7 @@ pub const VTable = struct {
     windowClose: *const fn (*anyopaque, window: *Window) void,
     windowPoll: *const fn (*anyopaque, window: *Window) anyerror!?Window.Event,
     windowSetProperty: *const fn (*anyopaque, window: *Window, property: Window.Property) anyerror!void,
+    windowNative: *const fn (*anyopaque, window: *Window) Window.Native,
 
     windowFramebuffer: *const fn (*anyopaque, window: *Window) anyerror!Window.Framebuffer,
 
