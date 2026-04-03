@@ -10,11 +10,14 @@ pub const Event = union(enum) {
     move: Position,
     focus: bool,
     key: Key,
+
     mouse_motion: MouseMotion,
-    /// Positive Y means wheel scrolled up (away from user).
-    /// Positive X means wheel scrolled right.
     mouse_scroll: MouseScroll,
     mouse_button: MouseButton,
+
+    touch_down: Touch,
+    touch_up: Touch,
+    touch_motion: Touch,
 
     pub const Key = struct {
         state: State,
@@ -392,5 +395,11 @@ pub const Event = union(enum) {
                 };
             }
         };
+    };
+
+    pub const Touch = struct {
+        id: i32,
+        x: f64 = 0.0,
+        y: f64 = 0.0,
     };
 };

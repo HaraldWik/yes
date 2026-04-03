@@ -58,6 +58,7 @@ const IoManager = struct {
             group: u32 = 0,
         } = .{},
     } = .{},
+    active_touches: std.AutoHashMapUnmanaged(i32, struct { x: f64, y: f64 }) = .empty,
 };
 
 pub const Window = struct {
@@ -145,6 +146,7 @@ pub fn deinit(self: @This()) void {
     if (self.io_manager.keyboard) |keyboard| keyboard.release();
     if (self.io_manager.pointer) |pointer| pointer.release();
     if (self.io_manager.touch) |touch| touch.release();
+    self.io_manager.active_touches.deinit(self.allocator);
     self.allocator.destroy(self.io_manager);
     self.shm.destroy();
     self.seat.destroy();
@@ -610,9 +612,55 @@ fn pointerListener(_: *wl.Pointer, event: wl.Pointer.Event, io_manager: *IoManag
 }
 
 fn touchListener(_: *wl.Touch, event: wl.Touch.Event, io_manager: *IoManager) void {
-    _ = io_manager;
+    const window = io_manager.current_window.load(.seq_cst) orelse return;
     switch (event) {
-        else => {}, //std.log.info("touch event: {t}", .{event}),
+        .down => |down| {
+            const touch_down: PlatformWindow.Event.Touch = .{
+                .id = down.id,
+                .x = down.x.toDouble(),
+                .y = down.y.toDouble(),
+            };
+            window.events.append(window.allocator, .{ .touch_down = touch_down }) catch |err| {
+                window.err = err;
+            };
+            io_manager.active_touches.put(window.allocator, touch_down.id, .{
+                .x = touch_down.x,
+                .y = touch_down.y,
+            }) catch |err| {
+                io_manager.err = err;
+            };
+        },
+        .up => |up| {
+            const touch_position = io_manager.active_touches.fetchRemove(up.id).?.value;
+            const touch_up: PlatformWindow.Event.Touch = .{
+                .id = up.id,
+                .x = touch_position.x,
+                .y = touch_position.y,
+            };
+            window.events.append(window.allocator, .{ .touch_up = touch_up }) catch |err| {
+                window.err = err;
+            };
+        },
+        .motion => |motion| {
+            const touch_motion: PlatformWindow.Event.Touch = .{
+                .id = motion.id,
+                .x = motion.x.toDouble(),
+                .y = motion.y.toDouble(),
+            };
+            window.events.append(window.allocator, .{ .touch_motion = touch_motion }) catch |err| {
+                window.err = err;
+            };
+            io_manager.active_touches.put(window.allocator, touch_motion.id, .{
+                .x = touch_motion.x,
+                .y = touch_motion.y,
+            }) catch |err| {
+                io_manager.err = err;
+            };
+        },
+        .cancel => {
+            io_manager.active_touches.clearAndFree(window.allocator);
+        },
+        .frame => {},
     }
 }
 

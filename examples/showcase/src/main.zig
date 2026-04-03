@@ -35,7 +35,7 @@ pub fn main(init: std.process.Init) !void {
             .resize => |size| std.log.info("resize: {d} x {d}", .{ size.width, size.height }),
             .move => |position| std.log.info("move: {d} x {d}", .{ position.x, position.y }),
             .focus => |focus| {
-                std.log.info("focus: {t}", .{focus});
+                std.log.info("focus: {}", .{focus});
             },
             .key => |key| {
                 std.log.info("{t:<8} {t}", .{ key.state, key.sym });
