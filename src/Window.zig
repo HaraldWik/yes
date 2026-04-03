@@ -10,6 +10,7 @@ position: Position = .{},
 focused: bool = false,
 surface_type: SurfaceType = .empty,
 keyboard: Keyboard = .empty,
+mouse_position: Event.MouseMotion = .{},
 
 pub const Event = @import("Window/event.zig").Event;
 pub const Keyboard = @import("Window/Keyboard.zig");
@@ -229,6 +230,7 @@ pub fn poll(window: *Window, platform: Platform) anyerror!?Event {
             if (key.state == window.keyboard.get(key.sym)) return window.poll(platform);
             window.keyboard.set(key.sym, key.state);
         },
+        .mouse_motion => |motion| window.mouse_position = motion,
         else => {},
     }
     return event;

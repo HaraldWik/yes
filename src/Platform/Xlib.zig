@@ -13,8 +13,8 @@ comptime {
 
 display: *xlib.Display,
 atom_table: AtomTable,
+extensions_info: ExtensionsInfo,
 cursor_table: CursorTable,
-xinput2_supported: bool,
 
 pub const AtomTable = struct {
     utf8_string: xlib.Atom,
@@ -58,6 +58,11 @@ pub const AtomTable = struct {
             },
         };
     }
+};
+
+pub const ExtensionsInfo = struct {
+    xi_opcode: u8,
+    xi_supported: bool,
 };
 
 pub const CursorTable = struct {
@@ -135,18 +140,18 @@ pub const Window = struct {
 pub fn init() !@This() {
     const display: *xlib.Display = xlib.XOpenDisplay(null) orelse return error.OpenDisplay;
 
-    const xinput2_supported: bool = blk: {
+    var extensions_info = std.mem.zeroes(ExtensionsInfo);
+    {
         var opcode: c_int = 0;
         var event: c_int = 0;
         var err: c_int = 0;
-        if (xlib.XQueryExtension(display, "XInputExtension", &opcode, &event, &err) == 0) break :blk false;
+        if (xlib.XQueryExtension(display, "XInputExtension", &opcode, &event, &err) == xlib.True) {
+            extensions_info.xi_supported = true;
+            extensions_info.xi_opcode = @intCast(opcode);
+        }
+    }
 
-        var major: c_int = 2;
-        var minor: c_int = 0;
-        break :blk xlib.XIQueryVersion(display, &major, &minor) == xlib.Success;
-    };
-
-    return .{ .display = display, .atom_table = .load(display), .cursor_table = .load(display), .xinput2_supported = xinput2_supported };
+    return .{ .display = display, .atom_table = .load(display), .cursor_table = .load(display), .extensions_info = extensions_info };
 }
 
 pub fn deinit(self: @This()) void {
@@ -289,19 +294,29 @@ fn windowOpen(context: *anyopaque, platform_window: *PlatformWindow, options: Pl
         else => {},
     }
 
-    if (!self.xinput2_supported) return;
+    if (!self.extensions_info.xi_supported) return;
 
-    var mask: [xlib.XIMaskLen(xlib.XI_Motion)]u8 = @splat(0);
+    var mask: [xlib.XIMaskLen(xlib.XI_LASTEVENT)]u8 = @splat(0);
+
+    const events = [_]u32{
+        xlib.XI_Motion,
+        xlib.XI_TouchBegin,
+        xlib.XI_TouchUpdate,
+        xlib.XI_TouchEnd,
+    };
+
+    for (events) |event| {
+        const index: usize = @intCast(event / 8);
+        mask[index] |= @as(u8, 1) << (@as(u3, @intCast(event % 8)));
+    }
+
     var evmask: xlib.XIEventMask = .{
         .deviceid = xlib.XIAllDevices,
         .mask_len = @intCast(mask.len),
         .mask = &mask,
     };
 
-    const event = xlib.XI_Motion;
-    const index = @divTrunc(event, 8);
-    mask[index] |= (1 << event % 8);
-    _ = xlib.XISelectEvents(self.display, window.handle, &evmask, 1);
+    if (xlib.XISelectEvents(self.display, window.handle, &evmask, 1) != 0) return error.XISelectEvents;
     _ = xlib.XFlush(self.display);
 }
 fn windowClose(context: *anyopaque, platform_window: *PlatformWindow) void {
@@ -322,22 +337,13 @@ fn windowPoll(context: *anyopaque, platform_window: *PlatformWindow) anyerror!?P
     }
 
     var event: xlib.XEvent = undefined;
-    while (xlib.XPending(self.display) > 0) {
-        if (xlib.XNextEvent(self.display, &event) != xlib.XCSUCCESS) return null;
-    }
+    if (xlib.XPending(self.display) == 0) return null;
+    if (xlib.XNextEvent(self.display, &event) != xlib.XCSUCCESS) return null;
 
-    if (event.xcookie.type == xlib.GenericEvent and xlib.XGetEventData(self.display, &event.xcookie) != 0) {
-        const xie: *xlib.XIDeviceEvent = @ptrCast(@alignCast(event.xcookie.data));
-
-        const mouse_motion: PlatformWindow.Event.MouseMotion = .{ .x = xie.event_x, .y = xie.event_y };
-        xlib.XFreeEventData(self.display, &event.xcookie);
-        return .{ .mouse_motion = mouse_motion };
-    }
-
-    return switch (event.type) {
-        xlib.ClientMessage => if (@as(xlib.Atom, @intCast(event.xclient.data.l[0])) == window.wm_delete_window) .close else null,
-        xlib.FocusIn => .{ .focus = true },
-        xlib.FocusOut => .{ .focus = false },
+    switch (event.type) {
+        xlib.ClientMessage => if (@as(xlib.Atom, @intCast(event.xclient.data.l[0])) == window.wm_delete_window) return .close,
+        xlib.FocusIn => return .{ .focus = true },
+        xlib.FocusOut => return .{ .focus = false },
         xlib.ConfigureNotify => {
             var attrs: xlib.XWindowAttributes = undefined;
             _ = xlib.XGetWindowAttributes(self.display, window.handle, &attrs);
@@ -357,8 +363,9 @@ fn windowPoll(context: *anyopaque, platform_window: *PlatformWindow) anyerror!?P
             }
             return if (window.interface.surface_type != .opengl and window.interface.surface_type != .vulkan) .{ .resize = size } else null;
         },
-        xlib.Expose => if (window.interface.surface_type == .vulkan or window.interface.surface_type == .opengl) .{ .resize = .{ .width = @intCast(event.xexpose.width), .height = @intCast(event.xexpose.height) } } else null,
-        xlib.ButtonPress, xlib.ButtonRelease => switch (event.xbutton.button) {
+        xlib.Expose => if (window.interface.surface_type == .vulkan or window.interface.surface_type == .opengl)
+            return .{ .resize = .{ .width = @intCast(event.xexpose.width), .height = @intCast(event.xexpose.height) } },
+        xlib.ButtonPress, xlib.ButtonRelease => return switch (event.xbutton.button) {
             4...7 => |scroll| if (event.type == xlib.ButtonPress) .{ .mouse_scroll = switch (scroll) {
                 6 => .{ .horizontal = 1.0 },
                 7 => .{ .horizontal = -1.0 },
@@ -375,11 +382,15 @@ fn windowPoll(context: *anyopaque, platform_window: *PlatformWindow) anyerror!?P
                 .button = PlatformWindow.Event.MouseButton.Button.fromX(event.xbutton.button) orelse return null,
             } },
         },
-        xlib.MotionNotify => .{ .mouse_motion = .{
-            .x = @floatFromInt(event.xmotion.x),
-            .y = @floatFromInt(event.xmotion.y),
-        } },
-        xlib.KeyPress, xlib.KeyRelease => .{ .key = .{
+        xlib.MotionNotify => if (!self.extensions_info.xi_supported) {
+            const mouse_motion: PlatformWindow.Event.MouseMotion = .{
+                .x = @floatFromInt(event.xmotion.x),
+                .y = @floatFromInt(event.xmotion.y),
+            };
+            if (mouse_motion.x != window.interface.mouse_position.x or mouse_motion.y != window.interface.mouse_position.y)
+                return .{ .mouse_motion = mouse_motion };
+        },
+        xlib.KeyPress, xlib.KeyRelease => return .{ .key = .{
             .state = switch (event.type) {
                 xlib.KeyPress => .pressed,
                 xlib.KeyRelease => .released,
@@ -388,8 +399,53 @@ fn windowPoll(context: *anyopaque, platform_window: *PlatformWindow) anyerror!?P
             .code = @intCast(event.xkey.keycode),
             .sym = PlatformWindow.Event.Key.Sym.fromXkb(xlib.XLookupKeysym(&event.xkey, @intCast(event.xkey.state & xlib.ShiftMask))) orelse return null,
         } },
-        else => null,
-    };
+        xlib.GenericEvent => {
+            const gevent: *xlib.XGenericEventCookie = @ptrCast(&event);
+            _ = xlib.XGetEventData(self.display, gevent);
+            defer xlib.XFreeEventData(self.display, gevent);
+
+            const xiev: *xlib.XIDeviceEvent = @ptrCast(@alignCast(gevent.data));
+
+            // Xinput
+            if (self.extensions_info.xi_supported and gevent.extension == @as(c_int, @intCast(self.extensions_info.xi_opcode))) switch (gevent.evtype) {
+                xlib.XI_Motion => {
+                    const mouse_motion: PlatformWindow.Event.MouseMotion = .{
+                        .x = xiev.event_x,
+                        .y = xiev.event_y,
+                    };
+                    if (mouse_motion.x != window.interface.mouse_position.x or mouse_motion.y != window.interface.mouse_position.y)
+                        return .{ .mouse_motion = mouse_motion };
+                },
+                xlib.XI_TouchBegin => {
+                    const touch_down: PlatformWindow.Event.Touch = .{
+                        .id = @intCast(xiev.detail),
+                        .x = xiev.event_x,
+                        .y = xiev.event_y,
+                    };
+                    return .{ .touch_down = touch_down };
+                },
+                xlib.XI_TouchEnd => {
+                    const touch_up: PlatformWindow.Event.Touch = .{
+                        .id = @intCast(xiev.detail),
+                        .x = xiev.event_x,
+                        .y = xiev.event_y,
+                    };
+                    return .{ .touch_up = touch_up };
+                },
+                xlib.XI_TouchUpdate => {
+                    const touch_motion: PlatformWindow.Event.Touch = .{
+                        .id = @intCast(xiev.detail),
+                        .x = xiev.event_x,
+                        .y = xiev.event_y,
+                    };
+                    return .{ .touch_motion = touch_motion };
+                },
+                else => {},
+            };
+        },
+        else => {},
+    }
+    return windowPoll(context, platform_window);
 }
 fn windowSetProperty(context: *anyopaque, platform_window: *PlatformWindow, property: PlatformWindow.Property) anyerror!void {
     const self: *@This() = @ptrCast(@alignCast(context));
