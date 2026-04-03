@@ -201,6 +201,7 @@ fn windowOpen(context: *anyopaque, platform_window: *PlatformWindow, options: Pl
 
     _ = win32.ShowWindow(@ptrCast(window.hwnd), .{ .SHOWNORMAL = 1 });
     if (!win32.SUCCEEDED(win32.UpdateWindow(@ptrCast(window.hwnd)))) return error.UpdateWindow;
+    _ = win32.RegisterTouchWindow(@ptrCast(window.hwnd), 0);
 
     if (options.fullscreen) try windowSetProperty(context, platform_window, .{ .fullscreen = options.fullscreen });
     if (options.maximized) try windowSetProperty(context, platform_window, .{ .maximized = options.maximized });
@@ -330,6 +331,22 @@ fn windowPoll(context: *anyopaque, platform_window: *PlatformWindow) anyerror!?P
         win32.WM_SETCURSOR => {
             _ = win32.SetCursor(@ptrCast(window.cursor));
             return windowPoll(context, platform_window);
+        },
+        win32.WM_TOUCH => {
+            const c_inputs = win32.zig.loword(msg.wParam);
+            var inputs: [10]win32.TOUCHINPUT = @splat(std.mem.zeroes(win32.TOUCHINPUT));
+            if (win32.GetTouchInputInfo(@ptrFromInt(msg.lParam), c_inputs, inputs, @sizeOf(win32.TOUCHINPUT))) {
+                defer win32.CloseTouchInputHandle(@ptrFromInt(msg.lParam));
+                for (&inputs, 0..) |*input, i| {
+                    const x = @as(f64, @floatFromInt(input.x)) / 100;
+                    const y = @as(f64, @floatFromInt(input.y)) / 100;
+                    const touch: PlatformWindow.Event.Touch = .{ .id = @intCast(i), .x = x, .y = y };
+
+                    if (input.dwFlags.DOWN == 1) return .{ .touch_down = touch };
+                    if (input.dwFlags.UP == 1) return .{ .touch_up = touch };
+                    if (input.dwFlags.MOVE == 1) return .{ .touch_motion = touch };
+                }
+            }
         },
         else => windowPoll(context, platform_window),
     };
