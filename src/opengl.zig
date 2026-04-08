@@ -50,7 +50,7 @@ comptime {
         else => !builtin.cpu.arch.isWasm(),
     };
 
-    if (need_fake_exports and build_options.xlib and !build_options.opengl) {
+    if (need_fake_exports and build_options.x_backend != .none and !build_options.opengl) {
         @export(&invalid, .{ .name = "glXGetProcAddress" });
         @export(&invalid, .{ .name = "glXQueryExtensionsString" });
         @export(&invalid, .{ .name = "glXChooseFBConfig" });

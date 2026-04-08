@@ -1,15 +1,10 @@
 const std = @import("std");
 const builtin = @import("builtin");
-const build_options = @import("build_options");
 const xlib = @import("xlib");
 const opengl = @import("../opengl.zig");
 const vulkan = @import("../vulkan.zig");
 const Platform = @import("../Platform.zig");
 const PlatformWindow = @import("../Window.zig");
-
-comptime {
-    if (!build_options.xlib) @compileError("xlib backend not available unless build options xlib is set to true");
-}
 
 display: *xlib.Display,
 atom_table: AtomTable,

@@ -41,7 +41,7 @@ pub const Surface = opaque {
                 next: ?*const anyopaque = null,
                 flags: u32 = 0,
                 connection: *anyopaque,
-                window: c_uint,
+                window: u32,
             };
 
             pub const Wayland = extern struct {

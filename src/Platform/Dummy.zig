@@ -1,4 +1,5 @@
 const std = @import("std");
+const opengl = @import("../opengl.zig");
 const vulkan = @import("../root.zig").vulkan;
 const Platform = @import("../Platform.zig");
 const PlatformWindow = @import("../Window.zig");

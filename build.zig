@@ -1,11 +1,17 @@
 const std = @import("std");
 
+pub const XBackend = enum {
+    none,
+    xcb,
+    xpz,
+    xlib,
+};
+
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
     const win32 = b.dependency("win32", .{}).module("win32");
-    const xpz = b.dependency("xpz", .{ .target = target, .optimize = optimize }).module("xpz");
 
     const mod = b.addModule("yes", .{
         .root_source_file = b.path("src/root.zig"),
@@ -13,13 +19,12 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .imports = &.{
             .{ .name = "win32", .module = win32 },
-            .{ .name = "xpz", .module = xpz },
         },
     });
 
     const opengl_option = b.option(bool, "opengl", "Link with native OpenGL libs") orelse false;
-    const xlib_option = b.option(bool, "xlib", "Allow use of xlib platform") orelse true; // Linux
     const libwayland_option = b.option(bool, "libwayland", "Links with wayland libraries") orelse true; // Linux
+    const x_backend_option = b.option(XBackend, "x_backend", "Which X backend") orelse .xcb; // Linux
     const glfw_option = b.option(bool, "glfw", "Allow usage of glfw backend") orelse false;
 
     if (glfw_option) {
@@ -45,11 +50,21 @@ pub fn build(b: *std.Build) void {
         .windows => {},
         .macos => {},
         else => {
-            if (xlib_option) addXlib(b, mod, target, optimize);
             if (libwayland_option) addWayland(b, mod, target, optimize);
-            if (xlib_option or libwayland_option) addXkbcommon(b, mod, target, optimize);
 
-            if (xlib_option and opengl_option) {
+            switch (x_backend_option) {
+                .none => {},
+                .xcb => addXcb(b, mod, target, optimize),
+                .xlib => addXlib(b, mod, target, optimize),
+                .xpz => {
+                    const xpz = b.lazyDependency("xpz", .{ .target = target, .optimize = optimize }).?.module("xpz");
+                    mod.addImport("xpz", xpz);
+                },
+            }
+
+            addXkbcommon(b, mod, target, optimize);
+
+            if (x_backend_option != .none and opengl_option) {
                 mod.linkSystemLibrary("glx", .{});
             }
             if (libwayland_option and opengl_option) {
@@ -61,7 +76,7 @@ pub fn build(b: *std.Build) void {
 
     const options = b.addOptions();
     options.addOption(bool, "opengl", opengl_option);
-    options.addOption(bool, "xlib", xlib_option);
+    options.addOption(XBackend, "x_backend", x_backend_option);
     options.addOption(bool, "libwayland", libwayland_option);
     options.addOption(bool, "glfw", glfw_option);
     mod.addOptions("build_options", options);
@@ -71,6 +86,24 @@ pub fn build(b: *std.Build) void {
 
     const test_step = b.step("test", "Run tests");
     test_step.dependOn(&run_mod_tests.step);
+}
+
+pub fn addXcb(b: *std.Build, mod: *std.Build.Module, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) void {
+    const xcb_dep = b.lazyDependency("xcb", .{ .target = target, .optimize = optimize }).?;
+
+    const xcb_translate_c = b.addTranslateC(.{
+        .root_source_file = b.addWriteFiles().add("xcb.h",
+            \\#include <xcb.h>
+            \\#include <glx.h>
+        ),
+        .target = target,
+        .optimize = optimize,
+    });
+    xcb_translate_c.addIncludePath(xcb_dep.path("src/"));
+    xcb_translate_c.addIncludePath(xcb_dep.path("xcbgen/"));
+
+    mod.addImport("xcb", xcb_translate_c.createModule());
+    mod.linkLibrary(xcb_dep.artifact("xcb"));
 }
 
 pub fn addXlib(b: *std.Build, mod: *std.Build.Module, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) void {
@@ -102,25 +135,27 @@ pub fn addWayland(b: *std.Build, mod: *std.Build.Module, target: std.Build.Resol
     const Scanner = @import("wayland").Scanner;
     const scanner = Scanner.create(b, .{});
 
+    const wayland_protocols = b.lazyDependency("wayland_protocols", .{}).?;
+
     const wayland = b.createModule(.{
         .root_source_file = scanner.result,
         .target = target,
         .optimize = optimize,
     });
 
-    scanner.addSystemProtocol("stable/xdg-shell/xdg-shell.xml");
-    scanner.addSystemProtocol("unstable/xdg-decoration/xdg-decoration-unstable-v1.xml");
-    scanner.addSystemProtocol("staging/cursor-shape/cursor-shape-v1.xml");
-    scanner.addSystemProtocol("unstable/tablet/tablet-unstable-v2.xml");
+    scanner.addCustomProtocol(wayland_protocols.path("stable/xdg-shell/xdg-shell.xml"));
+    scanner.addCustomProtocol(wayland_protocols.path("unstable/xdg-decoration/xdg-decoration-unstable-v1.xml"));
+    scanner.addCustomProtocol(wayland_protocols.path("staging/cursor-shape/cursor-shape-v1.xml"));
+    scanner.addCustomProtocol(wayland_protocols.path("unstable/tablet/tablet-unstable-v2.xml"));
 
     scanner.generate("wl_compositor", 1);
     scanner.generate("wl_output", 4);
     scanner.generate("wl_shm", 1);
     scanner.generate("wl_seat", 4);
     scanner.generate("xdg_wm_base", 3);
+    // scanner.generate("xdg_activation_v1", 1);
     scanner.generate("zxdg_decoration_manager_v1", 1);
     scanner.generate("wp_cursor_shape_manager_v1", 2);
-
     scanner.generate("zwp_tablet_manager_v2", 1);
 
     mod.addImport("wayland", wayland);

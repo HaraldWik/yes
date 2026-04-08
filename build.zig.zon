@@ -8,18 +8,31 @@
             .url = "git+https://github.com/SquareMan/zigwin32#01df0ea99ae90afc3f46117055ab788646872eba",
             .hash = "zigwin32-25.0.28-preview-qYSj4tyL5APmYxQI4_nKfd431j6VtaZnQkOb9IY6o5TR",
         },
-        .xpz = .{
-            .url = "git+https://github.com/HaraldWik/xpz#eb34851ec1e6a8c303326e7bf813ba647a8f871d",
-            .hash = "xpz-0.0.0-_a41ws95AQB-Q_J_KlJBNDkUEJxv_SZAyoF6LvVj3pgU",
+
+        .wayland = .{
+            .url = "git+https://github.com/HaraldWik/zig-wayland#7233349e81de71a89a1e389057923506291f7105",
+            .hash = "wayland-0.5.0-dev-lQa1knX9AQBbTyO_CdFb3VDugVoOJR8iQ5mbzZZcx6RK",
+        },
+        .wayland_protocols = .{
+            .url = "git+https://gitlab.freedesktop.org/wayland/wayland-protocols#02e63e74a807afed95bc25a386173110afef24e3",
+            .hash = "N-V-__8AAMCWEADA0AS-1LfBEtixZLJAb_XQKQpgSmR2uxAO",
+            .lazy = true,
+        },
+
+        .xcb = .{
+            .url = "git+https://github.com/HaraldWik/zig-xcb/#e46b51f68eac18b9ea3781ec81ca80eb59f64a93",
+            .hash = "xcb-0.0.0-x0nviD8pUgAmxcmVDj0VcukMC7X1CyLCowthSkcTBb58",
+            .lazy = true,
         },
         .xlib = .{
             .url = "git+https://github.com/mirror/libX11/#ff8706a5eae25b8bafce300527079f68a201d27f",
             .hash = "N-V-__8AACyQxwDUvMZdHuuzwuP1mlGU6uroadqmQvBwevJX",
             .lazy = true,
         },
-        .wayland = .{
-            .url = "git+https://github.com/HaraldWik/zig-wayland#7233349e81de71a89a1e389057923506291f7105",
-            .hash = "wayland-0.5.0-dev-lQa1knX9AQBbTyO_CdFb3VDugVoOJR8iQ5mbzZZcx6RK",
+        .xpz = .{
+            .url = "git+https://github.com/HaraldWik/xpz#eb34851ec1e6a8c303326e7bf813ba647a8f871d",
+            .hash = "xpz-0.0.0-_a41ws95AQB-Q_J_KlJBNDkUEJxv_SZAyoF6LvVj3pgU",
+            .lazy = true,
         },
 
         .xkbcommon = .{

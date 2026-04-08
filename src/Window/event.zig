@@ -70,7 +70,7 @@ pub const Event = union(enum) {
             y = 'Y',
             z = 'Z',
 
-            // --- Punctuation / symbols ---
+            // Punctuation / symbols
             space = ' ',
             exclam = '!',
             double_quote = '"',

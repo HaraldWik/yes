@@ -1,3 +1,4 @@
+const build_options = @import("build_options");
 const Window = @import("Window.zig");
 const opengl = @import("opengl.zig");
 const vulkan = @import("vulkan.zig");
@@ -11,12 +12,14 @@ pub const Dummy = @import("Platform/Dummy.zig");
 pub const Cross = @import("Platform/Cross.zig");
 /// Default win32 api interactions
 pub const Win32 = @import("Platform/Win32.zig");
-/// X-protocol implementation written in zig
-pub const Xpz = @import("Platform/Xpz.zig");
-/// Xlib
-pub const Xlib = @import("Platform/Xlib.zig");
 /// Default Wayland Client
 pub const Wayland = @import("Platform/Wayland.zig");
+/// Xcb, more modern Xlib
+pub const Xcb = if (build_options.x_backend == .xcb) @import("Platform/Xcb.zig") else @compileError("xcb backend is unavailable unless build options x_backend is set to .xcb");
+/// Xlib
+pub const Xlib = if (build_options.x_backend == .xlib) @import("Platform/Xlib.zig") else @compileError("xlib backend is unavailable unless build options x_backend is set to .xlib");
+/// X-protocol implementation written in zig
+pub const Xpz = if (build_options.x_backend == .xpz) @import("Platform/Xpz.zig") else @compileError("xpz backend is unavailable unless build options x_backend is set to .xpz");
 /// Currently just a dummy platform
 pub const Cocoa = @import("Platform/Cocoa.zig");
 

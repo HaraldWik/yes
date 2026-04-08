@@ -17,25 +17,26 @@ pub const Inner = if (build_options.glfw) Platform.Glfw else switch (builtin.os.
         Platform.Web
     else
         union(enum) {
-            x: if (build_options.xlib) Platform.Xlib else Platform.Xpz,
             wayland: if (build_options.libwayland) Platform.Wayland else void,
+            x: switch (build_options.x_backend) {
+                .none => void,
+                .xcb => Platform.Xcb,
+                .xlib => Platform.Xlib,
+                .xpz => Platform.Xpz,
+            },
         },
 };
 
 pub const Window = struct {
-    inner: @This().Inner,
-
-    pub const Inner = if (build_options.glfw) Platform.Glfw.Window else switch (builtin.os.tag) {
-        .windows => Platform.Win32.Window,
-        .macos, .ios, .tvos => Platform.Cocoa.Window,
-        else => if (is_wasm)
-            Platform.Web.Window
-        else
-            union {
-                x: if (build_options.xlib) Platform.Xlib.Window else Platform.Xpz.Window,
-                wayland: if (build_options.libwayland) Platform.Wayland.Window else void,
-            },
-    };
+    inner: if (@hasDecl(Inner, "Window")) Inner.Window else union {
+        wayland: Platform.Wayland.Window,
+        x: switch (build_options.x_backend) {
+            .none => void,
+            .xcb => Platform.Xcb.Window,
+            .xlib => Platform.Xlib.Window,
+            .xpz => Platform.Xpz.Window,
+        },
+    },
 
     pub fn empty(p: Platform) @This() {
         const cross: *Cross = @ptrCast(@alignCast(p.ptr));
@@ -45,8 +46,8 @@ pub const Window = struct {
             else => if (is_wasm)
                 .{ .inner = .{} }
             else switch (cross.inner) {
-                .x => .{ .inner = .{ .x = .{} } },
                 .wayland => if (build_options.libwayland) .{ .inner = .{ .wayland = .{} } } else undefined,
+                .x => .{ .inner = .{ .x = .{} } },
             },
         };
     }
@@ -59,33 +60,40 @@ pub const Window = struct {
             else => if (is_wasm)
                 &self.inner.interface
             else switch (cross.inner) {
-                .x => &self.inner.x.interface,
                 .wayland => if (build_options.libwayland) &self.inner.wayland.interface else unreachable,
+                .x => &self.inner.x.interface,
             },
         };
     }
 };
 
-pub fn init(allocator: std.mem.Allocator, io: std.Io, minimal: std.process.Init.Minimal) !@This() {
-    return if (build_options.glfw) .{ .inner = try Platform.Glfw.init(allocator) } else switch (builtin.os.tag) {
-        .windows => .{ .inner = try Platform.Win32.init(allocator) },
+pub fn init(gpa: std.mem.Allocator, io: std.Io, minimal: std.process.Init.Minimal) !@This() {
+    return if (build_options.glfw) .{ .inner = try Platform.Glfw.init(gpa) } else switch (builtin.os.tag) {
+        .windows => .{ .inner = try Platform.Win32.init(gpa) },
         .macos, .ios, .tvos => .{ .inner = try Platform.Cocoa.init() },
         else => if (is_wasm)
             .{ .inner = try Platform.Web.init() }
         else
-            try initUnix(allocator, io, minimal),
+            try initUnix(gpa, io, minimal),
     };
 }
 
-fn initUnix(allocator: std.mem.Allocator, io: std.Io, minimal: std.process.Init.Minimal) !@This() {
-    const session_type: Platform.unix.SessionType = if (build_options.libwayland) Platform.unix.SessionType.detect(minimal) orelse .x11 else .x11;
-    return switch (session_type) {
-        .x11 => if (build_options.xlib)
-            .{ .inner = .{ .x = try .init() } }
+fn initUnix(gpa: std.mem.Allocator, io: std.Io, minimal: std.process.Init.Minimal) !@This() {
+    const session_type: Platform.unix.SessionType =
+        if (build_options.libwayland and build_options.x_backend != .none)
+            Platform.unix.SessionType.detect(minimal) orelse .wayland
         else
-            .{ .inner = .{ .x = try .init(allocator, io, minimal) } },
-        .wayland => if (build_options.libwayland) .{ .inner = .{ .wayland = try .init(allocator) } } else unreachable,
-        else => error.UnsupportedUnixPlatform,
+            .wayland;
+
+    return switch (session_type) {
+        .wayland => if (build_options.libwayland) .{ .inner = .{ .wayland = try .init(gpa) } } else unreachable,
+        .x11 => .{ .inner = .{ .x = try switch (build_options.x_backend) {
+            .none => return error.XUnsupported,
+            .xcb => Platform.Xcb.init(gpa, minimal),
+            .xlib => Platform.Xlib.init(),
+            .xpz => Platform.Xpz.init(gpa, io, minimal),
+        } } },
+        else => error.UnsupportedPlatform,
     };
 }
 
@@ -96,8 +104,8 @@ pub fn deinit(self: *@This()) void {
         else => if (is_wasm)
             self.inner.deinit()
         else switch (self.inner) {
-            .x => self.inner.x.deinit(),
             .wayland => if (build_options.libwayland) self.inner.wayland.deinit() else unreachable,
+            .x => self.inner.x.deinit(),
         },
     }
 }
@@ -109,8 +117,8 @@ pub fn platform(self: *@This()) Platform {
         else => if (is_wasm)
             self.inner.platform()
         else switch (self.inner) {
-            .x => self.inner.x.platform(),
             .wayland => if (build_options.libwayland) self.inner.wayland.platform() else unreachable,
+            .x => self.inner.x.platform(),
         },
     };
 }
