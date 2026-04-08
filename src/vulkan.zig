@@ -1,5 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
+const build_options = @import("build_options");
 const Platform = @import("Platform.zig");
 const Window = @import("Window.zig");
 
@@ -8,59 +9,53 @@ pub const Result = enum(c_int) {
     _,
 };
 
-pub const Instance = opaque {
-    pub const GetProcAddress = *const fn (instance: *Instance, name: [*:0]const u8) callconv(.c) ?*const fn () callconv(.c) void;
-};
+pub const InstanceGetProcAddress = *const fn (instance: *anyopaque, name: [*:0]const u8) callconv(.c) ?*const fn () callconv(.c) void;
 
-pub const AllocationCallbacks = opaque {};
+pub const SurfaceCreateInfo = switch (builtin.os.tag) {
+    .windows => extern struct {
+        stype: c_uint = 1000009000,
+        next: ?*const anyopaque = null,
+        flags: u32 = 0,
+        hinstance: std.os.windows.HINSTANCE,
+        hwnd: std.os.windows.HWND,
+    },
+    else => union {
+        xlib: Xlib,
+        xcb: Xcb,
+        wayland: Wayland,
 
-pub const Surface = opaque {
-    pub const CreateInfo = switch (builtin.os.tag) {
-        .windows => extern struct {
-            stype: c_uint = 1000009000,
+        pub const Xlib = extern struct {
+            stype: c_uint = 1000004000,
             next: ?*const anyopaque = null,
             flags: u32 = 0,
-            hinstance: std.os.windows.HINSTANCE,
-            hwnd: std.os.windows.HWND,
-        },
-        else => union {
-            xlib: Xlib,
-            xcb: Xcb,
-            wayland: Wayland,
+            display: *anyopaque,
+            window: c_ulong = 0,
+        };
 
-            pub const Xlib = extern struct {
-                stype: c_uint = 1000004000,
-                next: ?*const anyopaque = null,
-                flags: u32 = 0,
-                display: *anyopaque,
-                window: c_ulong = 0,
-            };
+        pub const Xcb = extern struct {
+            stype: c_uint = 1000005000,
+            next: ?*const anyopaque = null,
+            flags: u32 = 0,
+            connection: *anyopaque,
+            window: u32,
+        };
 
-            pub const Xcb = extern struct {
-                stype: c_uint = 1000005000,
-                next: ?*const anyopaque = null,
-                flags: u32 = 0,
-                connection: *anyopaque,
-                window: u32,
-            };
-
-            pub const Wayland = extern struct {
-                stype: c_uint = 1000006000,
-                next: ?*const anyopaque = null,
-                flags: u32 = 0,
-                display: *anyopaque,
-                surface: *anyopaque,
-            };
-        },
-    };
-
-    pub const CreateProc = *const fn (instance: *Instance, create_info: *const Surface.CreateInfo, allocator: ?*const AllocationCallbacks, surface: *?*Surface) callconv(.c) Result;
-
-    pub fn create(platform: Platform, window: *Window, instance: *Instance, allocator: ?*const AllocationCallbacks, getProcAddress: Instance.GetProcAddress) !*@This() {
-        if (window.surface_type != .vulkan) return error.WrongSurfaceType;
-        return platform.vtable.windowVulkanCreateSurface(platform.ptr, window, instance, allocator, getProcAddress);
-    }
+        pub const Wayland = extern struct {
+            stype: c_uint = 1000006000,
+            next: ?*const anyopaque = null,
+            flags: u32 = 0,
+            display: *anyopaque,
+            surface: *anyopaque,
+        };
+    },
 };
+
+pub const SurfaceCreateProc = *const fn (instance: *anyopaque, create_info: *const SurfaceCreateInfo, allocator: ?*const anyopaque, surface: *?*anyopaque) callconv(.c) Result;
+
+pub fn createSurface(platform: Platform, window: *Window, instance: *anyopaque, allocator: ?*const anyopaque, getProcAddress: InstanceGetProcAddress) !*anyopaque {
+    if (window.surface_type != .vulkan) return error.WrongSurfaceType;
+    return platform.vtable.windowVulkanCreateSurface(platform.ptr, window, instance, allocator, getProcAddress);
+}
 
 pub fn isSupported() bool {
     var lib_a = std.DynLib.openZ(switch (builtin.os.tag) {
@@ -93,14 +88,22 @@ pub fn getRequiredInstanceExtensions(comptime T: type, platform: Platform, windo
         } else switch (window.native(platform)) {
             .wayland => &.{
                 "VK_KHR_surface",
-                "VK_KHR_display",
                 "VK_KHR_wayland_surface",
             },
-            .x11 => &.{
-                "VK_KHR_surface",
-                "VK_KHR_display",
-                "VK_KHR_xlib_surface",
-                "VK_KHR_xcb_surface",
+            .x11 => switch (build_options.x_backend) {
+                .none => &.{
+                    "VK_KHR_surface",
+                    "VK_KHR_xcb_surface",
+                    "VK_KHR_xlib_surface",
+                },
+                .xcb, .xpz => &.{
+                    "VK_KHR_surface",
+                    "VK_KHR_xcb_surface",
+                },
+                .xlib => &.{
+                    "VK_KHR_surface",
+                    "VK_KHR_xlib_surface",
+                },
             },
             else => &.{},
         },

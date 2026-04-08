@@ -1,9 +1,9 @@
 const std = @import("std");
-const win32 = @import("win32").everything;
 const opengl = @import("../opengl.zig");
 const vulkan = @import("../vulkan.zig");
 const Platform = @import("../Platform.zig");
 const PlatformWindow = @import("../Window.zig");
+const win32 = @import("win32").everything;
 
 // zig build -Dtarget=x86_64-windows && wine zig-out/bin/example.exe
 
@@ -310,14 +310,6 @@ fn windowPoll(context: *anyopaque, platform_window: *PlatformWindow) anyerror!?P
         // Key
         win32.WM_KEYDOWN, win32.WM_KEYUP => {
             const sym = PlatformWindow.Event.Key.Sym.fromWin32(std.enums.fromInt(win32.VIRTUAL_KEY, msg.wParam).?, msg.lParam) orelse return null;
-            // switch (msg.message) {
-            //     win32.WM_KEYDOWN => {
-            //         if (keyboard.keys[@intFromEnum(sym)] == .pressed) return null;
-            //         keyboard.keys[@intFromEnum(sym)] = .pressed;
-            //     },
-            //     win32.WM_KEYUP => keyboard.keys[@intFromEnum(sym)] = .released,
-            //     else => unreachable,
-            // }
             return .{ .key = .{
                 .state = switch (msg.message) {
                     win32.WM_KEYDOWN => .pressed,
@@ -491,18 +483,18 @@ fn windowOpenglSwapInterval(context: *anyopaque, platform_window: *PlatformWindo
 
     if (!win32.SUCCEEDED(self.wglSwapIntervalEXT.?(interval))) return reportErr(error.WglMakeCurrent);
 }
-fn windowVulkanCreateSurface(context: *anyopaque, platform_window: *PlatformWindow, instance: *vulkan.Instance, allocator: ?*const vulkan.AllocationCallbacks, getProcAddress: vulkan.Instance.GetProcAddress) anyerror!*vulkan.Surface {
+fn windowVulkanCreateSurface(context: *anyopaque, platform_window: *PlatformWindow, instance: *anyopaque, allocator: ?*const anyopaque, getProcAddress: vulkan.InstanceGetProcAddress) anyerror!*anyopaque {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
 
-    const vkCreateWin32SurfaceKHR: vulkan.Surface.CreateProc = @ptrCast(getProcAddress(instance, "vkCreateWin32SurfaceKHR") orelse return error.LoadVkCreateWin32SurfaceKHR);
+    const vkCreateWin32SurfaceKHR: vulkan.SurfaceCreateProc = @ptrCast(getProcAddress(instance, "vkCreateWin32SurfaceKHR") orelse return error.LoadVkCreateWin32SurfaceKHR);
 
-    const create_info: vulkan.Surface.CreateInfo = .{
+    const create_info: vulkan.SurfaceCreateInfo = .{
         .hinstance = self.hinstance,
         .hwnd = window.hwnd,
     };
 
-    var surface: ?*vulkan.Surface = null;
+    var surface: ?*anyopaque = null;
     if (vkCreateWin32SurfaceKHR(instance, &create_info, allocator, &surface) != .success) return error.VkCreateWin32SurfaceKHR;
     return surface orelse error.InvalidSurface;
 }

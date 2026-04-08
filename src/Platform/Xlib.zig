@@ -1,10 +1,10 @@
 const std = @import("std");
 const builtin = @import("builtin");
-const xlib = @import("xlib");
 const opengl = @import("../opengl.zig");
 const vulkan = @import("../vulkan.zig");
 const Platform = @import("../Platform.zig");
 const PlatformWindow = @import("../Window.zig");
+const xlib = @import("xlib");
 
 display: *xlib.Display,
 atom_table: AtomTable,
@@ -362,8 +362,8 @@ fn windowPoll(context: *anyopaque, platform_window: *PlatformWindow) anyerror!?P
             return .{ .resize = .{ .width = @intCast(event.xexpose.width), .height = @intCast(event.xexpose.height) } },
         xlib.ButtonPress, xlib.ButtonRelease => return switch (event.xbutton.button) {
             4...7 => |scroll| if (event.type == xlib.ButtonPress) .{ .mouse_scroll = switch (scroll) {
-                6 => .{ .horizontal = 1.0 },
-                7 => .{ .horizontal = -1.0 },
+                6 => .{ .horizontal = -1.0 },
+                7 => .{ .horizontal = 1.0 },
                 4 => .{ .vertical = 1.0 },
                 5 => .{ .vertical = -1.0 },
                 else => unreachable,
@@ -670,18 +670,18 @@ fn windowOpenglSwapInterval(context: *anyopaque, platform_window: *PlatformWindo
     const glXSwapIntervalEXT: *const fn (display: *xlib.Display, drawable: xlib.Drawable, interval: i32) callconv(.c) void = @ptrCast(xlib.glXGetProcAddress("glXSwapIntervalEXT") orelse return error.SwapIntervalLoad);
     glXSwapIntervalEXT(self.display, window.handle, interval);
 }
-fn windowVulkanCreateSurface(context: *anyopaque, platform_window: *PlatformWindow, instance: *vulkan.Instance, allocator: ?*const vulkan.AllocationCallbacks, getProcAddress: vulkan.Instance.GetProcAddress) anyerror!*vulkan.Surface {
+fn windowVulkanCreateSurface(context: *anyopaque, platform_window: *PlatformWindow, instance: *anyopaque, allocator: ?*const anyopaque, getProcAddress: vulkan.InstanceGetProcAddress) anyerror!*anyopaque {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
 
-    const vkCreateXlibSurfaceKHR: vulkan.Surface.CreateProc = @ptrCast(getProcAddress(instance, "vkCreateXlibSurfaceKHR") orelse return error.LoadVkCreateXlibSurfaceKHR);
+    const vkCreateXlibSurfaceKHR: vulkan.SurfaceCreateProc = @ptrCast(getProcAddress(instance, "vkCreateXlibSurfaceKHR") orelse return error.LoadVkCreateXlibSurfaceKHR);
 
-    const create_info: vulkan.Surface.CreateInfo = .{ .xlib = .{
+    const create_info: vulkan.SurfaceCreateInfo = .{ .xlib = .{
         .display = self.display,
         .window = window.handle,
     } };
 
-    var surface: ?*vulkan.Surface = null;
+    var surface: ?*anyopaque = null;
     if (vkCreateXlibSurfaceKHR(instance, &create_info, allocator, &surface) != .success) return error.VkCreateXlibSurfaceKHR;
     return surface orelse error.InvalidSurface;
 }

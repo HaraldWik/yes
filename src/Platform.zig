@@ -42,7 +42,7 @@ pub const VTable = struct {
     windowOpenglSwapBuffers: *const fn (*anyopaque, window: *Window) anyerror!void,
     windowOpenglSwapInterval: *const fn (*anyopaque, window: *Window, interval: i32) anyerror!void,
 
-    windowVulkanCreateSurface: *const fn (*anyopaque, window: *Window, instance: *vulkan.Instance, allocator: ?*const vulkan.AllocationCallbacks, getProcAddress: vulkan.Instance.GetProcAddress) anyerror!*vulkan.Surface,
+    windowVulkanCreateSurface: *const fn (*anyopaque, window: *Window, instance: *anyopaque, allocator: ?*const anyopaque, getProcAddress: vulkan.InstanceGetProcAddress) anyerror!*anyopaque,
 
     openglGetProcAddress: *const fn (procname: [*:0]const u8) callconv(opengl.APIENTRY) ?opengl.Proc,
 };

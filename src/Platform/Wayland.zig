@@ -1,5 +1,9 @@
 const std = @import("std");
 const build_options = @import("build_options");
+const opengl = @import("../opengl.zig");
+const vulkan = @import("../vulkan.zig");
+const Platform = @import("../Platform.zig");
+const PlatformWindow = @import("../Window.zig");
 const wayland = @import("wayland");
 const wl = wayland.client.wl;
 const xdg = wayland.client.xdg;
@@ -11,10 +15,6 @@ const egl = @cImport({ // TODO: replace
     @cInclude("wayland-egl-core.h");
 });
 const xkb = @import("xkbcommon");
-const opengl = @import("../opengl.zig");
-const vulkan = @import("../vulkan.zig");
-const Platform = @import("../Platform.zig");
-const PlatformWindow = @import("../Window.zig");
 
 const Wayland = @This();
 
@@ -433,20 +433,20 @@ fn windowOpenglSwapInterval(_: *anyopaque, platform_window: *PlatformWindow, int
     const gl = window.surface.opengl;
     if (egl.eglSwapInterval(gl.display, interval) != egl.EGL_TRUE) return error.EglSwapInterval;
 }
-fn windowVulkanCreateSurface(context: *anyopaque, platform_window: *PlatformWindow, instance: *vulkan.Instance, allocator: ?*const vulkan.AllocationCallbacks, getProcAddress: vulkan.Instance.GetProcAddress) anyerror!*vulkan.Surface {
+fn windowVulkanCreateSurface(context: *anyopaque, platform_window: *PlatformWindow, instance: *anyopaque, allocator: ?*const anyopaque, getProcAddress: vulkan.InstanceGetProcAddress) anyerror!*anyopaque {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
 
-    const vkCreateWaylandSurfaceKHR: vulkan.Surface.CreateProc = @ptrCast(getProcAddress(instance, "vkCreateWaylandSurfaceKHR") orelse return error.LoadVkCreateWaylandSurfaceKHR);
+    const vkCreateWaylandSurfaceKHR: vulkan.SurfaceCreateProc = @ptrCast(getProcAddress(instance, "vkCreateWaylandSurfaceKHR") orelse return error.LoadVkCreateWaylandSurfaceKHR);
 
-    const create_info: vulkan.Surface.CreateInfo = .{
+    const create_info: vulkan.SurfaceCreateInfo = .{
         .wayland = .{
             .display = self.display,
             .surface = window.wl_surface,
         },
     };
 
-    var surface: ?*vulkan.Surface = undefined;
+    var surface: ?*anyopaque = undefined;
     if (vkCreateWaylandSurfaceKHR(instance, &create_info, allocator, &surface) != .success) return error.VkCreateWaylandSurfaceKHR;
     return surface orelse error.InvalidSurface;
 }

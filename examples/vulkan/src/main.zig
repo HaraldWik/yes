@@ -36,7 +36,7 @@ pub fn main(init: std.process.Init) !void {
         vkDestroyDebugUtilsMessengerEXT(instance.handle, messenger, null);
 
     // Surface
-    const surface: vk.Surface = .{ .handle = @ptrCast(try yes.vulkan.Surface.create(platform, window, @ptrCast(instance.handle), null, @ptrCast(&vk.c.vkGetInstanceProcAddr))) };
+    const surface: vk.Surface = .{ .handle = @ptrCast(try yes.vulkan.createSurface(platform, window, instance.handle.?, null, @ptrCast(&vk.c.vkGetInstanceProcAddr))) };
     defer surface.deinit(instance);
 
     // Physical device

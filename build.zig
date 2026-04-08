@@ -95,6 +95,7 @@ pub fn addXcb(b: *std.Build, mod: *std.Build.Module, target: std.Build.ResolvedT
         .root_source_file = b.addWriteFiles().add("xcb.h",
             \\#include <xcb.h>
             \\#include <glx.h>
+            \\#include <xinput.h>
         ),
         .target = target,
         .optimize = optimize,
@@ -173,9 +174,7 @@ pub fn addXkbcommon(b: *std.Build, mod: *std.Build.Module, target: std.Build.Res
     }).?;
     const xkbcommon_headers = b.lazyDependency("xkbcommon_headers", .{}).?;
     const xkbcommon = b.addTranslateC(.{
-        .root_source_file =
-        // b.dependency("xkbcommon_headers", .{}).path("include/xkbcommon/xkbcommon.h"),
-        b.addWriteFiles().add("xkb.c",
+        .root_source_file = b.addWriteFiles().add("xkbcommon.c",
             \\#include <xkbcommon/xkbcommon.h>
             \\#include <xkbcommon/xkbcommon-keysyms.h>
         ),

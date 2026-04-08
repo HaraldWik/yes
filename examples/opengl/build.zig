@@ -8,6 +8,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
         .opengl = true, // VERY IMPORTANT when using OpenGL
+        .x_backend = .xlib, // xlib is ancient just like OpenGL, so its basicaly needed for GLX
     }).module("yes");
     const gl = b.dependency("zig_opengl", .{ .target = target, .optimize = optimize }).module("zig_opengl");
     const numz = b.dependency("numz", .{ .target = target, .optimize = optimize }).module("numz");

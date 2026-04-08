@@ -57,6 +57,10 @@
             .hash = "N-V-__8AACo0SgD2fozxq6O88t3f1Bd5GT89PObFv1OsPK0y",
             .lazy = true,
         },
+        .libxkbcommon = .{
+            .url = "git+https://github.com/HaraldWik/libxkbcommon/#54b54db10d7954cc3d4eb0b7ba8a2ad49ee8712c",
+            .hash = "libxkbcommon-1.11.0-93LaF-twAgBJ6KbPBRhi5ZjuKzg37UVw6j6Os0egOPqN",
+        },
     },
     .paths = .{
         "build.zig",
