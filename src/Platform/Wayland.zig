@@ -18,7 +18,7 @@ const xkb = @import("xkbcommon");
 
 const Wayland = @This();
 
-allocator: std.mem.Allocator,
+gpa: std.mem.Allocator,
 display: *wl.Display,
 registry: *wl.Registry,
 
@@ -63,7 +63,7 @@ const IoManager = struct {
 
 pub const Window = struct {
     interface: PlatformWindow = .{},
-    allocator: std.mem.Allocator = undefined,
+    gpa: std.mem.Allocator = undefined,
     err: ?anyerror = null,
     wl_surface: *wl.Surface = undefined,
     xdg_surface: *xdg.Surface = undefined,
@@ -97,7 +97,7 @@ pub const Window = struct {
     };
 };
 
-pub fn init(allocator: std.mem.Allocator) !@This() {
+pub fn init(gpa: std.mem.Allocator) !@This() {
     const display = try wl.Display.connect(null);
     const registry = try display.getRegistry();
 
@@ -112,7 +112,7 @@ pub fn init(allocator: std.mem.Allocator) !@This() {
     const seat = globals.seat orelse return error.NoWlSeat;
     const shm = globals.shm orelse return error.NoShm;
 
-    const io_manager = try allocator.create(IoManager);
+    const io_manager = try gpa.create(IoManager);
     io_manager.* = .{ .xkb = .{
         .context = xkb.xkb_context_new(xkb.XKB_CONTEXT_NO_FLAGS) orelse return error.CreateXkbContext,
     } };
@@ -124,7 +124,7 @@ pub fn init(allocator: std.mem.Allocator) !@This() {
     if (io_manager.err) |err| return err;
 
     return .{
-        .allocator = allocator,
+        .gpa = gpa,
         .display = display,
         .registry = registry,
 
@@ -146,8 +146,8 @@ pub fn deinit(self: @This()) void {
     if (self.io_manager.keyboard) |keyboard| keyboard.release();
     if (self.io_manager.pointer) |pointer| pointer.release();
     if (self.io_manager.touch) |touch| touch.release();
-    self.io_manager.active_touches.deinit(self.allocator);
-    self.allocator.destroy(self.io_manager);
+    self.io_manager.active_touches.deinit(self.gpa);
+    self.gpa.destroy(self.io_manager);
     self.shm.destroy();
     self.seat.destroy();
     self.xdg_wm_base.destroy();
@@ -179,7 +179,7 @@ fn windowOpen(context: *anyopaque, platform_window: *PlatformWindow, options: Pl
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
 
-    window.allocator = self.allocator;
+    window.gpa = self.gpa;
 
     window.wl_surface = try self.compositor.createSurface();
     window.xdg_surface = try self.xdg_wm_base.getXdgSurface(window.wl_surface);
@@ -258,8 +258,8 @@ fn windowOpen(context: *anyopaque, platform_window: *PlatformWindow, options: Pl
     window.wl_surface.commit();
     if (self.display.roundtrip() != .SUCCESS) return error.Roundtrip;
 
-    if (options.surface_type != .empty) try window.events.append(self.allocator, .{ .focus = true });
-    try window.events.append(self.allocator, .{ .resize = options.size });
+    if (options.surface_type != .empty) try window.events.append(self.gpa, .{ .focus = true });
+    try window.events.append(self.gpa, .{ .resize = options.size });
 }
 fn windowClose(context: *anyopaque, platform_window: *PlatformWindow) void {
     const self: *@This() = @ptrCast(@alignCast(context));
@@ -285,7 +285,7 @@ fn windowClose(context: *anyopaque, platform_window: *PlatformWindow) void {
     window.xdg_surface.destroy();
     window.wl_surface.destroy();
     // window.event_queue.destroy();
-    window.events.deinit(window.allocator);
+    window.events.deinit(window.gpa);
 }
 fn windowPoll(context: *anyopaque, platform_window: *PlatformWindow) anyerror!?PlatformWindow.Event {
     const self: *@This() = @ptrCast(@alignCast(context));
@@ -342,8 +342,8 @@ fn windowSetProperty(context: *anyopaque, platform_window: *PlatformWindow, prop
 
     switch (property) {
         .title => |title| {
-            const title_z = try self.allocator.dupeZ(u8, title);
-            defer self.allocator.free(title_z);
+            const title_z = try self.gpa.dupeZ(u8, title);
+            defer self.gpa.free(title_z);
             window.xdg_toplevel.setTitle(title_z.ptr);
         },
         .size => {},
@@ -550,12 +550,12 @@ fn keyboardListener(_: *wl.Keyboard, event: wl.Keyboard.Event, io_manager: *IoMa
             _ = xkb.xkb_state_update_mask(io_manager.xkb.state.?, modifiers.mods_depressed, modifiers.mods_latched, modifiers.mods_locked, modifiers.group, 0, 0);
         },
         .enter => if (current_window) |window| if (!window.interface.focused) {
-            window.events.append(window.allocator, .{ .focus = true }) catch |err| {
+            window.events.append(window.gpa, .{ .focus = true }) catch |err| {
                 window.err = err;
             };
         },
         .leave => if (current_window) |window| if (window.interface.focused) {
-            window.events.append(window.allocator, .{ .focus = false }) catch |err| {
+            window.events.append(window.gpa, .{ .focus = false }) catch |err| {
                 window.err = err;
             };
         },
@@ -567,7 +567,7 @@ fn keyboardListener(_: *wl.Keyboard, event: wl.Keyboard.Event, io_manager: *IoMa
                 .code = key.key + 8,
                 .sym = PlatformWindow.Event.Key.Sym.fromXkb(sym) orelse return,
             };
-            window.events.append(window.allocator, .{ .key = window_event }) catch |err| {
+            window.events.append(window.gpa, .{ .key = window_event }) catch |err| {
                 window.err = err;
             };
         },
@@ -585,7 +585,7 @@ fn pointerListener(_: *wl.Pointer, event: wl.Pointer.Event, io_manager: *IoManag
         .leave => {},
         .motion => |motion| {
             const mouse_motion: PlatformWindow.Event.MouseMotion = .{ .x = motion.surface_x.toDouble(), .y = motion.surface_y.toDouble() };
-            window.events.append(window.allocator, .{ .mouse_motion = mouse_motion }) catch |err| {
+            window.events.append(window.gpa, .{ .mouse_motion = mouse_motion }) catch |err| {
                 window.err = err;
             };
         },
@@ -594,7 +594,7 @@ fn pointerListener(_: *wl.Pointer, event: wl.Pointer.Event, io_manager: *IoManag
                 .state = @enumFromInt(@intFromEnum(button.state)),
                 .button = PlatformWindow.Event.MouseButton.Button.fromWayland(button.button).?,
             };
-            window.events.append(window.allocator, .{ .mouse_button = mouse_button }) catch |err| {
+            window.events.append(window.gpa, .{ .mouse_button = mouse_button }) catch |err| {
                 window.err = err;
             };
         },
@@ -604,7 +604,7 @@ fn pointerListener(_: *wl.Pointer, event: wl.Pointer.Event, io_manager: *IoManag
                 .horizontal_scroll => .{ .horizontal = axis.value.toDouble() / 10.0 },
                 _ => unreachable,
             };
-            window.events.append(window.allocator, .{ .mouse_scroll = mouse_scroll }) catch |err| {
+            window.events.append(window.gpa, .{ .mouse_scroll = mouse_scroll }) catch |err| {
                 window.err = err;
             };
         },
@@ -620,10 +620,10 @@ fn touchListener(_: *wl.Touch, event: wl.Touch.Event, io_manager: *IoManager) vo
                 .x = down.x.toDouble(),
                 .y = down.y.toDouble(),
             };
-            window.events.append(window.allocator, .{ .touch_down = touch_down }) catch |err| {
+            window.events.append(window.gpa, .{ .touch_down = touch_down }) catch |err| {
                 window.err = err;
             };
-            io_manager.active_touches.put(window.allocator, touch_down.id, .{
+            io_manager.active_touches.put(window.gpa, touch_down.id, .{
                 .x = touch_down.x,
                 .y = touch_down.y,
             }) catch |err| {
@@ -637,7 +637,7 @@ fn touchListener(_: *wl.Touch, event: wl.Touch.Event, io_manager: *IoManager) vo
                 .x = touch_position.x,
                 .y = touch_position.y,
             };
-            window.events.append(window.allocator, .{ .touch_up = touch_up }) catch |err| {
+            window.events.append(window.gpa, .{ .touch_up = touch_up }) catch |err| {
                 window.err = err;
             };
         },
@@ -647,10 +647,10 @@ fn touchListener(_: *wl.Touch, event: wl.Touch.Event, io_manager: *IoManager) vo
                 .x = motion.x.toDouble(),
                 .y = motion.y.toDouble(),
             };
-            window.events.append(window.allocator, .{ .touch_motion = touch_motion }) catch |err| {
+            window.events.append(window.gpa, .{ .touch_motion = touch_motion }) catch |err| {
                 window.err = err;
             };
-            io_manager.active_touches.put(window.allocator, touch_motion.id, .{
+            io_manager.active_touches.put(window.gpa, touch_motion.id, .{
                 .x = touch_motion.x,
                 .y = touch_motion.y,
             }) catch |err| {
@@ -658,7 +658,7 @@ fn touchListener(_: *wl.Touch, event: wl.Touch.Event, io_manager: *IoManager) vo
             };
         },
         .cancel => {
-            io_manager.active_touches.clearAndFree(window.allocator);
+            io_manager.active_touches.clearAndFree(window.gpa);
         },
         .frame => {},
     }
@@ -674,24 +674,24 @@ fn xdgSurfaceListener(xdg_surface: *xdg.Surface, event: xdg.Surface.Event, confi
 }
 
 fn xdgToplevelListener(_: *xdg.Toplevel, event: xdg.Toplevel.Event, window: *Window) void {
-    const allocator = window.allocator;
+    const gpa = window.gpa;
     switch (event) {
         .configure => |configure| {
             const size: PlatformWindow.Size = .{ .width = @intCast(configure.width), .height = @intCast(configure.height) };
             if (!size.eql(.{}))
-                window.events.append(allocator, .{ .resize = size }) catch |err| {
+                window.events.append(gpa, .{ .resize = size }) catch |err| {
                     window.err = err;
                 };
 
             for (configure.states.slice(xdg.Toplevel.State)) |state| if (state == .activated and window.interface.focused) {
                 if (window.interface.focused == true) return;
-                window.events.append(allocator, .{ .focus = true }) catch |err| {
+                window.events.append(gpa, .{ .focus = true }) catch |err| {
                     window.err = err;
                 };
             };
         },
         .close => {
-            window.events.append(window.allocator, .close) catch |err| {
+            window.events.append(window.gpa, .close) catch |err| {
                 window.err = err;
             };
             window.running = false;

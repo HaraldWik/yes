@@ -7,6 +7,8 @@ pub fn build(b: *std.Build) void {
     const yes = b.dependency("yes", .{
         .target = target,
         .optimize = optimize,
+        // .wayland_backend = <none, libwayland (default)>,
+        // .x_backend = <none, xcb (default), xlib (default when OpenGL), xpz>,
     }).module("yes");
 
     const exe = b.addExecutable(.{

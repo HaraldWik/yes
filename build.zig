@@ -1,5 +1,10 @@
 const std = @import("std");
 
+pub const WaylandBackend = enum {
+    none,
+    libwayland,
+};
+
 pub const XBackend = enum {
     none,
     xcb,
@@ -23,8 +28,8 @@ pub fn build(b: *std.Build) void {
     });
 
     const opengl_option = b.option(bool, "opengl", "Link with native OpenGL libs") orelse false;
-    const libwayland_option = b.option(bool, "libwayland", "Links with wayland libraries") orelse true; // Linux
-    const x_backend_option = b.option(XBackend, "x_backend", "Which X backend") orelse .xcb; // Linux
+    const wayland_backend_option = b.option(WaylandBackend, "wayland_backend", "Which Wayland backend to use by default") orelse .libwayland; // Linux
+    const x_backend_option = b.option(XBackend, "x_backend", "Which X backend to use by default") orelse @as(XBackend, if (opengl_option) .xlib else .xcb); // Linux
     const glfw_option = b.option(bool, "glfw", "Allow usage of glfw backend") orelse false;
 
     if (glfw_option) {
@@ -44,13 +49,17 @@ pub fn build(b: *std.Build) void {
 
         mod.addImport("glfw", glfw.createModule());
         mod.linkLibrary(glfw_lib);
+        return;
     }
 
     switch (target.result.os.tag) {
         .windows => {},
         .macos => {},
         else => {
-            if (libwayland_option) addWayland(b, mod, target, optimize);
+            switch (wayland_backend_option) {
+                .none => {},
+                .libwayland => addWayland(b, mod, target, optimize),
+            }
 
             switch (x_backend_option) {
                 .none => {},
@@ -67,7 +76,7 @@ pub fn build(b: *std.Build) void {
             if (x_backend_option != .none and opengl_option) {
                 mod.linkSystemLibrary("glx", .{});
             }
-            if (libwayland_option and opengl_option) {
+            if (wayland_backend_option != .none and opengl_option) {
                 mod.linkSystemLibrary("EGL", .{ .weak = true });
                 mod.linkSystemLibrary("wayland-egl", .{ .weak = true });
             }
@@ -76,8 +85,8 @@ pub fn build(b: *std.Build) void {
 
     const options = b.addOptions();
     options.addOption(bool, "opengl", opengl_option);
+    options.addOption(WaylandBackend, "wayland_backend", wayland_backend_option);
     options.addOption(XBackend, "x_backend", x_backend_option);
-    options.addOption(bool, "libwayland", libwayland_option);
     options.addOption(bool, "glfw", glfw_option);
     mod.addOptions("build_options", options);
 

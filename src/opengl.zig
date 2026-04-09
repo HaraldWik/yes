@@ -40,8 +40,11 @@ pub fn swapInterval(platform: Platform, window: *Window, interval: i32) !void {
     try platform.vtable.windowOpenglSwapInterval(platform.ptr, window, interval);
 }
 
-fn invalid() callconv(.c) void {
-    std.debug.panic("attempted to call native GLX or EGL function while OpenGL build option is set to false", .{});
+fn invalid() callconv(.c) noreturn {
+    switch (builtin.mode) {
+        .Debug, .ReleaseSafe => std.debug.panic("attempted to call native GLX or EGL function while OpenGL build option is set to false", .{}),
+        else => return noreturn,
+    }
 }
 
 comptime {
@@ -61,7 +64,7 @@ comptime {
         @export(&invalid, .{ .name = "glXSwapBuffers" });
     }
 
-    if (need_fake_exports and build_options.libwayland and !build_options.opengl) {
+    if (need_fake_exports and build_options.wayland_backend != .none and !build_options.opengl) {
         @export(&invalid, .{ .name = "eglGetProcAddress" });
         @export(&invalid, .{ .name = "eglGetDisplay" });
         @export(&invalid, .{ .name = "eglInitialize" });

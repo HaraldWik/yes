@@ -17,7 +17,10 @@ pub const Inner = if (build_options.glfw) Platform.Glfw else switch (builtin.os.
         Platform.Web
     else
         union(enum) {
-            wayland: if (build_options.libwayland) Platform.Wayland else void,
+            wayland: switch (build_options.wayland_backend) {
+                .none => void,
+                .libwayland => Platform.Wayland,
+            },
             x: switch (build_options.x_backend) {
                 .none => void,
                 .xcb => Platform.Xcb,
@@ -29,7 +32,10 @@ pub const Inner = if (build_options.glfw) Platform.Glfw else switch (builtin.os.
 
 pub const Window = struct {
     inner: if (@hasDecl(Inner, "Window")) Inner.Window else union {
-        wayland: Platform.Wayland.Window,
+        wayland: switch (build_options.wayland_backend) {
+            .none => void,
+            .libwayland => Platform.Wayland.Window,
+        },
         x: switch (build_options.x_backend) {
             .none => void,
             .xcb => Platform.Xcb.Window,
@@ -46,8 +52,8 @@ pub const Window = struct {
             else => if (is_wasm)
                 .{ .inner = .{} }
             else switch (cross.inner) {
-                .wayland => if (build_options.libwayland) .{ .inner = .{ .wayland = .{} } } else undefined,
-                .x => .{ .inner = .{ .x = .{} } },
+                .wayland => if (build_options.wayland_backend != .none) .{ .inner = .{ .wayland = .{} } } else unreachable,
+                .x => if (build_options.x_backend != .none) .{ .inner = .{ .x = .{} } } else unreachable,
             },
         };
     }
@@ -60,8 +66,8 @@ pub const Window = struct {
             else => if (is_wasm)
                 &self.inner.interface
             else switch (cross.inner) {
-                .wayland => if (build_options.libwayland) &self.inner.wayland.interface else unreachable,
-                .x => &self.inner.x.interface,
+                .wayland => if (build_options.wayland_backend != .none) &self.inner.wayland.interface else unreachable,
+                .x => if (build_options.x_backend != .none) &self.inner.x.interface else unreachable,
             },
         };
     }
@@ -80,13 +86,15 @@ pub fn init(gpa: std.mem.Allocator, io: std.Io, minimal: std.process.Init.Minima
 
 fn initUnix(gpa: std.mem.Allocator, io: std.Io, minimal: std.process.Init.Minimal) !@This() {
     const session_type: Platform.unix.SessionType =
-        if (build_options.libwayland and build_options.x_backend != .none)
+        if (build_options.wayland_backend != .none and build_options.x_backend != .none)
             Platform.unix.SessionType.detect(minimal) orelse .wayland
-        else
-            .wayland;
+        else if (build_options.wayland_backend != .none) .wayland else if (build_options.x_backend != .none) .x11 else @compileError("no x or wayland backend available");
 
     return switch (session_type) {
-        .wayland => if (build_options.libwayland) .{ .inner = .{ .wayland = try .init(gpa) } } else unreachable,
+        .wayland => .{ .inner = .{ .wayland = try switch (build_options.wayland_backend) {
+            .none => return error.WaylandUnsupported,
+            .libwayland => Platform.Wayland.init(gpa),
+        } } },
         .x11 => .{ .inner = .{ .x = try switch (build_options.x_backend) {
             .none => return error.XUnsupported,
             .xcb => Platform.Xcb.init(gpa, minimal),
@@ -104,8 +112,8 @@ pub fn deinit(self: *@This()) void {
         else => if (is_wasm)
             self.inner.deinit()
         else switch (self.inner) {
-            .wayland => if (build_options.libwayland) self.inner.wayland.deinit() else unreachable,
-            .x => self.inner.x.deinit(),
+            .wayland => if (build_options.wayland_backend != .none) self.inner.wayland.deinit(),
+            .x => if (build_options.x_backend != .none) self.inner.x.deinit(),
         },
     }
 }
@@ -117,8 +125,8 @@ pub fn platform(self: *@This()) Platform {
         else => if (is_wasm)
             self.inner.platform()
         else switch (self.inner) {
-            .wayland => if (build_options.libwayland) self.inner.wayland.platform() else unreachable,
-            .x => self.inner.x.platform(),
+            .wayland => if (build_options.wayland_backend != .none) self.inner.wayland.platform() else unreachable,
+            .x => if (build_options.x_backend != .none) self.inner.x.platform() else unreachable,
         },
     };
 }
