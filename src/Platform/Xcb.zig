@@ -21,28 +21,45 @@ pub const AtomTable = struct {
     utf8_string: xcb.xcb_atom_t,
     wm: struct {
         protocols: xcb.xcb_atom_t,
-        name: xcb.xcb_atom_t,
     },
     net_wm: struct {
         name: xcb.xcb_atom_t,
+        state: xcb.xcb_atom_t,
+        state_fullscreen: xcb.xcb_atom_t,
+        state_maximized_horz: xcb.xcb_atom_t,
+        state_maximized_vert: xcb.xcb_atom_t,
+        state_above: xcb.xcb_atom_t,
+        active_window: xcb.xcb_atom_t,
     },
+    motif_wm_hints: xcb.xcb_atom_t,
 
     pub fn load(connection: *xcb.xcb_connection_t) @This() {
         const utf8_string_cookie = cookie(connection, "UTF8_STRING");
         const wm_protocols_cookie = cookie(connection, "WM_PROTOCOLS");
-        const wm_name_cookie = cookie(connection, "WM_NAME");
-
         const net_wm_name_cookie = cookie(connection, "_NET_WM_NAME");
+        const net_wm_state_cookie = cookie(connection, "_NET_WM_STATE");
+        const net_wm_state_fullscreen_cookie = cookie(connection, "_NET_WM_STATE_FULLSCREEN");
+        const net_wm_state_maximized_horz_cookie = cookie(connection, "_NET_WM_STATE_MAXIMIZED_HORZ");
+        const net_wm_state_maximized_vert_cookie = cookie(connection, "_NET_WM_STATE_MAXIMIZED_VERT");
+        const net_wm_state_above_cookie = cookie(connection, "_NET_WM_STATE_ABOVE");
+        const motif_wm_hints_cookie = cookie(connection, "_MOTIF_WM_HINTS");
+        const net_wm_active_window_cookie = cookie(connection, "_NET_ACTIVE_WINDOW");
 
         return .{
             .utf8_string = atom(connection, utf8_string_cookie),
             .wm = .{
                 .protocols = atom(connection, wm_protocols_cookie),
-                .name = atom(connection, wm_name_cookie),
             },
             .net_wm = .{
                 .name = atom(connection, net_wm_name_cookie),
+                .state = atom(connection, net_wm_state_cookie),
+                .state_fullscreen = atom(connection, net_wm_state_fullscreen_cookie),
+                .state_maximized_horz = atom(connection, net_wm_state_maximized_horz_cookie),
+                .state_maximized_vert = atom(connection, net_wm_state_maximized_vert_cookie),
+                .state_above = atom(connection, net_wm_state_above_cookie),
+                .active_window = atom(connection, net_wm_active_window_cookie),
             },
+            .motif_wm_hints = atom(connection, motif_wm_hints_cookie),
         };
     }
 
@@ -280,7 +297,14 @@ fn windowOpen(context: *anyopaque, platform_window: *PlatformWindow, options: Pl
 
     try windowSetProperty(context, platform_window, .{ .title = options.title });
 
-    _ = xcb.xcb_flush(self.connection);
+    if (options.resize_policy == .specified) try windowSetProperty(context, platform_window, .{ .resize_policy = options.resize_policy });
+    if (options.fullscreen) try windowSetProperty(context, platform_window, .{ .fullscreen = options.fullscreen });
+    if (options.maximized) try windowSetProperty(context, platform_window, .{ .maximized = options.maximized });
+    if (options.minimized) try windowSetProperty(context, platform_window, .{ .minimized = options.minimized });
+    if (!options.focused) try windowSetProperty(context, platform_window, .{ .focused = options.focused });
+    if (options.always_on_top) try windowSetProperty(context, platform_window, .{ .always_on_top = options.always_on_top });
+    if (options.floating) |floating| try windowSetProperty(context, platform_window, .{ .floating = floating });
+    if (!options.decorated) try windowSetProperty(context, platform_window, .{ .decorated = options.decorated });
 
     switch (options.surface_type) {
         .opengl => {
@@ -468,26 +492,176 @@ fn windowSetProperty(context: *anyopaque, platform_window: *PlatformWindow, prop
 
     switch (property) {
         .title => |title| {
-            _ = xcb.xcb_change_property(self.connection, xcb.XCB_PROP_MODE_REPLACE, window.id, self.atom_table.wm.name, xcb.XCB_ATOM_STRING, 8, @intCast(title.len), title.ptr);
+            _ = xcb.xcb_change_property(self.connection, xcb.XCB_PROP_MODE_REPLACE, window.id, xcb.XCB_ATOM_WM_NAME, xcb.XCB_ATOM_STRING, 8, @intCast(title.len), title.ptr);
             _ = xcb.xcb_change_property(self.connection, xcb.XCB_PROP_MODE_REPLACE, window.id, self.atom_table.net_wm.name, self.atom_table.utf8_string, 8, @intCast(title.len), title.ptr);
         },
-        .size => {},
-        .position => {},
-        .resize_policy => |resize_policy| switch (resize_policy) {
-            .resizable => |resizable| {
-                _ = resizable;
-            },
-            .specified => |specified| {
-                _ = specified;
-            },
+        .size => |size| {
+            var values = [_]u32{ size.width, size.height };
+
+            _ = xcb.xcb_configure_window(
+                self.connection,
+                window.id,
+                xcb.XCB_CONFIG_WINDOW_WIDTH | xcb.XCB_CONFIG_WINDOW_HEIGHT,
+                &values,
+            );
         },
-        .fullscreen => {},
-        .maximized => {},
-        .minimized => {},
-        .always_on_top => {},
+        .position => |position| {
+            var values = [_]u32{ @intCast(position.x), @intCast(position.y) };
+
+            _ = xcb.xcb_configure_window(
+                self.connection,
+                window.id,
+                xcb.XCB_CONFIG_WINDOW_X | xcb.XCB_CONFIG_WINDOW_Y,
+                &values,
+            );
+        },
+        .resize_policy => |resize_policy| {
+            var hints: xcb.xcb_size_hints_t = .{};
+
+            switch (resize_policy) {
+                .resizable => |resizable| if (!resizable) {
+                    const size = window.interface.size;
+                    xcb.xcb_icccm_size_hints_set_max_size(&hints, @intCast(size.width), @intCast(size.height));
+                    xcb.xcb_icccm_size_hints_set_min_size(&hints, @intCast(size.width), @intCast(size.height));
+                },
+                .specified => |specified| {
+                    if (specified.max_size) |size| xcb.xcb_icccm_size_hints_set_max_size(&hints, @intCast(size.width), @intCast(size.height));
+                    if (specified.min_size) |size| xcb.xcb_icccm_size_hints_set_min_size(&hints, @intCast(size.width), @intCast(size.height));
+                },
+            }
+
+            _ = xcb.xcb_icccm_set_wm_normal_hints(self.connection, window.id, &hints);
+        },
+        .fullscreen => |fullscreen| {
+            var event: xcb.xcb_client_message_event_t = .{
+                .response_type = xcb.XCB_CLIENT_MESSAGE,
+                .format = 32,
+                .window = window.id,
+                .type = self.atom_table.net_wm.state,
+                .data = .{ .data32 = .{
+                    @intFromBool(fullscreen),
+                    self.atom_table.net_wm.state_fullscreen,
+                    0,
+                    0,
+                    0,
+                } },
+            };
+
+            _ = xcb.xcb_send_event(self.connection, 0, self.screen.root, xcb.XCB_EVENT_MASK_SUBSTRUCTURE_REDIRECT | xcb.XCB_EVENT_MASK_SUBSTRUCTURE_NOTIFY, @ptrCast(&event));
+        },
+        .maximized => |maximized| {
+            var event: xcb.xcb_client_message_event_t = .{
+                .response_type = xcb.XCB_CLIENT_MESSAGE,
+                .format = 32,
+                .window = window.id,
+                .type = self.atom_table.net_wm.state,
+                .data = .{ .data32 = .{
+                    @intFromBool(maximized),
+                    self.atom_table.net_wm.state_maximized_horz,
+                    self.atom_table.net_wm.state_maximized_vert,
+                    0,
+                    0,
+                } },
+            };
+
+            _ = xcb.xcb_send_event(self.connection, 0, self.screen.root, xcb.XCB_EVENT_MASK_SUBSTRUCTURE_REDIRECT | xcb.XCB_EVENT_MASK_SUBSTRUCTURE_NOTIFY, @ptrCast(&event));
+        },
+        .minimized => |minimized| {
+            _ = if (minimized)
+                xcb.xcb_unmap_window(self.connection, window.id)
+            else
+                xcb.xcb_map_window(self.connection, window.id);
+        },
+        .always_on_top => |always_on_top| {
+            var event: xcb.xcb_client_message_event_t = .{
+                .response_type = xcb.XCB_CLIENT_MESSAGE,
+                .format = 32,
+                .window = window.id,
+                .type = self.atom_table.net_wm.state,
+                .data = .{ .data32 = .{
+                    @intFromBool(always_on_top),
+                    self.atom_table.net_wm.state_above,
+                    0,
+                    0,
+                    0,
+                } },
+            };
+
+            _ = xcb.xcb_send_event(self.connection, 0, self.screen.root, xcb.XCB_EVENT_MASK_SUBSTRUCTURE_REDIRECT | xcb.XCB_EVENT_MASK_SUBSTRUCTURE_NOTIFY, @ptrCast(&event));
+        },
         .floating => {},
-        .decorated => {},
-        .focused => {},
+        .decorated => |decorated| {
+            const MotifHints = extern struct {
+                flags: u32,
+                functions: u32,
+                decorations: u32,
+                input_mode: i32,
+                status: u32,
+            };
+            const MWM_HINTS_DECORATIONS = 1 << 1;
+
+            var hints = MotifHints{
+                .flags = MWM_HINTS_DECORATIONS,
+                .functions = 0,
+                .decorations = @intFromBool(decorated),
+                .input_mode = 0,
+                .status = 0,
+            };
+
+            _ = xcb.xcb_change_property(
+                self.connection,
+                xcb.XCB_PROP_MODE_REPLACE,
+                window.id,
+                self.atom_table.motif_wm_hints,
+                self.atom_table.motif_wm_hints,
+                32,
+                @sizeOf(MotifHints) / 4,
+                &hints,
+            );
+        },
+        .focused => |focused| if (focused) {
+            _ = xcb.xcb_set_input_focus(
+                self.connection,
+                xcb.XCB_INPUT_FOCUS_POINTER_ROOT, // or XCB_INPUT_FOCUS_PARENT
+                window.id,
+                xcb.XCB_CURRENT_TIME,
+            );
+
+            var event: xcb.xcb_client_message_event_t = .{
+                .response_type = xcb.XCB_CLIENT_MESSAGE,
+                .format = 32,
+                .window = window.id,
+                .type = self.atom_table.net_wm.state,
+                .data = .{ .data32 = .{
+                    @intFromBool(focused),
+                    self.atom_table.net_wm.active_window,
+                    0,
+                    0,
+                    0,
+                } },
+            };
+
+            _ = xcb.xcb_send_event(self.connection, 0, self.screen.root, xcb.XCB_EVENT_MASK_SUBSTRUCTURE_REDIRECT | xcb.XCB_EVENT_MASK_SUBSTRUCTURE_NOTIFY, @ptrCast(&event));
+        } else {
+            _ = xcb.xcb_set_input_focus(
+                self.connection,
+                xcb.XCB_INPUT_FOCUS_POINTER_ROOT,
+                self.screen.root,
+                xcb.XCB_CURRENT_TIME,
+            );
+
+            var event: xcb.xcb_client_message_event_t = .{
+                .response_type = xcb.XCB_CLIENT_MESSAGE,
+                .format = 32,
+                .window = 0, // no specific window,
+                .type = self.atom_table.net_wm.active_window,
+                .data = .{ .data32 = .{
+                    1, xcb.XCB_CURRENT_TIME, 0, 0, 0,
+                } },
+            };
+
+            _ = xcb.xcb_send_event(self.connection, 0, self.screen.root, xcb.XCB_EVENT_MASK_SUBSTRUCTURE_REDIRECT | xcb.XCB_EVENT_MASK_SUBSTRUCTURE_NOTIFY, @ptrCast(&event));
+        },
         .cursor => {},
     }
     _ = xcb.xcb_flush(self.connection);
@@ -514,18 +688,13 @@ fn windowOpenglMakeCurrent(context: *anyopaque, platform_window: *PlatformWindow
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
 
-    _ = self;
-    _ = window;
-
-    // xcb.xcb_glx_make_current();
+    _ = xcb.xcb_glx_make_current(self.connection, window.id, window.glx.context, 0);
 }
 fn windowOpenglSwapBuffers(context: *anyopaque, platform_window: *PlatformWindow) anyerror!void {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
 
-    _ = self;
-    _ = window;
-    // xcb.xcb_glx_swap_buffers(c: ?*struct_xcb_connection_t, context_tag: u32, drawable: u32)
+    _ = xcb.xcb_glx_swap_buffers(self.connection, 0, window.id);
 }
 fn windowOpenglSwapInterval(context: *anyopaque, platform_window: *PlatformWindow, interval: i32) anyerror!void {
     const self: *@This() = @ptrCast(@alignCast(context));

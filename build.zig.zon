@@ -20,8 +20,8 @@
         },
 
         .xcb = .{
-            .url = "git+https://github.com/HaraldWik/zig-xcb/#e46b51f68eac18b9ea3781ec81ca80eb59f64a93",
-            .hash = "xcb-0.0.0-x0nviD8pUgAmxcmVDj0VcukMC7X1CyLCowthSkcTBb58",
+            .url = "git+https://github.com/HaraldWik/zig-xcb#530deb4c388f7911c379aa78e91a3de693af9014",
+            .hash = "xcb-0.0.0-x0nviN81UwDeojIuSWebnowKsqm-RYnbWfftCUNwLsnK",
             .lazy = true,
         },
         .xlib = .{
