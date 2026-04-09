@@ -764,14 +764,13 @@ fn windowVulkanCreateSurface(context: *anyopaque, platform_window: *PlatformWind
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
     _ = self;
 
-    const xcb_locations: []const [*:0]const u8 = &.{
-        "/lib/x86_64-linux-gnu/libxcb.so.1",
-        "/usr/lib/x86_64-linux-gnu/libxcb.so.1",
-        "/lib/libxcb.so.1",
-        "/usr/lib/libxcb.so.1",
+    const xcb_lib_names: []const [*:0]const u8 = &.{
+        "libxcb.so.1",
+        "libxcb.so.0",
+        "libxcb.so",
     };
 
-    var xcb_lib: std.DynLib = for (xcb_locations) |location| {
+    var xcb_lib: std.DynLib = for (xcb_lib_names) |location| {
         break std.DynLib.openZ(location) catch |err| switch (err) {
             error.FileNotFound => continue,
             else => return err,
