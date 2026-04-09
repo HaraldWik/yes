@@ -83,9 +83,13 @@ pub const Window = struct {
     id: xcb.xcb_window_t = 0,
     event_queue: std.ArrayList(PlatformWindow.Event) = .empty,
     wm_delete_atom: xcb.xcb_atom_t = 0,
-    glx: struct {
-        context: xcb.xcb_glx_context_t = 0,
-    } = .{},
+    surface: union {
+        empty: void,
+        framebuffer: Framebuffer,
+        glx: struct {
+            context: xcb.xcb_glx_context_t,
+        },
+    } = .{ .empty = {} },
 };
 
 pub fn init(gpa: std.mem.Allocator, minimal: std.process.Init.Minimal) !@This() {
@@ -172,6 +176,22 @@ fn windowOpen(context: *anyopaque, platform_window: *PlatformWindow, options: Pl
     var fb_config: xcb.xcb_glx_fbconfig_t = 0;
 
     const visual: xcb.xcb_visualid_t = switch (options.surface_type) {
+        .empty => self.screen.root_visual,
+        .framebuffer => visual: {
+            var depth_iter = xcb.xcb_screen_allowed_depths_iterator(self.screen);
+            while (depth_iter.rem > 0) : (xcb.xcb_depth_next(&depth_iter)) {
+                const depth: *xcb.xcb_depth_t = depth_iter.data.?;
+                if (depth.depth != 32) continue;
+
+                var visual_iter = xcb.xcb_depth_visuals_iterator(depth);
+                while (visual_iter.rem > 0) : (xcb.xcb_visualtype_next(&visual_iter)) {
+                    const visual: *xcb.xcb_visualtype_t = visual_iter.data.?;
+                    if (visual.bits_per_rgb_value != 8) continue;
+                    break :visual visual.visual_id;
+                }
+            }
+            return error.NoVisualWithFramebufferSupports;
+        },
         .opengl => visual: {
             const cookie = xcb.xcb_glx_get_fb_configs(self.connection, self.screen_index);
             const configs_reply: *xcb.xcb_glx_get_fb_configs_reply_t =
@@ -216,7 +236,7 @@ fn windowOpen(context: *anyopaque, platform_window: *PlatformWindow, options: Pl
 
             break :visual @intCast(chosen_visual_id);
         },
-        else => self.screen.root_visual,
+        .vulkan => self.screen.root_visual,
     };
 
     const mask: u32 = xcb.XCB_CW_EVENT_MASK;
@@ -235,7 +255,7 @@ fn windowOpen(context: *anyopaque, platform_window: *PlatformWindow, options: Pl
 
     _ = xcb.xcb_create_window(
         self.connection,
-        xcb.XCB_COPY_FROM_PARENT,
+        if (options.surface_type == .framebuffer) 32 else xcb.XCB_COPY_FROM_PARENT,
         window.id,
         self.screen.root,
         if (options.position) |position| @intCast(position.x) else 0,
@@ -307,6 +327,10 @@ fn windowOpen(context: *anyopaque, platform_window: *PlatformWindow, options: Pl
     if (!options.decorated) try windowSetProperty(context, platform_window, .{ .decorated = options.decorated });
 
     switch (options.surface_type) {
+        .empty => {},
+        .framebuffer => {
+            window.surface = .{ .framebuffer = try .init(self.connection) };
+        },
         .opengl => {
             const context_id: xcb.xcb_glx_context_t = xcb.xcb_generate_id(self.connection);
 
@@ -319,12 +343,11 @@ fn windowOpen(context: *anyopaque, platform_window: *PlatformWindow, options: Pl
                 ).sequence,
             };
 
-            const err = xcb.xcb_request_check(self.connection, cookie);
-            if (err != null) return error.MakeCurrentFailed;
+            if (xcb.xcb_request_check(self.connection, cookie) != null) return error.MakeCurrentFailed;
 
-            _ = xcb.xcb_flush(self.connection);
+            window.surface = .{ .glx = .{ .context = context_id } };
         },
-        else => {},
+        .vulkan => {},
     }
 
     try window.event_queue.append(self.gpa, .{ .resize = options.size });
@@ -365,6 +388,7 @@ fn windowPoll(context: *anyopaque, platform_window: *PlatformWindow) anyerror!?P
         xcb.XCB_CONFIGURE_NOTIFY => {
             const event: *xcb.xcb_configure_notify_event_t = @ptrCast(generic_event);
             target_id = event.window;
+            const target, _ = self.windowFromId(target_id).?;
 
             const translate: *xcb.xcb_translate_coordinates_reply_t =
                 xcb.xcb_translate_coordinates_reply(self.connection, xcb.xcb_translate_coordinates(self.connection, event.window, self.screen.root, @intCast(event.x), @intCast(event.y)), null).?;
@@ -372,19 +396,36 @@ fn windowPoll(context: *anyopaque, platform_window: *PlatformWindow) anyerror!?P
             const size: PlatformWindow.Size = .{ .width = @intCast(event.width), .height = @intCast(event.height) };
             const position: PlatformWindow.Position = .{ .x = @intCast(translate.dst_x), .y = @intCast(translate.dst_y) };
 
-            if (position.x != window.interface.position.x or
-                position.y != window.interface.position.y)
+            if (position.x != target.interface.position.x or
+                position.y != target.interface.position.y)
             {
                 out_event = .{ .move = position };
             }
 
-            if (window.interface.surface_type != .vulkan and window.interface.surface_type != .opengl and !size.eql(window.interface.size))
-                try window.event_queue.append(self.gpa, .{ .resize = size });
+            switch (target.interface.surface_type) {
+                .empty => if (!size.eql(target.interface.size)) try target.event_queue.append(self.gpa, .{ .resize = size }),
+                .framebuffer => if (!size.eql(target.interface.size)) {
+                    try target.event_queue.append(self.gpa, .{ .resize = size });
+
+                    if (target.interface.surface_type == .framebuffer) {
+                        try target.surface.framebuffer.resize(self.connection, target.id, size);
+                    }
+                },
+                .opengl, .vulkan => {},
+            }
         },
         xcb.XCB_EXPOSE => {
             const event: *xcb.xcb_expose_event_t = @ptrCast(generic_event);
+            target_id = event.window;
+            const target, _ = self.windowFromId(target_id).?;
+
             const size: PlatformWindow.Size = .{ .width = @intCast(event.width), .height = @intCast(event.height) };
-            if (window.interface.surface_type == .vulkan or window.interface.surface_type == .opengl) out_event = .{ .resize = size };
+            if (target.interface.surface_type == .vulkan or target.interface.surface_type == .opengl) out_event = .{ .resize = size };
+
+            if (target.interface.surface_type == .framebuffer) {
+                _ = xcb.xcb_render_composite(self.connection, xcb.XCB_RENDER_PICT_OP_OVER, target.surface.framebuffer.picture, 0, target.surface.framebuffer.picture, 0, 0, 0, 0, 0, 0, @intCast(size.width), @intCast(size.height));
+                _ = xcb.xcb_flush(self.connection);
+            }
         },
 
         xcb.XCB_FOCUS_IN => {
@@ -478,12 +519,12 @@ fn windowPoll(context: *anyopaque, platform_window: *PlatformWindow) anyerror!?P
         };
     }
 
-    if (out_event) |event| {
-        if (window.id == target_id) return event else {
-            const target, _ = self.windowFromId(target_id).?;
+    if (out_event) |event| if (window.id == target_id) return out_event else {
+        const target, _ = self.windowFromId(target_id).?;
+        if (window.id == target.id) return event else {
             try target.event_queue.append(self.gpa, event);
         }
-    }
+    };
     return windowPoll(context, platform_window);
 }
 fn windowSetProperty(context: *anyopaque, platform_window: *PlatformWindow, property: PlatformWindow.Property) anyerror!void {
@@ -680,15 +721,29 @@ fn windowFramebuffer(context: *anyopaque, platform_window: *PlatformWindow) anye
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
 
+    // const cookie = xcb.xcb_get_image(self.connection, xcb.XCB_IMAGE_FORMAT_Z_PIXMAP, // format
+    //     window.surface.framebuffer.pixmap, // your framebuffer pixmap
+    //     0, 0, // x, y
+    //     @intCast(window.interface.size.width), @intCast(window.interface.size.height), // size
+    //     0xFFFFFFFF // plane mask (all planes)
+    // );
+
+    // const reply = xcb.xcb_get_image_reply(self.connection, cookie, null);
+    // if (reply == null) return error.ImageReadFailed;
+
+    // const pixels: [*]u8 = @ptrCast(reply + 1);
+
+    // return .{ .pixels = pixels };
+
     _ = self;
     _ = window;
-    return .{ .pixels = undefined };
+    return undefined;
 }
 fn windowOpenglMakeCurrent(context: *anyopaque, platform_window: *PlatformWindow) anyerror!void {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
 
-    _ = xcb.xcb_glx_make_current(self.connection, window.id, window.glx.context, 0);
+    _ = xcb.xcb_glx_make_current(self.connection, window.id, window.surface.glx.context, 0);
 }
 fn windowOpenglSwapBuffers(context: *anyopaque, platform_window: *PlatformWindow) anyerror!void {
     const self: *@This() = @ptrCast(@alignCast(context));
@@ -719,3 +774,80 @@ fn windowVulkanCreateSurface(context: *anyopaque, platform_window: *PlatformWind
     if (vkCreateXcbSurfaceKHR(instance, &create_info, allocator, &surface) != .success) return error.VkCreateXlibSurfaceKHR;
     return surface orelse error.InvalidSurface;
 }
+
+pub const Framebuffer = struct {
+    shm: struct {
+        seg: xcb.xcb_shm_seg_t,
+        id: u32,
+    },
+    picture: xcb.xcb_render_picture_t,
+    format_id: xcb.xcb_render_pictformat_t,
+    pixels: [*]align(std.heap.page_size_min) u8,
+    pub fn init(connection: *xcb.xcb_connection_t) !Framebuffer {
+        _ = connection;
+        // // Query XRender formats
+        // const formats_cookie = xcb.xcb_render.xcb_render_query_pict_formats(connection);
+        // const formats = xcb.xcb_render.xcb_render_query_pict_formats_reply(connection, formats_cookie, null) orelse return error.RenderQueryFailed;
+
+        // // Find a 32-bit format
+        // var format_info_it = xcb_render.xcb_render_query_pict_formats_formats_iterator(formats);
+        // var format_id: xcb.xcb_render_pictformat_t = 0;
+        // while (format_info_it.rem > 0) : (xcb_render.xcb_render_pictforminfo_next(&format_info_it)) {
+        //     const format_info = format_info_it.data.?;
+        //     if (format_info.depth != 32) continue;
+        //     format_id = format_info.id;
+        //     break;
+        // }
+        // if (format_id == 0) return error.NoValidFormatId;
+
+        // return Framebuffer{
+        //     .shm = .{ .seg = 0, .id = 0 },
+        //     .picture = 0,
+        //     .format_id = format_id,
+        //     .pixels = null,
+        //     .width = 0,
+        //     .height = 0,
+        //     .shmid = 0,
+        // };
+        return undefined;
+    }
+
+    pub fn resize(self: *@This(), connection: *xcb.xcb_connection_t, window: xcb.xcb_window_t, size: PlatformWindow.Size) !void {
+        _ = self;
+        _ = connection;
+        _ = window;
+        _ = size;
+        // if (self.picture != 0) xcb.xcb_render_free_picture(connection, self.picture);
+
+        // if (self.shm.seg != 0) {
+        //     _ = xcb.xcb_shm_detach(connection, self.shm.seg);
+        // }
+
+        // const channels = 4;
+        // const bytes: u32 = size.width * size.height * channels;
+
+        // // Create SHM segment
+        // self.shmid = std.posix.system.mmap(0, bytes, xcb.IPC_CREAT | 0o666) orelse return error.FailedToCreateSHM;
+        // self.shm.seg = xcb.xcb_generate_id(connection);
+        // xcb.xcb_shm_attach(connection, self.shm.seg, self.shmid, 0);
+
+        // // Create XRender picture using the SHM pixmap
+        // const shm_pixmap = xcb.xcb_generate_id(connection);
+        // xcb.xcb_shm_pixmap_create(connection, shm_pixmap, window, width, height, 32, self.shm.seg);
+
+        // self.picture = xcb.xcb_generate_id(connection);
+        // xcb_render.xcb_render_create_picture(connection, self.picture, shm_pixmap, self.format_id, 0, null);
+    }
+
+    pub fn present(self: @This(), connection: *xcb.xcb_connection_t, size: PlatformWindow.Size) void {
+        _ = xcb.xcb_render_composite(connection, xcb.XCB_RENDER_PICT_OP_OVER, // operation
+            self.picture, // source picture (your framebuffer)
+            0, // mask picture (XCB_RENDER_PICTURE_NONE)
+            self.picture, // destination picture
+            0, 0, // src_x, src_y
+            0, 0, // mask_x, mask_y
+            0, 0, // dst_x, dst_y
+            @intCast(size.width), @intCast(size.height) // area to composite
+        );
+    }
+};

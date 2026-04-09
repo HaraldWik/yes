@@ -1,5 +1,4 @@
 const std = @import("std");
-const opengl = @import("../opengl.zig");
 const vulkan = @import("../root.zig").vulkan;
 const Platform = @import("../Platform.zig");
 const PlatformWindow = @import("../Window.zig");
@@ -125,7 +124,7 @@ fn windowOpenglSwapInterval(context: *anyopaque, platform_window: *PlatformWindo
     _ = window;
     _ = interval;
 }
-fn windowVulkanCreateSurface(context: *anyopaque, platform_window: *PlatformWindow, instance: *vulkan.Instance, allocator: ?*const vulkan.AllocationCallbacks, getProcAddress: vulkan.Instance.GetProcAddress) anyerror!*vulkan.Surface {
+fn windowVulkanCreateSurface(context: *anyopaque, platform_window: *PlatformWindow, instance: *anyopaque, allocator: ?*const anyopaque, getProcAddress: vulkan.InstanceGetProcAddress) anyerror!*anyopaque {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
 

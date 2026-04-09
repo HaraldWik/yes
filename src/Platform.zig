@@ -13,13 +13,13 @@ pub const Cross = @import("Platform/Cross.zig");
 /// Default win32 api interactions
 pub const Win32 = @import("Platform/Win32.zig");
 /// Default Wayland Client
-pub const Wayland = @import("Platform/Wayland.zig");
+pub const Wayland = if (build_options.wayland_backend != .none) @import("Platform/Wayland.zig") else @compileError("libwayland backend is unavailable unless build options wayland_backend is set to .libwayland");
 /// Xcb, more modern Xlib
-pub const Xcb = if (build_options.x_backend == .xcb) @import("Platform/Xcb.zig") else @compileError("xcb backend is unavailable unless build options x_backend is set to .xcb");
+pub const Xcb = if (build_options.x_backend != .none) @import("Platform/Xcb.zig") else @compileError("xcb backend is unavailable unless build options x_backend is set to .xcb");
 /// Xlib
-pub const Xlib = if (build_options.x_backend == .xlib) @import("Platform/Xlib.zig") else @compileError("xlib backend is unavailable unless build options x_backend is set to .xlib");
+pub const Xlib = if (build_options.x_backend != .none) @import("Platform/Xlib.zig") else @compileError("xlib backend is unavailable unless build options x_backend is set to .xlib");
 /// X-protocol implementation written in zig
-pub const Xpz = if (build_options.x_backend == .xpz) @import("Platform/Xpz.zig") else @compileError("xpz backend is unavailable unless build options x_backend is set to .xpz");
+pub const Xpz = if (build_options.x_backend != .none) @import("Platform/Xpz.zig") else @compileError("xpz backend is unavailable unless build options x_backend is set to .xpz");
 /// Currently just a dummy platform
 pub const Cocoa = @import("Platform/Cocoa.zig");
 

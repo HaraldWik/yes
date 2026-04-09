@@ -106,6 +106,7 @@ pub fn addXcb(b: *std.Build, mod: *std.Build.Module, target: std.Build.ResolvedT
             \\#include <glx.h>
             \\#include <xinput.h>
             \\#include <xcb_icccm.h>
+            \\#include <shm.h>
         ),
         .target = target,
         .optimize = optimize,

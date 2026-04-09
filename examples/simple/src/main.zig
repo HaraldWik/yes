@@ -2,8 +2,9 @@ const std = @import("std");
 const builtin = @import("builtin");
 const yes = @import("yes");
 
-// example args "zig build run -- --xdg=x11"
 // example args "zig build run -- --xdg=wayland"
+// example args "zig build run -- --xdg=x11"
+// if none are selected it will detect it in yes.Platform.unix.SessionType
 
 pub fn main(init: std.process.Init) !void {
     const allocator = init.gpa;

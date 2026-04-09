@@ -79,7 +79,7 @@ pub const Window = struct {
 
     pub const Surface = union(enum) {
         empty,
-        framebuffer: Software,
+        framebuffer: Framebuffer,
         opengl: OpenGL,
         vulkan,
 
@@ -90,7 +90,7 @@ pub const Window = struct {
             window: *wl.EglWindow,
             surface: *anyopaque,
         };
-        pub const Software = struct {
+        pub const Framebuffer = struct {
             buffer: *wl.Buffer,
             pixels: [*]align(std.heap.page_size_min) u8,
         };
@@ -267,8 +267,9 @@ fn windowClose(context: *anyopaque, platform_window: *PlatformWindow) void {
     _ = self;
 
     switch (window.surface) {
-        .framebuffer => |software| {
-            software.buffer.destroy();
+        .framebuffer => |framebuffer| {
+            framebuffer.buffer.destroy();
+            windowFreeShm(window);
         },
         .opengl => |gl| {
             _ = egl.eglDestroySurface(gl.display, gl.surface);
@@ -743,4 +744,10 @@ fn windowAllocShm(window: *Window, shm: *wl.Shm) !void {
     window.wl_surface.commit();
 
     window.surface = .{ .framebuffer = .{ .buffer = buffer, .pixels = pixels.ptr } };
+}
+
+fn windowFreeShm(window: *Window) void {
+    const size = window.interface.size;
+    const length = size.width * size.height * 4;
+    std.posix.munmap(window.surface.framebuffer.pixels[0..length]);
 }

@@ -79,12 +79,13 @@ pub fn platform(self: *@This()) Platform {
             .windowClose = windowClose,
             .windowPoll = windowPoll,
             .windowSetProperty = windowSetProperty,
+            .windowNative = windowNative,
             .windowFramebuffer = windowFramebuffer,
             .windowOpenglMakeCurrent = windowOpenglMakeCurrent,
             .windowOpenglSwapBuffers = windowOpenglSwapBuffers,
             .windowOpenglSwapInterval = windowOpenglSwapInterval,
             .windowVulkanCreateSurface = windowVulkanCreateSurface,
-            .openglGetProcAddress = undefined,
+            .openglGetProcAddress = opengl.glXGetProcAddress,
         },
     };
 }
@@ -157,8 +158,8 @@ fn windowPoll(context: *anyopaque, platform_window: *PlatformWindow) anyerror!?P
         .close => .close,
         .expose => |expose| .{ .resize = .{ .width = @intCast(expose.width), .height = @intCast(expose.height) } },
         .configure_notify => |notify| .{ .move = .{ .x = @intCast(notify.x), .y = @intCast(notify.y) } },
-        .focus_in => .{ .focus = .focused },
-        .focus_out => .{ .focus = .unfocused },
+        .focus_in => .{ .focus = true },
+        .focus_out => .{ .focus = false },
         .button_press, .button_release => |button| switch (button.button()) {
             .scroll_up => .{ .mouse_scroll = .{ .vertical = 1 } },
             .scroll_down => .{ .mouse_scroll = .{ .vertical = -1 } },
@@ -214,6 +215,16 @@ fn windowSetProperty(context: *anyopaque, platform_window: *PlatformWindow, prop
         .focused => {},
         .cursor => {},
     }
+}
+fn windowNative(context: *anyopaque, platform_window: *PlatformWindow) PlatformWindow.Native {
+    const self: *@This() = @ptrCast(@alignCast(context));
+    const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
+
+    return .{ .x11 = .{
+        .display = &self.connection,
+        .window = @intCast(@intFromEnum(window.handle)),
+        .screen = @intCast(@intFromEnum(self.root_screen.window)),
+    } };
 }
 fn windowFramebuffer(context: *anyopaque, platform_window: *PlatformWindow) anyerror!PlatformWindow.Framebuffer {
     const self: *@This() = @ptrCast(@alignCast(context));
