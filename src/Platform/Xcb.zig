@@ -317,7 +317,7 @@ fn windowOpen(context: *anyopaque, platform_window: *PlatformWindow, options: Pl
 
     try windowSetProperty(context, platform_window, .{ .title = options.title });
 
-    if (options.resize_policy == .specified) try windowSetProperty(context, platform_window, .{ .resize_policy = options.resize_policy });
+    try windowSetProperty(context, platform_window, .{ .resize_policy = options.resize_policy });
     if (options.fullscreen) try windowSetProperty(context, platform_window, .{ .fullscreen = options.fullscreen });
     if (options.maximized) try windowSetProperty(context, platform_window, .{ .maximized = options.maximized });
     if (options.minimized) try windowSetProperty(context, platform_window, .{ .minimized = options.minimized });
@@ -762,11 +762,33 @@ fn windowOpenglSwapInterval(context: *anyopaque, platform_window: *PlatformWindo
 fn windowVulkanCreateSurface(context: *anyopaque, platform_window: *PlatformWindow, instance: *anyopaque, allocator: ?*const anyopaque, getProcAddress: vulkan.InstanceGetProcAddress) anyerror!*anyopaque {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
+    _ = self;
+
+    const xcb_locations: []const [*:0]const u8 = &.{
+        "/lib/x86_64-linux-gnu/libxcb.so.1",
+        "/usr/lib/x86_64-linux-gnu/libxcb.so.1",
+        "/lib/libxcb.so.1",
+        "/usr/lib/libxcb.so.1",
+    };
+
+    var xcb_lib: std.DynLib = for (xcb_locations) |location| {
+        break std.DynLib.openZ(location) catch |err| switch (err) {
+            error.FileNotFound => continue,
+            else => return err,
+        };
+    } else return error.LibXcbNotFound;
+    defer xcb_lib.close();
+
+    const xcb_connect = xcb_lib.lookup(*const fn (?[*:0]const u8, ?*c_int) callconv(.c) ?*xcb.xcb_connection_t, "xcb_connect") orelse return error.LookupXcbConnect;
+    const xcb_disconnect = xcb_lib.lookup(*const fn (*xcb.xcb_connection_t) callconv(.c) void, "xcb_connect") orelse return error.LookupXcbDisconnect;
+
+    const tmp_connection = xcb_connect(null, null) orelse return error.Connect;
+    defer xcb_disconnect(tmp_connection);
 
     const vkCreateXcbSurfaceKHR: vulkan.SurfaceCreateProc = @ptrCast(getProcAddress(instance, "vkCreateXcbSurfaceKHR") orelse return error.LoadVkCreateXlibSurfaceKHR);
 
     const create_info: vulkan.SurfaceCreateInfo = .{ .xcb = .{
-        .connection = self.connection,
+        .connection = tmp_connection,
         .window = window.id,
     } };
 

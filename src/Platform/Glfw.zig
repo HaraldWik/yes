@@ -1,12 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const build_options = @import("build_options");
-const glfw = if (false) @import("glfw") else @cImport({
-    @cInclude("GLFW/glfw3.h"); // LSP purposes only
-    @cDefine("GLFW_EXPOSE_NATIVE_X11", "1");
-    @cDefine("GLFW_EXPOSE_NATIVE_WAYLAND", "1");
-    @cInclude("GLFW/glfw3native.h");
-});
+const glfw = @import("glfw");
 const vulkan = @import("../root.zig").vulkan;
 const Platform = @import("../Platform.zig");
 const PlatformWindow = @import("../Window.zig");
@@ -154,13 +149,29 @@ fn windowSetProperty(context: *anyopaque, platform_window: *PlatformWindow, prop
 fn windowNative(context: *anyopaque, platform_window: *PlatformWindow) PlatformWindow.Native {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
+    _ = self;
 
-    return .{
-        .x11 = .{
-            .display = self.display,
-            .window = @intCast(window.handle),
+    switch (builtin.os.tag) {
+        .windows => {},
+        .macos => {},
+        else => {
+            if (glfw.glfwGetWaylandDisplay()) |display| {
+                return .{ .wayland = .{
+                    .display = display,
+                    .surface = glfw.glfwGetWaylandWindow(window.handle).?,
+                    .compositor = 0,
+                } };
+            }
+
+            if (glfw.glfwGetX11Display()) |display| {
+                return .{ .x11 = .{
+                    .display = display,
+                    .window = glfw.glfwGetX11Window(window.handle),
+                    .screen = 0,
+                } };
+            }
         },
-    };
+    }
 }
 fn windowFramebuffer(context: *anyopaque, platform_window: *PlatformWindow) anyerror!PlatformWindow.Framebuffer {
     const self: *@This() = @ptrCast(@alignCast(context));
@@ -204,17 +215,6 @@ fn windowVulkanCreateSurface(context: *anyopaque, platform_window: *PlatformWind
         // TODO: add windows support
     }
 
-    if (glfw.glfwGetX11Display()) |display| {
-        const vkCreateXlibSurfaceKHR: vulkan.Surface.CreateProc = @ptrCast(getProcAddress(instance, "vkCreateXlibSurfaceKHR") orelse return error.LoadVkCreateXlibSurfaceKHR);
-
-        const create_info: vulkan.Surface.CreateInfo = .{ .xlib = .{
-            .display = display,
-            .window = glfw.glfwGetX11Window(window.handle),
-        } };
-
-        if (vkCreateXlibSurfaceKHR(instance, &create_info, allocator, &surface) != .success) return error.VkCreateXlibSurfaceKHR;
-    }
-
     if (glfw.glfwGetWaylandDisplay()) |display| {
         const vkCreateWaylandSurfaceKHR: vulkan.Surface.CreateProc = @ptrCast(getProcAddress(instance, "vkCreateWaylandSurfaceKHR") orelse return error.LoadVkCreateWaylandSurfaceKHR);
 
@@ -224,6 +224,17 @@ fn windowVulkanCreateSurface(context: *anyopaque, platform_window: *PlatformWind
         } };
 
         if (vkCreateWaylandSurfaceKHR(instance, &create_info, allocator, &surface) != .success) return error.VkCreateWaylandSurfaceKHR;
+    }
+
+    if (glfw.glfwGetX11Display()) |display| {
+        const vkCreateXlibSurfaceKHR: vulkan.Surface.CreateProc = @ptrCast(getProcAddress(instance, "vkCreateXlibSurfaceKHR") orelse return error.LoadVkCreateXlibSurfaceKHR);
+
+        const create_info: vulkan.Surface.CreateInfo = .{ .xlib = .{
+            .display = display,
+            .window = glfw.glfwGetX11Window(window.handle),
+        } };
+
+        if (vkCreateXlibSurfaceKHR(instance, &create_info, allocator, &surface) != .success) return error.VkCreateXlibSurfaceKHR;
     }
 
     return surface orelse error.InvalidSurface;

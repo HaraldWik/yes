@@ -19,17 +19,17 @@ pub const SurfaceCreateInfo = switch (builtin.os.tag) {
         hinstance: std.os.windows.HINSTANCE,
         hwnd: std.os.windows.HWND,
     },
-    else => union {
+    else => extern union {
+        wayland: Wayland,
         xlib: Xlib,
         xcb: Xcb,
-        wayland: Wayland,
 
-        pub const Xlib = extern struct {
-            stype: c_uint = 1000004000,
+        pub const Wayland = extern struct {
+            stype: c_uint = 1000006000,
             next: ?*const anyopaque = null,
             flags: u32 = 0,
             display: *anyopaque,
-            window: c_ulong = 0,
+            surface: *anyopaque,
         };
 
         pub const Xcb = extern struct {
@@ -40,12 +40,12 @@ pub const SurfaceCreateInfo = switch (builtin.os.tag) {
             window: u32,
         };
 
-        pub const Wayland = extern struct {
-            stype: c_uint = 1000006000,
+        pub const Xlib = extern struct {
+            stype: c_uint = 1000004000,
             next: ?*const anyopaque = null,
             flags: u32 = 0,
             display: *anyopaque,
-            surface: *anyopaque,
+            window: c_ulong = 0,
         };
     },
 };
