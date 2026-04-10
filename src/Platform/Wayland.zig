@@ -81,10 +81,10 @@ pub const Window = struct {
     pub const Surface = union(enum) {
         empty,
         framebuffer: Framebuffer,
-        opengl: OpenGL,
+        egl: Egl,
         vulkan,
 
-        pub const OpenGL = struct {
+        pub const Egl = struct {
             display: *anyopaque,
             config: *anyopaque,
             context: *anyopaque,
@@ -214,11 +214,13 @@ fn windowOpen(context: *anyopaque, platform_window: *PlatformWindow, options: Pl
     switch (options.surface_type) {
         .framebuffer => try windowAllocShm(window, self.shm),
         .opengl => |gl| {
-            const display = egl.eglGetDisplay(@ptrCast(self.display)) orelse return error.EglGetDisplay;
+            window.surface = .{ .egl = undefined };
+            const window_egl = &window.*.surface.egl;
+            window_egl.display = egl.eglGetDisplay(@ptrCast(self.display)) orelse return error.EglGetDisplay;
 
             var major: egl.EGLint = undefined;
             var minor: egl.EGLint = undefined;
-            if (egl.eglInitialize(display, &major, &minor) != egl.EGL_TRUE) return error.EglInitialize;
+            if (egl.eglInitialize(window_egl.display, &major, &minor) != egl.EGL_TRUE) return error.EglInitialize;
             if (egl.eglBindAPI(egl.EGL_OPENGL_API) != egl.EGL_TRUE) return error.EglBindAPI; // EGL_OPENGL_ES_API
 
             const config_attribs: []const egl.EGLint = &.{
@@ -232,8 +234,8 @@ fn windowOpen(context: *anyopaque, platform_window: *PlatformWindow, options: Pl
             };
 
             var config: egl.EGLConfig = undefined;
-            var n: egl.EGLint = undefined;
-            if (egl.eglChooseConfig(display, config_attribs.ptr, &config, 1, &n) != egl.EGL_TRUE) return error.ChooseConfig;
+            var configs_count: egl.EGLint = undefined;
+            if (egl.eglChooseConfig(window_egl.display, config_attribs.ptr, &config, 1, &configs_count) != egl.EGL_TRUE) return error.EglChooseConfig;
 
             const attribs: []const egl.EGLint = &.{
                 egl.EGL_CONTEXT_MAJOR_VERSION,       @intCast(gl.major),
@@ -242,20 +244,10 @@ fn windowOpen(context: *anyopaque, platform_window: *PlatformWindow, options: Pl
                 egl.EGL_NONE,
             };
 
-            const egl_context = egl.eglCreateContext(display, config, egl.EGL_NO_CONTEXT, attribs.ptr) orelse return error.CreateContext;
+            window_egl.context = egl.eglCreateContext(window_egl.display, config, egl.EGL_NO_CONTEXT, attribs.ptr) orelse return error.EglCreateContext;
 
-            const egl_window = try wl.EglWindow.create(window.wl_surface, @intCast(options.size.width), @intCast(options.size.height));
-            const egl_surface = egl.eglCreateWindowSurface(display, config, @intFromPtr(egl_window), null) orelse return error.CreateWindowSurface;
-
-            _ = egl.eglSwapBuffers(display, egl_surface);
-
-            window.surface = .{ .opengl = .{
-                .display = display,
-                .config = config.?,
-                .context = egl_context,
-                .window = egl_window,
-                .surface = egl_surface,
-            } };
+            window_egl.window = try wl.EglWindow.create(window.wl_surface, @intCast(options.size.width), @intCast(options.size.height));
+            window_egl.surface = egl.eglCreateWindowSurface(window_egl.display, config, @intFromPtr(window_egl.window), null) orelse return error.EglCreateWindowSurface;
         },
         else => {},
     }
@@ -276,7 +268,7 @@ fn windowClose(context: *anyopaque, platform_window: *PlatformWindow) void {
             framebuffer.buffer.destroy();
             windowFreeShm(window);
         },
-        .opengl => |gl| {
+        .egl => |gl| {
             _ = egl.eglDestroySurface(gl.display, gl.surface);
             gl.window.destroy();
             _ = egl.eglDestroyContext(gl.display, gl.context);
@@ -327,7 +319,7 @@ fn windowPoll(context: *anyopaque, platform_window: *PlatformWindow) anyerror!?P
                 window.interface.size = size;
                 try windowAllocShm(window, self.shm);
             },
-            .opengl => |gl| {
+            .egl => |gl| {
                 window.wl_surface.commit();
                 gl.window.resize(@intCast(size.width), @intCast(size.height), 0, 0);
                 window.wl_surface.commit();
@@ -416,24 +408,24 @@ fn windowFramebuffer(_: *anyopaque, platform_window: *PlatformWindow) anyerror!P
 fn windowOpenglMakeCurrent(_: *anyopaque, platform_window: *PlatformWindow) anyerror!void {
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
 
-    std.debug.assert(window.surface == .opengl);
-    const gl = window.surface.opengl;
+    std.debug.assert(window.surface == .egl);
+    const gl = window.surface.egl;
     if (egl.eglMakeCurrent(gl.display, gl.surface, gl.surface, gl.context) != egl.EGL_TRUE) return error.EglMakeCurrent;
 }
 fn windowOpenglSwapBuffers(context: *anyopaque, platform_window: *PlatformWindow) anyerror!void {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
 
-    std.debug.assert(window.surface == .opengl);
-    const gl = window.surface.opengl;
+    std.debug.assert(window.surface == .egl);
+    const gl = window.surface.egl;
     if (egl.eglSwapBuffers(gl.display, gl.surface) != egl.EGL_TRUE) return error.EglSwapBuffers;
     if (self.display.dispatchPending() != .SUCCESS) return error.DispatchPending;
 }
 fn windowOpenglSwapInterval(_: *anyopaque, platform_window: *PlatformWindow, interval: i32) anyerror!void {
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
 
-    std.debug.assert(window.surface == .opengl);
-    const gl = window.surface.opengl;
+    std.debug.assert(window.surface == .egl);
+    const gl = window.surface.egl;
     if (egl.eglSwapInterval(gl.display, interval) != egl.EGL_TRUE) return error.EglSwapInterval;
 }
 fn windowVulkanCreateSurface(context: *anyopaque, platform_window: *PlatformWindow, instance: *anyopaque, allocator: ?*const anyopaque, getProcAddress: vulkan.InstanceGetProcAddress) anyerror!*anyopaque {

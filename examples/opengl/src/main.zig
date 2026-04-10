@@ -118,17 +118,19 @@ pub fn main(init: std.process.Init) !void {
                 gl.c.glUniformMatrix4fv(projection_loc, 1, 0, projection_matrix.d[0..].ptr);
             },
             .key => |key| {
+                if (key.state == .pressed) switch (key.sym) {
+                    .w => view_transform.position[2] += 0.5,
+                    .s => view_transform.position[2] -= 0.5,
+                    .a => view_transform.position[0] += 0.5,
+                    .d => view_transform.position[0] -= 0.5,
+                    else => {},
+                };
                 std.log.info("{t:<8} {t}", .{ key.state, key.sym });
 
                 gl.c.glUniformMatrix4fv(view_loc, 1, 0, view_transform.toMat4x4().d[0..].ptr);
             },
             else => std.log.info("{any}", .{event}),
         };
-
-        if (window.keyboard.get(.w) == .pressed) view_transform.position[2] += 5.0 * delta_time;
-        if (window.keyboard.get(.s) == .pressed) view_transform.position[2] -= 5.0 * delta_time;
-        if (window.keyboard.get(.a) == .pressed) view_transform.position[0] += 5.0 * delta_time;
-        if (window.keyboard.get(.d) == .pressed) view_transform.position[0] -= 5.0 * delta_time;
 
         gl.clear.color(0.0, 0.0, 0.0, 0.0);
         gl.clear.buffer(.{ .color = true, .depth = true });
