@@ -200,8 +200,17 @@ fn windowOpen(context: *anyopaque, platform_window: *PlatformWindow, options: Pl
     window.xdg_toplevel.setListener(*Window, xdgToplevelListener, window);
 
     try windowSetProperty(context, platform_window, .{ .title = options.title });
+
+    if (options.position) |position| try windowSetProperty(context, platform_window, .{ .position = position });
     try windowSetProperty(context, platform_window, .{ .resize_policy = options.resize_policy });
-    try windowSetProperty(context, platform_window, .{ .decorated = options.decorated });
+    if (options.fullscreen) try windowSetProperty(context, platform_window, .{ .fullscreen = options.fullscreen });
+    if (options.maximized) try windowSetProperty(context, platform_window, .{ .maximized = options.maximized });
+    if (options.minimized) try windowSetProperty(context, platform_window, .{ .minimized = options.minimized });
+    if (!options.focused) try windowSetProperty(context, platform_window, .{ .focused = options.focused });
+    if (options.always_on_top) try windowSetProperty(context, platform_window, .{ .always_on_top = options.always_on_top });
+    if (options.floating) |floating| try windowSetProperty(context, platform_window, .{ .floating = floating });
+    if (options.decorated) try windowSetProperty(context, platform_window, .{ .decorated = options.decorated });
+
     if (self.io_manager.pointer) |pointer| {
         if (self.wp_cursor_shape_manager) |wp_cursor_shape_manager|
             window.wp_cursor_shape_device = try wp_cursor_shape_manager.getPointer(pointer);
@@ -340,6 +349,7 @@ fn windowSetProperty(context: *anyopaque, platform_window: *PlatformWindow, prop
             const title_z = try self.gpa.dupeZ(u8, title);
             defer self.gpa.free(title_z);
             window.xdg_toplevel.setTitle(title_z.ptr);
+            window.xdg_toplevel.setAppId(title_z.ptr);
         },
         .size => {},
         .position => {},
@@ -412,14 +422,12 @@ fn windowOpenglMakeCurrent(_: *anyopaque, platform_window: *PlatformWindow) anye
     const gl = window.surface.egl;
     if (egl.eglMakeCurrent(gl.display, gl.surface, gl.surface, gl.context) != egl.EGL_TRUE) return error.EglMakeCurrent;
 }
-fn windowOpenglSwapBuffers(context: *anyopaque, platform_window: *PlatformWindow) anyerror!void {
-    const self: *@This() = @ptrCast(@alignCast(context));
+fn windowOpenglSwapBuffers(_: *anyopaque, platform_window: *PlatformWindow) anyerror!void {
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
 
     std.debug.assert(window.surface == .egl);
     const gl = window.surface.egl;
     if (egl.eglSwapBuffers(gl.display, gl.surface) != egl.EGL_TRUE) return error.EglSwapBuffers;
-    if (self.display.dispatchPending() != .SUCCESS) return error.DispatchPending;
 }
 fn windowOpenglSwapInterval(_: *anyopaque, platform_window: *PlatformWindow, interval: i32) anyerror!void {
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
@@ -683,10 +691,9 @@ fn xdgToplevelListener(_: *xdg.Toplevel, event: xdg.Toplevel.Event, window: *Win
     switch (event) {
         .configure => |configure| {
             const size: PlatformWindow.Size = .{ .width = @intCast(configure.width), .height = @intCast(configure.height) };
-            if (!size.eql(.{}) and !size.eql(window.interface.size))
-                window.events.append(gpa, .{ .resize = size }) catch |err| {
-                    window.err = err;
-                };
+            window.events.append(gpa, .{ .resize = size }) catch |err| {
+                window.err = err;
+            };
 
             for (configure.states.slice(xdg.Toplevel.State)) |state| if (state == .activated and window.interface.focused) {
                 if (window.interface.focused == true) return;

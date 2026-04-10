@@ -35,9 +35,6 @@ pub fn main(init: std.process.Init) !void {
     defer window_b.close(platform);
     try window_b.setCursor(platform, .wait);
 
-    var scroll_x: usize = 0;
-    var scroll_y: usize = 0;
-
     main: while (true) {
         while (try window_a.poll(platform)) |event| switch (event) {
             .close => break :main,
@@ -56,6 +53,7 @@ pub fn main(init: std.process.Init) !void {
                     framebuffer.pixels[offset + format.a] = 255;
                 }
             },
+            .mouse_motion => {},
             else => std.log.info("a: {any}", .{event}),
         };
 
@@ -64,31 +62,31 @@ pub fn main(init: std.process.Init) !void {
             .resize => |size| {
                 std.log.info("b: resize: {d}x{d}", .{ size.width, size.height });
                 const framebuffer = try window_b.framebuffer(platform);
-                const format = yes.Window.Framebuffer.format;
-                const block_size: usize = 20;
-
-                for (0..size.height) |y| {
-                    const by = (y + scroll_y) / block_size;
-
-                    for (0..size.width) |x| {
-                        const bx = (x + scroll_x) / block_size;
-                        const i = y * size.width + x;
-                        const offset = i * 4;
-
-                        const checker = (bx + by) % 2 == 0;
-
-                        framebuffer.pixels[offset + format.r] = if (checker) 240 else 30;
-                        framebuffer.pixels[offset + format.g] = if (checker) 240 else 30;
-                        framebuffer.pixels[offset + format.b] = if (checker) 240 else 30;
-                        framebuffer.pixels[offset + format.a] = 255;
-                    }
-                }
+                drawCheckerboardPattern(framebuffer, size, 20, .{});
             },
-            .move => |position| {
-                scroll_x = @intCast(@abs(position.x));
-                scroll_y = @intCast(@abs(position.y));
-            },
+            .mouse_motion => {},
             else => std.log.info("b: {any}", .{event}),
         };
+    }
+}
+
+pub fn drawCheckerboardPattern(framebuffer: yes.Window.Framebuffer, size: yes.Window.Size, block_size: usize, offset: yes.Window.Size) void {
+    const format = yes.Window.Framebuffer.format;
+
+    for (0..size.height) |y| {
+        const by = (y + offset.height) / block_size;
+
+        for (0..size.width) |x| {
+            const bx = (x + offset.width) / block_size;
+            const i = y * size.width + x;
+            const pixel_offset = i * 4;
+
+            const checker = (bx + by) % 2 == 0;
+
+            framebuffer.pixels[pixel_offset + format.r] = if (checker) 240 else 30;
+            framebuffer.pixels[pixel_offset + format.g] = if (checker) 240 else 30;
+            framebuffer.pixels[pixel_offset + format.b] = if (checker) 240 else 30;
+            framebuffer.pixels[pixel_offset + format.a] = 255;
+        }
     }
 }
