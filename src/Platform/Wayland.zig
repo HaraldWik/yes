@@ -98,6 +98,8 @@ pub const Window = struct {
 };
 
 pub fn init(gpa: std.mem.Allocator) !@This() {
+    try Loader.load();
+
     const display = try wl.Display.connect(null);
     const registry = try display.getRegistry();
 
@@ -154,6 +156,7 @@ pub fn deinit(self: @This()) void {
     self.compositor.destroy();
     self.registry.destroy();
     self.display.disconnect();
+    Loader.unload();
 }
 
 pub fn platform(self: *@This()) Platform {
@@ -749,3 +752,88 @@ fn windowFreeShm(window: *Window) void {
     const length = size.width * size.height * 4;
     std.posix.munmap(window.surface.framebuffer.pixels[0..length]);
 }
+
+var loader: Loader = .{};
+/// Loads the wayland-client at runtime
+pub const Loader = struct {
+    lib: std.DynLib = undefined,
+
+    wl_display_cancel_read: ?*const fn (display: *wl.Display) callconv(.c) void = null,
+    wl_display_connect_to_fd: ?*const fn (fd: c_int) callconv(.c) ?*wl.Display = null,
+    wl_display_connect: ?*const fn (name: ?[*:0]const u8) callconv(.c) ?*wl.Display = null,
+    wl_display_create_queue: ?*const fn (display: *wl.Display) callconv(.c) ?*wl.EventQueue = null,
+    wl_display_disconnect: ?*const fn (display: *wl.Display) callconv(.c) void = null,
+    wl_display_dispatch_pending: ?*const fn (display: *wl.Display) callconv(.c) c_int = null,
+    wl_display_dispatch_queue_pending: ?*const fn (display: *wl.Display, queue: *wl.EventQueue) callconv(.c) c_int = null,
+    wl_display_dispatch_queue: ?*const fn (display: *wl.Display, queue: *wl.EventQueue) callconv(.c) c_int = null,
+    wl_display_dispatch: ?*const fn (display: *wl.Display) callconv(.c) c_int = null,
+    wl_display_flush: ?*const fn (display: *wl.Display) callconv(.c) c_int = null,
+    wl_display_get_error: ?*const fn (display: *wl.Display) callconv(.c) c_int = null,
+    wl_display_get_fd: ?*const fn (display: *wl.Display) callconv(.c) c_int = null,
+    wl_display_prepare_read_queue: ?*const fn (display: *wl.Display, queue: *wl.EventQueue) callconv(.c) c_int = null,
+    wl_display_prepare_read: ?*const fn (display: *wl.Display) callconv(.c) c_int = null,
+    wl_display_read_events: ?*const fn (display: *wl.Display) callconv(.c) c_int = null,
+    wl_display_roundtrip_queue: ?*const fn (display: *wl.Display, queue: *wl.EventQueue) callconv(.c) c_int = null,
+    wl_display_roundtrip: ?*const fn (display: *wl.Display) callconv(.c) c_int = null,
+    wl_event_queue_destroy: ?*const fn (queue: *wl.EventQueue) callconv(.c) void = null,
+    wl_proxy_add_dispatcher: ?*const fn (proxy: *wl.Proxy, dispatcher: *const wl.Proxy.DispatcherFn, implementation: ?*const anyopaque, data: ?*anyopaque) callconv(.c) c_int = null,
+    wl_proxy_create: ?*const fn (factory: *wl.Proxy, interface: *const wl.Interface) callconv(.c) ?*wl.Proxy = null,
+    wl_proxy_destroy: ?*const fn (proxy: *wl.Proxy) callconv(.c) void = null,
+    wl_proxy_get_id: ?*const fn (proxy: *wl.Proxy) callconv(.c) u32 = null,
+    wl_proxy_get_user_data: ?*const fn (proxy: *wl.Proxy) callconv(.c) ?*anyopaque = null,
+    wl_proxy_get_version: ?*const fn (proxy: *wl.Proxy) callconv(.c) u32 = null,
+    wl_proxy_marshal_array_constructor_versioned: ?*const fn (proxy: *wl.Proxy, opcode: u32, args: [*]wl.Argument, interface: *const wl.Interface, version: u32) callconv(.c) ?*wl.Proxy = null,
+    wl_proxy_marshal_array_constructor: ?*const fn (proxy: *wl.Proxy, opcode: u32, args: [*]wl.Argument, interface: *const wl.Interface) callconv(.c) ?*wl.Proxy = null,
+    wl_proxy_marshal_array: ?*const fn (proxy: *wl.Proxy, opcode: u32, args: ?[*]wl.Argument) callconv(.c) void = null,
+    wl_proxy_set_queue: ?*const fn (proxy: *wl.Proxy, queue: *wl.EventQueue) callconv(.c) void = null,
+
+    comptime {
+        _ = exports;
+    }
+
+    pub const exports = struct {
+        // zig fmt: off
+        pub export fn wl_display_cancel_read(display: *wl.Display) void { loader.wl_display_cancel_read.?(display); }
+        pub export fn wl_display_connect_to_fd(fd: c_int) ?*wl.Display { return loader.wl_display_connect_to_fd.?(fd); }
+        pub export fn wl_display_connect(name: ?[*:0]const u8) ?*wl.Display { return loader.wl_display_connect.?(name); }
+        pub export fn wl_display_create_queue(display: *wl.Display) ?*wl.EventQueue { return loader.wl_display_create_queue.?(display); }
+        pub export fn wl_display_disconnect(display: *wl.Display) void { loader.wl_display_disconnect.?(display); }
+        pub export fn wl_display_dispatch_pending(display: *wl.Display) c_int { return loader.wl_display_dispatch_pending.?(display); }
+        pub export fn wl_display_dispatch_queue_pending(display: *wl.Display, queue: *wl.EventQueue) c_int { return loader.wl_display_dispatch_queue_pending.?(display, queue); }
+        pub export fn wl_display_dispatch_queue(display: *wl.Display, queue: *wl.EventQueue) c_int { return loader.wl_display_dispatch_queue.?(display, queue); }
+        pub export fn wl_display_dispatch(display: *wl.Display) c_int { return loader.wl_display_dispatch.?(display); }
+        pub export fn wl_display_flush(display: *wl.Display) c_int { return loader.wl_display_flush.?(display); }
+        pub export fn wl_display_get_error(display: *wl.Display) c_int { return loader.wl_display_get_error.?(display); }
+        pub export fn wl_display_get_fd(display: *wl.Display) c_int { return loader.wl_display_get_fd.?(display); }
+        pub export fn wl_display_prepare_read_queue(display: *wl.Display, queue: *wl.EventQueue) c_int { return loader.wl_display_prepare_read_queue.?(display, queue); }
+        pub export fn wl_display_prepare_read(display: *wl.Display) c_int { return loader.wl_display_prepare_read.?(display); }
+        pub export fn wl_display_read_events(display: *wl.Display) c_int { return loader.wl_display_read_events.?(display); }
+        pub export fn wl_display_roundtrip_queue(display: *wl.Display, queue: *wl.EventQueue) c_int { return loader.wl_display_roundtrip_queue.?(display, queue); }
+        pub export fn wl_display_roundtrip(display: *wl.Display) c_int { return loader.wl_display_roundtrip.?(display); }
+        pub export fn wl_event_queue_destroy(queue: *wl.EventQueue) void { loader.wl_event_queue_destroy.?(queue); }
+        pub export fn wl_proxy_add_dispatcher(proxy: *wl.Proxy, dispatcher: *const wl.Proxy.DispatcherFn, implementation: ?*const anyopaque, data: ?*anyopaque) c_int { return loader.wl_proxy_add_dispatcher.?(proxy, dispatcher, implementation, data); }
+        pub export fn wl_proxy_create(factory: *wl.Proxy, interface: *const wl.Interface) ?*wl.Proxy { return loader.wl_proxy_create.?(factory, interface); }
+        pub export fn wl_proxy_destroy(proxy: *wl.Proxy) void { loader.wl_proxy_destroy.?(proxy); }
+        pub export fn wl_proxy_get_id(proxy: *wl.Proxy) u32 { return loader.wl_proxy_get_id.?(proxy); }
+        pub export fn wl_proxy_get_user_data(proxy: *wl.Proxy) ?*anyopaque { return loader.wl_proxy_get_user_data.?(proxy); }
+        pub export fn wl_proxy_get_version(proxy: *wl.Proxy) u32 { return loader.wl_proxy_get_version.?(proxy); }
+        pub export fn wl_proxy_marshal_array_constructor_versioned(proxy: *wl.Proxy, opcode: u32, args: [*]wl.Argument, interface: *const wl.Interface, version: u32) ?*wl.Proxy { return loader.wl_proxy_marshal_array_constructor_versioned.?(proxy, opcode, args, interface, version); }
+        pub export fn wl_proxy_marshal_array_constructor(proxy: *wl.Proxy, opcode: u32, args: [*]wl.Argument, interface: *const wl.Interface) ?*wl.Proxy { return loader.wl_proxy_marshal_array_constructor.?(proxy, opcode, args, interface); }
+        pub export fn wl_proxy_marshal_array(proxy: *wl.Proxy, opcode: u32, args: ?[*]wl.Argument) void { loader.wl_proxy_marshal_array.?(proxy, opcode, args); }
+        pub export fn wl_proxy_set_queue(proxy: *wl.Proxy, queue: *wl.EventQueue) void { loader.wl_proxy_set_queue.?(proxy, queue); }
+        // zig fmt: on
+    };
+
+    pub fn load() !void {
+        loader.lib = try .openZ("libwayland-client.so.0");
+        inline for (std.meta.fields(@This())) |field| {
+            if (field.type != std.DynLib) {
+                @field(loader, field.name) = loader.lib.lookup(field.type, field.name) orelse @panic(field.name);
+            }
+        }
+    }
+
+    pub fn unload() void {
+        loader.lib.close();
+    }
+};

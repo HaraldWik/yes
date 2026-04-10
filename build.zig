@@ -171,8 +171,7 @@ pub fn addWayland(b: *std.Build, mod: *std.Build.Module, target: std.Build.Resol
     scanner.generate("zwp_tablet_manager_v2", 1);
 
     mod.addImport("wayland", wayland);
-    mod.link_libc = true;
-    mod.linkSystemLibrary("wayland-client", .{});
+    // mod.linkSystemLibrary("wayland-client", .{});
 }
 
 pub fn addXkbcommon(b: *std.Build, mod: *std.Build.Module, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) void {

@@ -7,6 +7,7 @@ pub fn build(b: *std.Build) void {
     const yes = b.dependency("yes", .{
         .target = target,
         .optimize = optimize,
+        .x_backend = .none,
     }).module("yes");
 
     const vulkan_dep = b.dependency("vulkan", .{ .target = target, .optimize = optimize });
