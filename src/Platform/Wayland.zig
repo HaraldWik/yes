@@ -65,6 +65,7 @@ pub const Window = struct {
     interface: PlatformWindow = .{},
     gpa: std.mem.Allocator = undefined,
     err: ?anyerror = null,
+    output: ?*wl.Output = null,
     wl_surface: *wl.Surface = undefined,
     xdg_surface: *xdg.Surface = undefined,
     xdg_toplevel: *xdg.Toplevel = undefined,
@@ -194,6 +195,7 @@ fn windowOpen(context: *anyopaque, platform_window: *PlatformWindow, options: Pl
     // window.xdg_toplevel.setQueue(window.event_queue);
 
     var configured: bool = false;
+    window.wl_surface.setListener(*Window, wlSurfaceListener, window);
     window.xdg_surface.setListener(*bool, xdgSurfaceListener, &configured);
     window.xdg_toplevel.setListener(*Window, xdgToplevelListener, window);
 
@@ -299,8 +301,6 @@ fn windowPoll(context: *anyopaque, platform_window: *PlatformWindow) anyerror!?P
 
     if (self.display.dispatchPending() != .SUCCESS) return error.DispatchPending;
     if (self.display.prepareRead()) {
-        self.io_manager.current_window.store(window, .seq_cst);
-
         if (self.display.flush() != .SUCCESS) return error.Flush;
 
         if (window.err) |err| return err;
@@ -318,7 +318,6 @@ fn windowPoll(context: *anyopaque, platform_window: *PlatformWindow) anyerror!?P
             self.display.cancelRead();
 
         if (self.display.dispatchPending() != .SUCCESS) return error.DispatchPending;
-        self.io_manager.current_window.store(null, .seq_cst);
     }
 
     const event = window.events.pop() orelse return null;
@@ -508,9 +507,7 @@ fn seatListener(seat: *wl.Seat, event: wl.Seat.Event, io_manager: *IoManager) vo
                 io_manager.touch = null;
             }
         },
-        .name => |name| {
-            std.log.debug("seat name: {s}", .{name.name});
-        },
+        .name => {},
     }
 }
 
@@ -551,15 +548,20 @@ fn keyboardListener(_: *wl.Keyboard, event: wl.Keyboard.Event, io_manager: *IoMa
 
             _ = xkb.xkb_state_update_mask(io_manager.xkb.state.?, modifiers.mods_depressed, modifiers.mods_latched, modifiers.mods_locked, modifiers.group, 0, 0);
         },
-        .enter => if (current_window) |window| if (!window.interface.focused) {
-            window.events.append(window.gpa, .{ .focus = true }) catch |err| {
+        .enter => |enter| if (enter.surface) |surface| {
+            const window: *Window = @ptrCast(@alignCast(surface.getUserData().?));
+            if (!window.interface.focused) window.events.append(window.gpa, .{ .focus = true }) catch |err| {
                 window.err = err;
             };
+            io_manager.current_window.store(window, .seq_cst);
         },
-        .leave => if (current_window) |window| if (window.interface.focused) {
-            window.events.append(window.gpa, .{ .focus = false }) catch |err| {
+        .leave => |leave| if (leave.surface) |surface| {
+            const window: *Window = @ptrCast(@alignCast(surface.getUserData().?));
+
+            if (window.interface.focused) window.events.append(window.gpa, .{ .focus = false }) catch |err| {
                 window.err = err;
             };
+            if (current_window.? == window) io_manager.current_window.store(null, .seq_cst);
         },
         .key => |key| if (current_window) |window| {
             if (io_manager.xkb.state == null or io_manager.xkb.keymap == null) return;
@@ -666,6 +668,15 @@ fn touchListener(_: *wl.Touch, event: wl.Touch.Event, io_manager: *IoManager) vo
     }
 }
 
+fn wlSurfaceListener(_: *wl.Surface, event: wl.Surface.Event, window: *Window) void {
+    switch (event) {
+        .enter => |enter| {
+            window.output = enter.output;
+        },
+        .leave => {},
+    }
+}
+
 fn xdgSurfaceListener(xdg_surface: *xdg.Surface, event: xdg.Surface.Event, configured: *bool) void {
     switch (event) {
         .configure => |configure| {
@@ -680,7 +691,7 @@ fn xdgToplevelListener(_: *xdg.Toplevel, event: xdg.Toplevel.Event, window: *Win
     switch (event) {
         .configure => |configure| {
             const size: PlatformWindow.Size = .{ .width = @intCast(configure.width), .height = @intCast(configure.height) };
-            if (!size.eql(.{}))
+            if (!size.eql(.{}) and !size.eql(window.interface.size))
                 window.events.append(gpa, .{ .resize = size }) catch |err| {
                     window.err = err;
                 };
@@ -714,7 +725,7 @@ fn windowAllocShm(window: *Window, shm: *wl.Shm) !void {
     const length = size.width * size.height * channels;
 
     var fd_name_buf: [64]u8 = undefined;
-    const fd_name = try std.fmt.bufPrintSentinel(&fd_name_buf, "/yes_window_shm_{d}_{d}", .{ size.width, size.height }, 0);
+    const fd_name = try std.fmt.bufPrintSentinel(&fd_name_buf, "{d}yes_window_shm_{d}_{d}", .{ @intFromPtr(window.xdg_toplevel), size.width, size.height }, 0);
     const fd: std.posix.fd_t = std.posix.system.shm_open(
         fd_name[0..].ptr,
         @bitCast(std.posix.O{

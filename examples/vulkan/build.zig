@@ -7,7 +7,6 @@ pub fn build(b: *std.Build) void {
     const yes = b.dependency("yes", .{
         .target = target,
         .optimize = optimize,
-        .x_backend = .none,
     }).module("yes");
 
     const vulkan_dep = b.dependency("vulkan", .{ .target = target, .optimize = optimize });
@@ -45,6 +44,16 @@ pub fn build(b: *std.Build) void {
     });
     vulkan.addIncludePath(vulkan_dep.path("include"));
 
+    const vulkan_mod = b.addModule("vulkan", .{
+        .root_source_file = b.path("src/vulkan.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "yes", .module = yes },
+            .{ .name = "vulkan", .module = vulkan.createModule() },
+        },
+    });
+
     const exe = b.addExecutable(.{
         .name = "example",
         .root_module = b.createModule(.{
@@ -53,7 +62,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
             .imports = &.{
                 .{ .name = "yes", .module = yes },
-                .{ .name = "vulkan", .module = vulkan.createModule() },
+                .{ .name = "vulkan", .module = vulkan_mod },
             },
         }),
     });

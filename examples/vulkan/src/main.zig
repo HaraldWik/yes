@@ -1,7 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const yes = @import("yes");
-const vk = @import("vulkan.zig");
+const vk = @import("vulkan");
 
 pub fn main(init: std.process.Init) !void {
     const allocator = init.gpa;
