@@ -119,7 +119,7 @@ pub fn addXcb(b: *std.Build, mod: *std.Build.Module, target: std.Build.ResolvedT
 }
 
 pub fn addXlib(b: *std.Build, mod: *std.Build.Module, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) void {
-    const xlib_dep = b.lazyDependency("xlib", .{}) orelse @panic("fetch lazy dependency \"xlib\"");
+    const xlib_dep = b.lazyDependency("xlib", .{}).?;
     const xlib = b.addTranslateC(.{
         .root_source_file = b.addWriteFiles().add("c.h",
             \\#include <X11/Xlib.h>

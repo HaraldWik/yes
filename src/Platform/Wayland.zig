@@ -440,12 +440,10 @@ fn windowVulkanCreateSurface(context: *anyopaque, platform_window: *PlatformWind
 
     const vkCreateWaylandSurfaceKHR: vulkan.SurfaceCreateProc = @ptrCast(getProcAddress(instance, "vkCreateWaylandSurfaceKHR") orelse return error.LoadVkCreateWaylandSurfaceKHR);
 
-    const create_info: vulkan.SurfaceCreateInfo = .{
-        .wayland = .{
-            .display = self.display,
-            .surface = window.wl_surface,
-        },
-    };
+    const create_info: vulkan.SurfaceCreateInfo = .{ .wayland = .{
+        .display = self.display,
+        .surface = window.wl_surface,
+    } };
 
     var surface: ?*anyopaque = undefined;
     if (vkCreateWaylandSurfaceKHR(instance, &create_info, allocator, &surface) != .success) return error.VkCreateWaylandSurfaceKHR;
