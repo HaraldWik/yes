@@ -20,8 +20,8 @@
         },
 
         .xcb = .{
-            .url = "git+https://github.com/HaraldWik/zig-xcb#530deb4c388f7911c379aa78e91a3de693af9014",
-            .hash = "xcb-0.0.0-x0nviN81UwDeojIuSWebnowKsqm-RYnbWfftCUNwLsnK",
+            .url = "git+https://github.com/HaraldWik/zig-xcb#a0652f9e2112553661269f8d461d20d41d109748",
+            .hash = "xcb-0.0.0-x0nviCYsUwBUpTv-cyYOrp-DY99NdS-66f7l-FYRiiOx",
             .lazy = true,
         },
         .xlib = .{
@@ -40,11 +40,6 @@
             .hash = "libxkbcommon-1.11.0-93LaF31wAgDBmMuuxfPTZ2xJiOc3ZOb5OwOVi4FlD5iy",
             .lazy = true,
         },
-        .xkbcommon_headers = .{
-            .url = "git+https://github.com/xkbcommon/libxkbcommon#99e9b0fc558fb838a04c568bea033c52ffbe704b",
-            .hash = "N-V-__8AABlybQDWXn3GPnoYnvJ-umU89n4-fxdyXvALT-W-",
-            .lazy = true,
-        },
 
         // If you want a more stable window experience or smth add the glfw = true build option
         .glfw_lib = .{
@@ -58,7 +53,7 @@
             .lazy = true,
         },
         .libxkbcommon = .{
-            .url = "git+https://github.com/HaraldWik/libxkbcommon/#54b54db10d7954cc3d4eb0b7ba8a2ad49ee8712c",
+            .url = "git+https://github.com/HaraldWik/libxkbcommon#54b54db10d7954cc3d4eb0b7ba8a2ad49ee8712c",
             .hash = "libxkbcommon-1.11.0-93LaF-twAgBJ6KbPBRhi5ZjuKzg37UVw6j6Os0egOPqN",
         },
     },

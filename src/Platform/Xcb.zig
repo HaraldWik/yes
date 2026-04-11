@@ -12,8 +12,8 @@ screen: *xcb.xcb_screen_t,
 screen_index: u32,
 atom_table: AtomTable,
 extensions: struct {
-    xinput_opcode: ?u8 = null,
-} = .{},
+    xinput: xcb.xcb_query_extension_reply_t,
+},
 windows: std.ArrayList(?*Window) = .empty,
 keyboard: Keyboard,
 
@@ -76,6 +76,28 @@ pub const Keyboard = struct {
     context: *xkb.xkb_context,
     keymap: *xkb.xkb_keymap,
     state: *xkb.xkb_state,
+
+    extern fn xcb_xkb_use_extension(c: *xcb.xcb_connection_t, wantedMajor: u16, wantedMinor: u16) xcb.xcb_void_cookie_t;
+
+    pub fn init(connection: *xcb.xcb_connection_t) !@This() {
+        _ = xcb_xkb_use_extension(connection, 1, 0);
+        const context = xkb.xkb_context_new(xkb.XKB_CONTEXT_NO_FLAGS) orelse return error.CreateKeyboardContext;
+        const device_id = xkb.xkb_x11_get_core_keyboard_device_id(@ptrCast(connection));
+        const keymap = xkb.xkb_x11_keymap_new_from_device(context, @ptrCast(connection), device_id, xkb.XKB_KEYMAP_COMPILE_NO_FLAGS) orelse return error.CreateKeymap;
+        const state = xkb.xkb_x11_state_new_from_device(keymap, @ptrCast(connection), device_id) orelse return error.CreateKeyboardState;
+
+        return .{
+            .context = context,
+            .keymap = keymap,
+            .state = state,
+        };
+    }
+
+    pub fn deinit(self: *@This()) void {
+        xkb.xkb_context_unref(self.context);
+        xkb.xkb_keymap_unref(self.keymap);
+        xkb.xkb_state_unref(self.state);
+    }
 };
 
 pub const Window = struct {
@@ -106,11 +128,6 @@ pub fn init(gpa: std.mem.Allocator, minimal: std.process.Init.Minimal) !@This() 
 
     const xinput = xcb.xcb_get_extension_data(connection, &xcb.xcb_input_id);
 
-    var keyboard: Keyboard = undefined;
-    keyboard.context = xkb.xkb_context_new(xkb.XKB_CONTEXT_NO_FLAGS) orelse return error.CreateKeyboardContext;
-    keyboard.keymap = xkb.xkb_keymap_new_from_names(keyboard.context, null, xkb.XKB_KEYMAP_COMPILE_NO_FLAGS) orelse return error.CreateDefaultKeymap;
-    keyboard.state = xkb.xkb_state_new(keyboard.keymap) orelse return error.CreateKeyboardState;
-
     return .{
         .gpa = gpa,
         .connection = connection,
@@ -118,16 +135,14 @@ pub fn init(gpa: std.mem.Allocator, minimal: std.process.Init.Minimal) !@This() 
         .screen_index = @intCast(screen_index),
         .atom_table = .load(connection),
         .extensions = .{
-            .xinput_opcode = if (xinput.*.present == 1) xinput.*.major_opcode else null,
+            .xinput = xinput.?.*,
         },
-        .keyboard = keyboard,
+        .keyboard = try .init(connection),
     };
 }
 
 pub fn deinit(self: *@This()) void {
-    xkb.xkb_state_unref(self.keyboard.state);
-    xkb.xkb_keymap_unref(self.keyboard.keymap);
-    xkb.xkb_context_unref(self.keyboard.context);
+    self.keyboard.deinit();
     self.windows.deinit(self.gpa);
     xcb.xcb_disconnect(self.connection);
 }
@@ -269,7 +284,7 @@ fn windowOpen(context: *anyopaque, platform_window: *PlatformWindow, options: Pl
         &values,
     );
 
-    if (self.extensions.xinput_opcode) |_| {
+    if (self.extensions.xinput.present == 1) {
         var mask_bytes: [4]u8 = @splat(0);
 
         xiSetMask(&mask_bytes, xcb.XCB_INPUT_MOTION);
@@ -440,15 +455,7 @@ fn windowPoll(context: *anyopaque, platform_window: *PlatformWindow) anyerror!?P
         },
 
         xcb.XCB_KEYMAP_NOTIFY => {
-            const event: *xcb.xcb_keymap_notify_event_t = @ptrCast(generic_event);
-
-            for (event.keys, 0..) |byte, i| {
-                for (0..8) |bit| {
-                    const pressed = (byte >> @intCast(bit)) & 1;
-                    const keycode: u8 = @intCast(i * 8 + bit);
-                    _ = xkb.xkb_state_update_key(self.keyboard.state, keycode + 8, if (pressed != 0) xkb.XKB_KEY_DOWN else xkb.XKB_KEY_UP);
-                }
-            }
+            // const event: *xcb.xcb_keymap_notify_event_t = @ptrCast(generic_event);
         },
         xcb.XCB_KEY_PRESS, xcb.XCB_KEY_RELEASE => {
             const event: *xcb.xcb_key_press_event_t = @ptrCast(generic_event);
@@ -461,10 +468,18 @@ fn windowPoll(context: *anyopaque, platform_window: *PlatformWindow) anyerror!?P
             };
             const keycode = event.detail;
 
-            // _ = xkb.xkb_state_update_key(self.keyboard.state, keycode + 8, if (state == .pressed) xkb.XKB_KEY_DOWN else xkb.XKB_KEY_UP);
-            const xkb_sym = xkb.xkb_state_key_get_one_sym(self.keyboard.state, keycode + 8);
+            const direction = if (event_type == xcb.XCB_KEY_PRESS)
+                xkb.XKB_KEY_DOWN
+            else
+                xkb.XKB_KEY_UP;
 
-            if (std.enums.fromInt(PlatformWindow.Event.Key.Sym, xkb_sym)) |sym| out_event = .{ .key = .{
+            _ = xkb.xkb_state_update_key(self.keyboard.state, keycode, @intCast(direction));
+            const xkb_sym = xkb.xkb_state_key_get_one_sym(
+                self.keyboard.state,
+                keycode,
+            );
+
+            if (PlatformWindow.Event.Key.Sym.fromXkb(xkb_sym)) |sym| out_event = .{ .key = .{
                 .state = state,
                 .code = keycode,
                 .sym = sym,
@@ -503,7 +518,7 @@ fn windowPoll(context: *anyopaque, platform_window: *PlatformWindow) anyerror!?P
     if (generic_event.response_type == xcb.XCB_GE_GENERIC) {
         const extension_event: *xcb.xcb_ge_generic_event_t = @ptrCast(generic_event);
 
-        if (self.extensions.xinput_opcode) |opcode| if (extension_event.extension == opcode) switch (extension_event.event_type) {
+        if (self.extensions.xinput.present == 1 and extension_event.extension == self.extensions.xinput.major_opcode) switch (extension_event.event_type) {
             xcb.XCB_INPUT_MOTION => {
                 std.debug.print("xinput motion\n", .{});
             },

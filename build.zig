@@ -71,7 +71,7 @@ pub fn build(b: *std.Build) void {
                 },
             }
 
-            addXkbcommon(b, mod, target, optimize);
+            addXkbcommon(b, mod, target, optimize, x_backend_option == .xcb);
 
             if (x_backend_option != .none and opengl_option) {
                 mod.linkSystemLibrary("glx", .{});
@@ -102,17 +102,16 @@ pub fn addXcb(b: *std.Build, mod: *std.Build.Module, target: std.Build.ResolvedT
 
     const xcb_translate_c = b.addTranslateC(.{
         .root_source_file = b.addWriteFiles().add("xcb.h",
-            \\#include <xcb.h>
-            \\#include <glx.h>
-            \\#include <xinput.h>
-            \\#include <xcb_icccm.h>
-            \\#include <shm.h>
+            \\#include <xcb/xcb.h>
+            \\#include <xcb/glx.h>
+            \\#include <xcb/xinput.h>
+            \\#include <xcb/xcb_icccm.h>
+            \\#include <xcb/shm.h>
         ),
         .target = target,
         .optimize = optimize,
     });
-    xcb_translate_c.addIncludePath(xcb_dep.path("src/"));
-    xcb_translate_c.addIncludePath(xcb_dep.path("xcbgen/"));
+    xcb_translate_c.addIncludePath(xcb_dep.path("include/"));
 
     mod.addImport("xcb", xcb_translate_c.createModule());
     mod.linkLibrary(xcb_dep.artifact("xcb"));
@@ -171,27 +170,55 @@ pub fn addWayland(b: *std.Build, mod: *std.Build.Module, target: std.Build.Resol
     scanner.generate("zwp_tablet_manager_v2", 1);
 
     mod.addImport("wayland", wayland);
-    // mod.linkSystemLibrary("wayland-client", .{});
 }
 
-pub fn addXkbcommon(b: *std.Build, mod: *std.Build.Module, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) void {
+pub fn addXkbcommon(b: *std.Build, mod: *std.Build.Module, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, x11: bool) void {
     const xkbcommon_dep = b.lazyDependency("xkbcommon", .{
         .target = target,
         .optimize = optimize,
-
         .@"xkb-config-root" = "/usr/share/X11/xkb",
+
         .@"x-locale-root" = "/usr/share/X11/locale",
     }).?;
-    const xkbcommon_headers = b.lazyDependency("xkbcommon_headers", .{}).?;
+    const upstream = xkbcommon_dep.builder.dependency("libxkbcommon", .{});
     const xkbcommon = b.addTranslateC(.{
-        .root_source_file = b.addWriteFiles().add("xkbcommon.c",
+        .root_source_file = b.addWriteFiles().add("xkbcommon.h",
             \\#include <xkbcommon/xkbcommon.h>
             \\#include <xkbcommon/xkbcommon-keysyms.h>
+            \\#include <xkbcommon/xkbcommon-x11.h>
         ),
         .target = target,
         .optimize = optimize,
-    }).createModule();
-    xkbcommon.addIncludePath(xkbcommon_headers.path("include/"));
-    xkbcommon.linkLibrary(xkbcommon_dep.artifact("xkbcommon"));
-    mod.addImport("xkbcommon", xkbcommon);
+    });
+
+    xkbcommon.addIncludePath(upstream.path("include/"));
+    mod.addImport("xkbcommon", xkbcommon.createModule());
+
+    const libxkbcommon = xkbcommon_dep.artifact("xkbcommon");
+
+    if (!x11) {
+        mod.linkLibrary(libxkbcommon);
+        return;
+    }
+
+    const libxkbcommon_x11_sources: []const []const u8 = &.{
+        "src/x11/keymap.c",
+        "src/x11/state.c",
+        "src/x11/util.c",
+        "src/context-priv.c",
+        "src/keymap-priv.c",
+        "src/atom.c",
+    };
+
+    libxkbcommon.root_module.addCSourceFiles(.{
+        .root = upstream.path("."),
+        .files = libxkbcommon_x11_sources,
+    });
+
+    const xcb_dep = b.lazyDependency("xcb", .{ .target = target, .optimize = optimize }).?;
+
+    libxkbcommon.root_module.linkLibrary(xcb_dep.artifact("xcb"));
+    libxkbcommon.root_module.addIncludePath(xcb_dep.path("include/"));
+
+    mod.linkLibrary(libxkbcommon);
 }
