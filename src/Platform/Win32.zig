@@ -484,11 +484,11 @@ fn windowOpenglSwapInterval(context: *anyopaque, platform_window: *PlatformWindo
 
     if (!win32.SUCCEEDED(self.wglSwapIntervalEXT.?(interval))) return reportErr(error.WglMakeCurrent);
 }
-fn windowVulkanCreateSurface(context: *anyopaque, platform_window: *PlatformWindow, instance: *anyopaque, allocator: ?*const anyopaque, getProcAddress: vulkan.InstanceGetProcAddress) anyerror!*anyopaque {
+fn windowVulkanCreateSurface(context: *anyopaque, platform_window: *PlatformWindow, instance: *anyopaque, allocator: ?*const anyopaque, loader: vulkan.PfnGetInstanceProcAddr) anyerror!*anyopaque {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
 
-    const vkCreateWin32SurfaceKHR: vulkan.SurfaceCreateProc = @ptrCast(getProcAddress(instance, "vkCreateWin32SurfaceKHR") orelse return error.LoadVkCreateWin32SurfaceKHR);
+    const vkCreateWin32SurfaceKHR: vulkan.SurfaceCreateProc = @ptrCast(loader(instance, "vkCreateWin32SurfaceKHR") orelse return error.LoadVkCreateWin32SurfaceKHR);
 
     const create_info: vulkan.SurfaceCreateInfo = .{
         .hinstance = self.hinstance,

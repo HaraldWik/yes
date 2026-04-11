@@ -670,11 +670,11 @@ fn windowOpenglSwapInterval(context: *anyopaque, platform_window: *PlatformWindo
     const glXSwapIntervalEXT: *const fn (display: *xlib.Display, drawable: xlib.Drawable, interval: i32) callconv(.c) void = @ptrCast(xlib.glXGetProcAddress("glXSwapIntervalEXT") orelse return error.SwapIntervalLoad);
     glXSwapIntervalEXT(self.display, window.handle, interval);
 }
-fn windowVulkanCreateSurface(context: *anyopaque, platform_window: *PlatformWindow, instance: *anyopaque, allocator: ?*const anyopaque, getProcAddress: vulkan.InstanceGetProcAddress) anyerror!*anyopaque {
+fn windowVulkanCreateSurface(context: *anyopaque, platform_window: *PlatformWindow, instance: *anyopaque, allocator: ?*const anyopaque, loader: vulkan.PfnGetInstanceProcAddr) anyerror!*anyopaque {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
 
-    const vkCreateXlibSurfaceKHR: vulkan.SurfaceCreateProc = @ptrCast(getProcAddress(instance, "vkCreateXlibSurfaceKHR") orelse return error.LoadVkCreateXlibSurfaceKHR);
+    const vkCreateXlibSurfaceKHR: vulkan.SurfaceCreateProc = @ptrCast(loader(instance, "vkCreateXlibSurfaceKHR") orelse return error.LoadVkCreateXlibSurfaceKHR);
 
     const create_info: vulkan.SurfaceCreateInfo = .{ .xlib = .{
         .display = self.display,

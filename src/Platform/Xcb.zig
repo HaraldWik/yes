@@ -759,7 +759,7 @@ fn windowOpenglSwapInterval(context: *anyopaque, platform_window: *PlatformWindo
     _ = window;
     _ = interval;
 }
-fn windowVulkanCreateSurface(context: *anyopaque, platform_window: *PlatformWindow, instance: *anyopaque, allocator: ?*const anyopaque, getProcAddress: vulkan.InstanceGetProcAddress) anyerror!*anyopaque {
+fn windowVulkanCreateSurface(context: *anyopaque, platform_window: *PlatformWindow, instance: *anyopaque, allocator: ?*const anyopaque, loader: vulkan.PfnGetInstanceProcAddr) anyerror!*anyopaque {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
     _ = self;
@@ -784,7 +784,7 @@ fn windowVulkanCreateSurface(context: *anyopaque, platform_window: *PlatformWind
     const tmp_connection = xcb_connect(null, null) orelse return error.Connect;
     defer xcb_disconnect(tmp_connection);
 
-    const vkCreateXcbSurfaceKHR: vulkan.SurfaceCreateProc = @ptrCast(getProcAddress(instance, "vkCreateXcbSurfaceKHR") orelse return error.LoadVkCreateXlibSurfaceKHR);
+    const vkCreateXcbSurfaceKHR: vulkan.SurfaceCreateProc = @ptrCast(loader(instance, "vkCreateXcbSurfaceKHR") orelse return error.LoadVkCreateXlibSurfaceKHR);
 
     const create_info: vulkan.SurfaceCreateInfo = .{ .xcb = .{
         .connection = tmp_connection,

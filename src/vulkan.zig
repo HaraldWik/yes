@@ -9,7 +9,18 @@ pub const Result = enum(c_int) {
     _,
 };
 
-pub const InstanceGetProcAddress = *const fn (instance: *anyopaque, name: [*:0]const u8) callconv(.c) ?*const fn () callconv(.c) void;
+pub const call_conv: std.builtin.CallingConvention = if (builtin.os.tag == .windows and builtin.cpu.arch == .x86)
+    .winapi
+else if (builtin.abi == .android and (builtin.cpu.arch.isArm() or builtin.cpu.arch.isThumb()) and std.Target.arm.featureSetHas(builtin.cpu.features, .has_v7) and builtin.cpu.arch.ptrBitWidth() == 32)
+    .arm_aapcs_vfp
+else
+    .c;
+
+pub const PfnVoidFunction = ?*const fn () callconv(call_conv) void;
+pub const PfnGetInstanceProcAddr = *const fn (
+    instance: *anyopaque,
+    p_name: [*:0]const u8,
+) callconv(call_conv) PfnVoidFunction;
 
 pub const SurfaceCreateInfo = switch (builtin.os.tag) {
     .windows => extern struct {
@@ -52,9 +63,9 @@ pub const SurfaceCreateInfo = switch (builtin.os.tag) {
 
 pub const SurfaceCreateProc = *const fn (instance: *anyopaque, create_info: *const SurfaceCreateInfo, allocator: ?*const anyopaque, surface: *?*anyopaque) callconv(.c) Result;
 
-pub fn createSurface(platform: Platform, window: *Window, instance: *anyopaque, allocator: ?*const anyopaque, getProcAddress: InstanceGetProcAddress) !*anyopaque {
+pub fn createSurface(platform: Platform, window: *Window, instance: *anyopaque, allocator: ?*const anyopaque, loader: PfnGetInstanceProcAddr) !*anyopaque {
     if (window.surface_type != .vulkan) return error.WrongSurfaceType;
-    return platform.vtable.windowVulkanCreateSurface(platform.ptr, window, instance, allocator, getProcAddress);
+    return platform.vtable.windowVulkanCreateSurface(platform.ptr, window, instance, allocator, loader);
 }
 
 pub fn isSupported() bool {

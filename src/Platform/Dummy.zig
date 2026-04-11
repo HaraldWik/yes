@@ -124,7 +124,7 @@ fn windowOpenglSwapInterval(context: *anyopaque, platform_window: *PlatformWindo
     _ = window;
     _ = interval;
 }
-fn windowVulkanCreateSurface(context: *anyopaque, platform_window: *PlatformWindow, instance: *anyopaque, allocator: ?*const anyopaque, getProcAddress: vulkan.InstanceGetProcAddress) anyerror!*anyopaque {
+fn windowVulkanCreateSurface(context: *anyopaque, platform_window: *PlatformWindow, instance: *anyopaque, allocator: ?*const anyopaque, loader: vulkan.PfnGetInstanceProcAddr) anyerror!*anyopaque {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
 
@@ -132,7 +132,7 @@ fn windowVulkanCreateSurface(context: *anyopaque, platform_window: *PlatformWind
     _ = window;
     _ = instance;
     _ = allocator;
-    _ = getProcAddress;
+    _ = loader;
 
     return undefined;
 }
