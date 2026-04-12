@@ -691,7 +691,7 @@ fn xdgToplevelListener(_: *xdg.Toplevel, event: xdg.Toplevel.Event, window: *Win
     switch (event) {
         .configure => |configure| {
             const size: PlatformWindow.Size = .{ .width = @intCast(configure.width), .height = @intCast(configure.height) };
-            window.events.append(gpa, .{ .resize = size }) catch |err| {
+            if (!size.eql(.{})) window.events.append(gpa, .{ .resize = size }) catch |err| {
                 window.err = err;
             };
 
