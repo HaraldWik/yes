@@ -98,7 +98,8 @@ pub fn build(b: *std.Build) void {
 }
 
 pub fn addXcb(b: *std.Build, mod: *std.Build.Module, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) void {
-    const xcb_dep = b.lazyDependency("xcb", .{ .target = target, .optimize = optimize }).?;
+    const xcb_dep = b.lazyDependency("xcb", .{ .target = target, .optimize = optimize }) orelse
+        return std.log.err("lazy dependency xcb returned null, xcb platform will be disabled", .{});
 
     const xcb_translate_c = b.addTranslateC(.{
         .root_source_file = b.addWriteFiles().add("xcb.h",
@@ -118,7 +119,9 @@ pub fn addXcb(b: *std.Build, mod: *std.Build.Module, target: std.Build.ResolvedT
 }
 
 pub fn addXlib(b: *std.Build, mod: *std.Build.Module, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) void {
-    const xlib_dep = b.lazyDependency("xlib", .{}).?;
+    const xlib_dep = b.lazyDependency("xlib", .{}) orelse
+        return std.log.err("lazy dependency xlib returned null, xlib platform will be disabled", .{});
+
     const xlib = b.addTranslateC(.{
         .root_source_file = b.addWriteFiles().add("c.h",
             \\#include <X11/Xlib.h>
@@ -146,7 +149,7 @@ pub fn addWayland(b: *std.Build, mod: *std.Build.Module, target: std.Build.Resol
     const Scanner = @import("wayland").Scanner;
     const scanner = Scanner.create(b, .{});
 
-    const wayland_protocols = b.lazyDependency("wayland_protocols", .{}).?;
+    const wayland_protocols = b.dependency("wayland_protocols", .{});
 
     const wayland = b.createModule(.{
         .root_source_file = scanner.result,
@@ -173,13 +176,13 @@ pub fn addWayland(b: *std.Build, mod: *std.Build.Module, target: std.Build.Resol
 }
 
 pub fn addXkbcommon(b: *std.Build, mod: *std.Build.Module, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, x11: bool) void {
-    const xkbcommon_dep = b.lazyDependency("xkbcommon", .{
+    const xkbcommon_dep = b.dependency("xkbcommon", .{
         .target = target,
         .optimize = optimize,
         .@"xkb-config-root" = "/usr/share/X11/xkb",
 
         .@"x-locale-root" = "/usr/share/X11/locale",
-    }).?;
+    });
     const upstream = xkbcommon_dep.builder.dependency("libxkbcommon", .{});
     const xkbcommon = b.addTranslateC(.{
         .root_source_file = b.addWriteFiles().add("xkbcommon.h",

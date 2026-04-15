@@ -159,7 +159,7 @@ fn windowNative(context: *anyopaque, platform_window: *PlatformWindow) PlatformW
                 return .{ .wayland = .{
                     .display = display,
                     .surface = glfw.glfwGetWaylandWindow(window.handle).?,
-                    .compositor = 0,
+                    .compositor = undefined,
                 } };
             }
 
@@ -172,6 +172,7 @@ fn windowNative(context: *anyopaque, platform_window: *PlatformWindow) PlatformW
             }
         },
     }
+    @panic("platform does not expose native");
 }
 fn windowFramebuffer(context: *anyopaque, platform_window: *PlatformWindow) anyerror!PlatformWindow.Framebuffer {
     const self: *@This() = @ptrCast(@alignCast(context));
@@ -204,21 +205,21 @@ fn windowOpenglSwapInterval(context: *anyopaque, platform_window: *PlatformWindo
     _ = window;
     glfw.glfwSwapInterval(@intCast(interval));
 }
-fn windowVulkanCreateSurface(context: *anyopaque, platform_window: *PlatformWindow, instance: *vulkan.Instance, allocator: ?*const vulkan.AllocationCallbacks, getProcAddress: vulkan.Instance.GetProcAddress) anyerror!*vulkan.Surface {
+fn windowVulkanCreateSurface(context: *anyopaque, platform_window: *PlatformWindow, instance: *anyopaque, allocator: ?*const anyopaque, getProcAddress: vulkan.PfnGetInstanceProcAddr) anyerror!*anyopaque {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
     _ = self;
 
-    var surface: ?*vulkan.Surface = null;
+    var surface: ?*anyopaque = null;
 
     if (builtin.os.tag == .windows) {
         // TODO: add windows support
     }
 
     if (glfw.glfwGetWaylandDisplay()) |display| {
-        const vkCreateWaylandSurfaceKHR: vulkan.Surface.CreateProc = @ptrCast(getProcAddress(instance, "vkCreateWaylandSurfaceKHR") orelse return error.LoadVkCreateWaylandSurfaceKHR);
+        const vkCreateWaylandSurfaceKHR: vulkan.SurfaceCreateProc = @ptrCast(getProcAddress(instance, "vkCreateWaylandSurfaceKHR") orelse return error.LoadVkCreateWaylandSurfaceKHR);
 
-        const create_info: vulkan.Surface.CreateInfo = .{ .wayland = .{
+        const create_info: vulkan.SurfaceCreateInfo = .{ .wayland = .{
             .display = display,
             .surface = glfw.glfwGetWaylandWindow(window.handle).?,
         } };
@@ -227,9 +228,9 @@ fn windowVulkanCreateSurface(context: *anyopaque, platform_window: *PlatformWind
     }
 
     if (glfw.glfwGetX11Display()) |display| {
-        const vkCreateXlibSurfaceKHR: vulkan.Surface.CreateProc = @ptrCast(getProcAddress(instance, "vkCreateXlibSurfaceKHR") orelse return error.LoadVkCreateXlibSurfaceKHR);
+        const vkCreateXlibSurfaceKHR: vulkan.SurfaceCreateProc = @ptrCast(getProcAddress(instance, "vkCreateXlibSurfaceKHR") orelse return error.LoadVkCreateXlibSurfaceKHR);
 
-        const create_info: vulkan.Surface.CreateInfo = .{ .xlib = .{
+        const create_info: vulkan.SurfaceCreateInfo = .{ .xlib = .{
             .display = display,
             .window = glfw.glfwGetX11Window(window.handle),
         } };

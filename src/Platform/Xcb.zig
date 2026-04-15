@@ -114,6 +114,8 @@ pub const Window = struct {
     } = .{ .empty = {} },
 };
 
+extern var xcb_input_id: xcb.xcb_extension_t;
+
 pub fn init(gpa: std.mem.Allocator, minimal: std.process.Init.Minimal) !@This() {
     var screen_index: c_int = 0;
     const display_name = minimal.environ.getPosix("DISPLAY");
@@ -126,7 +128,7 @@ pub fn init(gpa: std.mem.Allocator, minimal: std.process.Init.Minimal) !@This() 
 
     _ = xcb.xcb_change_keyboard_control(connection, xcb.XCB_KB_AUTO_REPEAT_MODE, &@as(u32, 0));
 
-    const xinput = xcb.xcb_get_extension_data(connection, &xcb.xcb_input_id);
+    const xinput = xcb.xcb_get_extension_data(connection, &xcb_input_id);
 
     return .{
         .gpa = gpa,

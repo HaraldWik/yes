@@ -53,7 +53,6 @@ pub fn main(init: std.process.Init) !void {
                     framebuffer.pixels[offset + format.a] = 255;
                 }
             },
-            .mouse_motion => {},
             else => std.log.info("a: {any}", .{event}),
         };
 
@@ -64,7 +63,6 @@ pub fn main(init: std.process.Init) !void {
                 const framebuffer = try window_b.framebuffer(platform);
                 drawCheckerboardPattern(framebuffer, size, 20, .{});
             },
-            .mouse_motion => {},
             else => std.log.info("b: {any}", .{event}),
         };
     }
