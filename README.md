@@ -84,7 +84,7 @@ It implements only a small subset of functionality and mainly serves as a demons
 
 | Window Property Setting              |Windows |Wayland | XCB  | Xlib | XPZ  |Cocoa (Mac) |
 |--------------------------------------|:------:|:------:|:----:|:----:|:----:|:----------:|
-| Title                                |   ✅   |   ✅   |  ✅  |  ✅  |  ❌  |     ❌     |
+| Title                                |   ✅   |   ✅   |  ✅  |  ✅  |  ✅  |     ❌     |
 | Size                                 |   ✅   |   ❌   |  ✅  |  ✅  |  ❌  |     ❌     |
 | Position                             |   ✅   |   ❌   |  ✅  |  ✅  |  ❌  |     ❌     |
 | Resize Policy (max, min, resizable)  |   ✅   |   ✅   |  ✅  |  ✅  |  ❌  |     ❌     |
