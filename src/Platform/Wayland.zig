@@ -26,8 +26,9 @@ compositor: *wl.Compositor,
 xdg_wm_base: *xdg.WmBase,
 seat: *wl.Seat,
 shm: *wl.Shm,
+data_device_manager: *wl.DataDeviceManager,
 zxdg_decoration_manager: ?*zxdg.DecorationManagerV1 = null,
-wp_cursor_shape_manager: ?*wp.CursorShapeManagerV1,
+wp_cursor_shape_manager: ?*wp.CursorShapeManagerV1 = null,
 
 io_manager: *IoManager,
 
@@ -36,6 +37,7 @@ const Globals = struct {
     xdg_wm_base: ?*xdg.WmBase = null,
     seat: ?*wl.Seat = null,
     shm: ?*wl.Shm = null,
+    data_device_manager: ?*wl.DataDeviceManager = null,
     zxdg_decoration_manager: ?*zxdg.DecorationManagerV1 = null,
     wp_cursor_shape_manager: ?*wp.CursorShapeManagerV1 = null,
 };
@@ -59,6 +61,12 @@ const IoManager = struct {
         } = .{},
     } = .{},
     active_touches: std.AutoHashMapUnmanaged(i32, struct { x: f64, y: f64 }) = .empty,
+    data_device: *wl.DataDevice,
+    clipboard: struct {
+        pending: ?*wl.DataOffer = null,
+        active: ?*wl.DataOffer = null,
+        file: ?std.Io.File = null,
+    } = .{},
 };
 
 pub const Window = struct {
@@ -114,13 +122,19 @@ pub fn init(gpa: std.mem.Allocator) !@This() {
     const compositor = globals.compositor orelse return error.NoCompositor;
     const seat = globals.seat orelse return error.NoWlSeat;
     const shm = globals.shm orelse return error.NoShm;
+    const data_device_manager = globals.data_device_manager orelse return error.NoDataDeviceManager;
 
     const io_manager = try gpa.create(IoManager);
-    io_manager.* = .{ .xkb = .{
-        .context = xkb.xkb_context_new(xkb.XKB_CONTEXT_NO_FLAGS) orelse return error.CreateXkbContext,
-    } };
+    io_manager.* = .{
+        .xkb = .{
+            .context = xkb.xkb_context_new(xkb.XKB_CONTEXT_NO_FLAGS) orelse return error.CreateXkbContext,
+        },
+        .data_device = try data_device_manager.getDataDevice(seat),
+    };
 
     seat.setListener(*IoManager, seatListener, io_manager);
+    io_manager.data_device.setListener(*IoManager, dataDeviceListener, io_manager);
+
     if (display.flush() != .SUCCESS) return error.Flush;
     if (display.dispatch() != .SUCCESS) return error.Dispatch;
 
@@ -135,6 +149,7 @@ pub fn init(gpa: std.mem.Allocator) !@This() {
         .xdg_wm_base = xdg_wm_base,
         .seat = seat,
         .shm = shm,
+        .data_device_manager = data_device_manager,
         .zxdg_decoration_manager = globals.zxdg_decoration_manager,
         .wp_cursor_shape_manager = globals.wp_cursor_shape_manager,
 
@@ -195,7 +210,7 @@ fn windowOpen(context: *anyopaque, platform_window: *PlatformWindow, options: Pl
     // window.xdg_toplevel.setQueue(window.event_queue);
 
     var configured: bool = false;
-    window.wl_surface.setListener(*Window, wlSurfaceListener, window);
+    window.wl_surface.setListener(*Window, surfaceListener, window);
     window.xdg_surface.setListener(*bool, xdgSurfaceListener, &configured);
     window.xdg_toplevel.setListener(*Window, xdgToplevelListener, window);
 
@@ -668,7 +683,50 @@ fn touchListener(_: *wl.Touch, event: wl.Touch.Event, io_manager: *IoManager) vo
     }
 }
 
-fn wlSurfaceListener(_: *wl.Surface, event: wl.Surface.Event, window: *Window) void {
+fn dataDeviceListener(_: *wl.DataDevice, event: wl.DataDevice.Event, io_manager: *IoManager) void {
+    switch (event) {
+        .data_offer => |offer| {
+            io_manager.clipboard.pending = offer.id;
+        },
+        .enter => |enter| {
+            std.log.scoped(.data_device).info("{t}", .{event});
+            const window: *Window = @ptrCast(@alignCast(enter.surface.?.getUserData()));
+            _ = window;
+        },
+        .leave => {
+            std.log.scoped(.data_device).info("{t}", .{event});
+        },
+        .motion => |motion| {
+            std.log.scoped(.data_device).info("motion: {d}x{d}", .{ motion.x.toDouble(), motion.y.toDouble() });
+        },
+        .drop => {
+            std.log.scoped(.data_device).info("{t}", .{event});
+        },
+        .selection => |selection| {
+            std.log.scoped(.data_device).info("{t}", .{event});
+
+            const offer = selection.id orelse {
+                io_manager.clipboard.active = null;
+                return;
+            };
+            io_manager.clipboard.active = offer;
+            io_manager.clipboard.pending = null;
+
+            var fds: [2]std.posix.fd_t = undefined;
+            _ = std.posix.system.pipe(&fds);
+
+            const read_fd = fds[0];
+            const write_fd = fds[1];
+
+            offer.receive("text/plain", write_fd);
+            _ = std.posix.system.close(write_fd);
+
+            io_manager.clipboard.file = .{ .handle = read_fd, .flags = .{ .nonblocking = true } };
+        },
+    }
+}
+
+fn surfaceListener(_: *wl.Surface, event: wl.Surface.Event, window: *Window) void {
     switch (event) {
         .enter => |enter| {
             window.output = enter.output;

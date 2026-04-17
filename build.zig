@@ -166,8 +166,8 @@ pub fn addWayland(b: *std.Build, mod: *std.Build.Module, target: std.Build.Resol
     scanner.generate("wl_output", 4);
     scanner.generate("wl_shm", 1);
     scanner.generate("wl_seat", 4);
+    scanner.generate("wl_data_device_manager", 3);
     scanner.generate("xdg_wm_base", 3);
-    // scanner.generate("xdg_activation_v1", 1);
     scanner.generate("zxdg_decoration_manager_v1", 1);
     scanner.generate("wp_cursor_shape_manager_v1", 2);
     scanner.generate("zwp_tablet_manager_v2", 1);

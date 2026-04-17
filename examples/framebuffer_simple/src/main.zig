@@ -40,7 +40,22 @@ pub fn main(init: std.process.Init) !void {
                     framebuffer.pixels[offset + format.a] = 255;
                 }
             },
+            .mouse_motion => {},
             else => std.log.info("{any}", .{event}),
         };
+
+        const wayland: *yes.Platform.Wayland = @ptrCast(@alignCast(platform.ptr));
+
+        if (wayland.io_manager.clipboard.file) |file| {
+            var clipboard_buffer: [128]u8 = undefined;
+            var clipboard_reader = file.reader(io, &clipboard_buffer);
+            const reader = &clipboard_reader.interface;
+
+            try reader.fillMore();
+
+            if (reader.bufferedLen() > 0) std.log.info("clipboard: {s}", .{reader.buffered()});
+
+            reader.tossBuffered();
+        }
     }
 }
