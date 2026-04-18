@@ -26,7 +26,6 @@ compositor: *wl.Compositor,
 xdg_wm_base: *xdg.WmBase,
 seat: *wl.Seat,
 shm: *wl.Shm,
-data_device_manager: *wl.DataDeviceManager,
 zxdg_decoration_manager: ?*zxdg.DecorationManagerV1 = null,
 wp_cursor_shape_manager: ?*wp.CursorShapeManagerV1 = null,
 
@@ -61,6 +60,7 @@ const IoManager = struct {
         } = .{},
     } = .{},
     active_touches: std.AutoHashMapUnmanaged(i32, struct { x: f64, y: f64 }) = .empty,
+    data_device_manager: *wl.DataDeviceManager,
     data_device: *wl.DataDevice,
     clipboard: struct {
         pending: ?*wl.DataOffer = null,
@@ -129,11 +129,14 @@ pub fn init(gpa: std.mem.Allocator) !@This() {
         .xkb = .{
             .context = xkb.xkb_context_new(xkb.XKB_CONTEXT_NO_FLAGS) orelse return error.CreateXkbContext,
         },
+        .data_device_manager = data_device_manager,
         .data_device = try data_device_manager.getDataDevice(seat),
     };
 
     seat.setListener(*IoManager, seatListener, io_manager);
     io_manager.data_device.setListener(*IoManager, dataDeviceListener, io_manager);
+
+    // wl_data_source_offer(data_source, "text/plain;charset=utf-8");
 
     if (display.flush() != .SUCCESS) return error.Flush;
     if (display.dispatch() != .SUCCESS) return error.Dispatch;
@@ -149,7 +152,6 @@ pub fn init(gpa: std.mem.Allocator) !@This() {
         .xdg_wm_base = xdg_wm_base,
         .seat = seat,
         .shm = shm,
-        .data_device_manager = data_device_manager,
         .zxdg_decoration_manager = globals.zxdg_decoration_manager,
         .wp_cursor_shape_manager = globals.wp_cursor_shape_manager,
 
@@ -579,6 +581,13 @@ fn keyboardListener(_: *wl.Keyboard, event: wl.Keyboard.Event, io_manager: *IoMa
             if (current_window.? == window) io_manager.current_window.store(null, .seq_cst);
         },
         .key => |key| if (current_window) |window| {
+            // HARALD TMP
+            const data_source = io_manager.data_device_manager.createDataSource() catch return;
+            data_source.offer("text/plain;charset=utf-8");
+            io_manager.data_device.setSelection(data_source, key.serial);
+            data_source.setListener(*IoManager, dataSourceListener, io_manager);
+            // HARALD TMP
+
             if (io_manager.xkb.state == null or io_manager.xkb.keymap == null) return;
             const sym = xkb.xkb_state_key_get_one_sym(io_manager.xkb.state.?, key.key + 8);
             const window_event: PlatformWindow.Event.Key = .{
@@ -687,11 +696,14 @@ fn dataDeviceListener(_: *wl.DataDevice, event: wl.DataDevice.Event, io_manager:
     switch (event) {
         .data_offer => |offer| {
             io_manager.clipboard.pending = offer.id;
+            offer.id.setListener(*IoManager, dataOfferListener, io_manager);
         },
         .enter => |enter| {
             std.log.scoped(.data_device).info("{t}", .{event});
             const window: *Window = @ptrCast(@alignCast(enter.surface.?.getUserData()));
             _ = window;
+
+            // enter.id.?.setListener(*IoManager, dataOfferListener, io_manager);
         },
         .leave => {
             std.log.scoped(.data_device).info("{t}", .{event});
@@ -718,11 +730,66 @@ fn dataDeviceListener(_: *wl.DataDevice, event: wl.DataDevice.Event, io_manager:
             const read_fd = fds[0];
             const write_fd = fds[1];
 
-            offer.receive("text/plain", write_fd);
+            offer.receive("text/plain;charset=utf-8", write_fd);
             _ = std.posix.system.close(write_fd);
 
             io_manager.clipboard.file = .{ .handle = read_fd, .flags = .{ .nonblocking = true } };
         },
+    }
+}
+
+fn dataOfferListener(_: *wl.DataOffer, event: wl.DataOffer.Event, io_manager: *IoManager) void {
+    _ = io_manager;
+    switch (event) {
+        .offer => |offer| {
+            std.log.scoped(.data_offer).info("offer: {s}", .{offer.mime_type});
+        },
+        .source_actions => |action| {
+            std.log.scoped(.data_offer).info("source_actions: {s}{s}{s}", .{
+                if (action.source_actions.ask) "ask;" else "",
+                if (action.source_actions.copy) "copy;" else "",
+                if (action.source_actions.move) "move;" else "",
+            });
+        },
+        .action => |action| {
+            std.log.scoped(.data_offer).info("action: {s}{s}{s}", .{
+                if (action.dnd_action.ask) "ask;" else "",
+                if (action.dnd_action.copy) "copy;" else "",
+                if (action.dnd_action.move) "move;" else "",
+            });
+        },
+    }
+}
+
+fn dataSourceListener(source: *wl.DataSource, event: wl.DataSource.Event, io_manager: *IoManager) void {
+    _ = io_manager;
+    switch (event) {
+        .send => |send| {
+            std.log.info("send: {s}", .{send.mime_type});
+
+            if (!std.mem.eql(u8, std.mem.span(send.mime_type), "text/plain") and
+                !std.mem.eql(u8, std.mem.span(send.mime_type), "text/plain;charset=utf-8"))
+            {
+                _ = std.posix.system.close(send.fd);
+                return;
+            }
+
+            const bytes = "Hello, world!";
+
+            var written: usize = 0;
+            while (written < bytes.len) {
+                const n = std.posix.system.write(send.fd, bytes[0..].ptr, bytes.len);
+                written += @intCast(n);
+            }
+
+            _ = std.posix.system.close(send.fd);
+        },
+
+        .cancelled => {
+            source.destroy();
+        },
+
+        else => {},
     }
 }
 
