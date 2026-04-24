@@ -62,6 +62,10 @@ const IoManager = struct {
     active_touches: std.AutoHashMapUnmanaged(i32, struct { x: f64, y: f64 }) = .empty,
     data_device_manager: *wl.DataDeviceManager,
     data_device: *wl.DataDevice,
+    dnd: struct {
+        offer: *wl.DataOffer = undefined,
+        fd: std.posix.fd_t = 0,
+    } = .{},
     clipboard: struct {
         pending: ?*wl.DataOffer = null,
         active: ?*wl.DataOffer = null,
@@ -160,6 +164,7 @@ pub fn init(gpa: std.mem.Allocator) !@This() {
 }
 
 pub fn deinit(self: @This()) void {
+    self.io_manager.data_device.destroy();
     if (self.io_manager.xkb.state) |state| xkb.xkb_state_unref(state);
     if (self.io_manager.xkb.keymap) |keymap| xkb.xkb_keymap_unref(keymap);
     if (self.io_manager.xkb.context) |context| xkb.xkb_context_unref(context);
@@ -583,7 +588,8 @@ fn keyboardListener(_: *wl.Keyboard, event: wl.Keyboard.Event, io_manager: *IoMa
         .key => |key| if (current_window) |window| {
             // HARALD TMP
             const data_source = io_manager.data_device_manager.createDataSource() catch return;
-            data_source.offer("text/plain;charset=utf-8");
+            // data_source.offer("text/plain;charset=utf-8");
+            data_source.offer("text/uri-list");
             io_manager.data_device.setSelection(data_source, key.serial);
             data_source.setListener(*IoManager, dataSourceListener, io_manager);
             // HARALD TMP
@@ -699,20 +705,53 @@ fn dataDeviceListener(_: *wl.DataDevice, event: wl.DataDevice.Event, io_manager:
             offer.id.setListener(*IoManager, dataOfferListener, io_manager);
         },
         .enter => |enter| {
-            std.log.scoped(.data_device).info("{t}", .{event});
             const window: *Window = @ptrCast(@alignCast(enter.surface.?.getUserData()));
-            _ = window;
+            std.log.scoped(.data_device).info("{t} ({t} window)", .{ event, window.surface });
+            if (enter.id) |offer| {
+                std.debug.print("accept\n", .{});
+                offer.accept(enter.serial, "text/uri-list");
 
-            // enter.id.?.setListener(*IoManager, dataOfferListener, io_manager);
+                io_manager.dnd.offer = offer;
+            }
+
+            window.events.append(window.gpa, .drag_enter) catch |err| {
+                window.err = err;
+            };
+            io_manager.current_window.store(window, .seq_cst);
         },
         .leave => {
-            std.log.scoped(.data_device).info("{t}", .{event});
+            const window = io_manager.current_window.load(.seq_cst) orelse return;
+            window.events.append(window.gpa, .drag_leave) catch |err| {
+                window.err = err;
+            };
         },
         .motion => |motion| {
-            std.log.scoped(.data_device).info("motion: {d}x{d}", .{ motion.x.toDouble(), motion.y.toDouble() });
+            const drag_motion: PlatformWindow.Event.MouseMotion = .{ .x = motion.x.toDouble(), .y = motion.y.toDouble() };
+
+            const window = io_manager.current_window.load(.seq_cst) orelse return;
+            window.events.append(window.gpa, .{ .drag_motion = drag_motion }) catch |err| {
+                window.err = err;
+            };
         },
         .drop => {
-            std.log.scoped(.data_device).info("{t}", .{event});
+            const offer = io_manager.dnd.offer;
+
+            var fds: [2]std.posix.fd_t = undefined;
+            _ = std.posix.system.pipe(&fds);
+
+            const read_fd = fds[0];
+            const write_fd = fds[1];
+
+            offer.receive("text/uri-list", write_fd);
+            offer.receive("text/plain", write_fd);
+            _ = std.posix.system.close(write_fd);
+
+            io_manager.clipboard.file = .{ .handle = read_fd, .flags = .{ .nonblocking = false } };
+
+            const window = io_manager.current_window.load(.seq_cst) orelse return;
+            window.events.append(window.gpa, .{ .drag_drop = .{ .action = .copy, .kind = .text, .fd = read_fd } }) catch |err| {
+                window.err = err;
+            };
         },
         .selection => |selection| {
             std.log.scoped(.data_device).info("{t}", .{event});
@@ -722,19 +761,51 @@ fn dataDeviceListener(_: *wl.DataDevice, event: wl.DataDevice.Event, io_manager:
                 return;
             };
             io_manager.clipboard.active = offer;
-            io_manager.clipboard.pending = null;
 
-            var fds: [2]std.posix.fd_t = undefined;
-            _ = std.posix.system.pipe(&fds);
-
-            const read_fd = fds[0];
-            const write_fd = fds[1];
-
-            offer.receive("text/plain;charset=utf-8", write_fd);
-            _ = std.posix.system.close(write_fd);
-
-            io_manager.clipboard.file = .{ .handle = read_fd, .flags = .{ .nonblocking = true } };
+            // io_manager.clipboard.file = .{ .handle = read_fd, .flags = .{ .nonblocking = false } };
         },
+    }
+}
+
+fn dataSourceListener(source: *wl.DataSource, event: wl.DataSource.Event, io_manager: *IoManager) void {
+    _ = io_manager;
+    switch (event) {
+        .send => |send| {
+
+            // if (!std.mem.eql(u8, std.mem.span(send.mime_type), "text/plain") and
+            //     !std.mem.eql(u8, std.mem.span(send.mime_type), "text/plain;charset=utf-8"))
+            // {
+            //     _ = std.posix.system.close(send.fd);
+            //     return;
+            // }
+
+            if (!std.mem.eql(u8, std.mem.span(send.mime_type), "text/uri-list")) {
+                _ = std.posix.system.close(send.fd);
+                std.log.info("send wrong mime: {s}", .{send.mime_type});
+
+                return;
+            }
+
+            std.log.info("send found: {s}", .{send.mime_type});
+
+            const bytes =
+                "file:///home/user/Pictures/Screenshots/Screenshot%20From%202026-04-17%2017-47-33.png\n" ++
+                "file:///home/user/Pictures/Screenshots/Screenshot%20From%202026-04-17%2017-47-33.png\n";
+
+            var written: usize = 0;
+            while (written < bytes.len) {
+                const n = std.posix.system.write(send.fd, bytes[0..].ptr, bytes.len);
+                written += @intCast(n);
+            }
+
+            _ = std.posix.system.close(send.fd);
+        },
+
+        .cancelled => {
+            source.destroy();
+        },
+
+        else => {},
     }
 }
 
@@ -758,38 +829,6 @@ fn dataOfferListener(_: *wl.DataOffer, event: wl.DataOffer.Event, io_manager: *I
                 if (action.dnd_action.move) "move;" else "",
             });
         },
-    }
-}
-
-fn dataSourceListener(source: *wl.DataSource, event: wl.DataSource.Event, io_manager: *IoManager) void {
-    _ = io_manager;
-    switch (event) {
-        .send => |send| {
-            std.log.info("send: {s}", .{send.mime_type});
-
-            if (!std.mem.eql(u8, std.mem.span(send.mime_type), "text/plain") and
-                !std.mem.eql(u8, std.mem.span(send.mime_type), "text/plain;charset=utf-8"))
-            {
-                _ = std.posix.system.close(send.fd);
-                return;
-            }
-
-            const bytes = "Hello, world!";
-
-            var written: usize = 0;
-            while (written < bytes.len) {
-                const n = std.posix.system.write(send.fd, bytes[0..].ptr, bytes.len);
-                written += @intCast(n);
-            }
-
-            _ = std.posix.system.close(send.fd);
-        },
-
-        .cancelled => {
-            source.destroy();
-        },
-
-        else => {},
     }
 }
 

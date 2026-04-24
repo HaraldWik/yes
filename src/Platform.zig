@@ -2,6 +2,7 @@ const build_options = @import("build_options");
 const Window = @import("Window.zig");
 const opengl = @import("opengl.zig");
 const vulkan = @import("vulkan.zig");
+const Clipboard = @import("root.zig").Clipboard;
 
 ptr: *anyopaque,
 vtable: *const VTable,
@@ -45,4 +46,7 @@ pub const VTable = struct {
     windowVulkanCreateSurface: *const fn (*anyopaque, window: *Window, instance: *anyopaque, allocator: ?*const anyopaque, loader: vulkan.PfnGetInstanceProcAddr) anyerror!*anyopaque,
 
     openglGetProcAddress: *const fn (procname: [*:0]const u8) callconv(opengl.APIENTRY) ?opengl.Proc,
+
+    setClipboard: *const fn (*anyopaque, serial: u32, clipboard: Clipboard) anyerror!void = undefined,
+    getClipboard: *const fn (*anyopaque, serial: u32) anyerror!Clipboard = undefined,
 };

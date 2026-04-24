@@ -1,11 +1,11 @@
 const std = @import("std");
-const win32 = @import("win32").everything;
-const xkb = @import("xkbcommon");
 const Size = @import("../Window.zig").Size;
 const Position = @import("../Window.zig").Position;
+const win32 = @import("win32").everything;
+const xkb = @import("xkbcommon");
 
 pub const Event = union(enum) {
-    close,
+    close: void,
     resize: Size,
     move: Position,
     focus: bool,
@@ -18,6 +18,11 @@ pub const Event = union(enum) {
     touch_down: Touch,
     touch_up: Touch,
     touch_motion: Touch,
+
+    drag_enter: void, // TODO
+    drag_leave: void, // TODO
+    drag_motion: MouseMotion,
+    drag_drop: DragDrop, // TODO
 
     pub const Key = struct {
         state: State,
@@ -401,5 +406,21 @@ pub const Event = union(enum) {
         id: i32,
         x: f64 = 0.0,
         y: f64 = 0.0,
+    };
+
+    pub const DragDrop = struct {
+        action: Action,
+        kind: Kind,
+        fd: std.posix.fd_t,
+
+        pub const Action = enum(u1) {
+            copy,
+            move,
+        };
+
+        pub const Kind = enum(u1) {
+            files,
+            text,
+        };
     };
 };

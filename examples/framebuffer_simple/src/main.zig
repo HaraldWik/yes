@@ -41,6 +41,12 @@ pub fn main(init: std.process.Init) !void {
                 }
             },
             .mouse_motion => {},
+            .drag_motion => {},
+            .drag_drop => |drop| {
+                var buf: [256]u8 = undefined;
+                const read = buf[0..@intCast(std.posix.system.read(drop.fd, &buf, buf.len))];
+                std.debug.print("drop:\n{s}\n", .{read});
+            },
             else => std.log.info("{any}", .{event}),
         };
 
@@ -56,6 +62,20 @@ pub fn main(init: std.process.Init) !void {
             if (reader.bufferedLen() > 0) std.log.info("clipboard: {s}", .{reader.buffered()});
 
             reader.tossBuffered();
+        }
+
+        if (wayland.io_manager.clipboard.active) |offer| {
+            var fds: [2]std.posix.fd_t = undefined;
+            _ = std.posix.system.pipe(&fds);
+
+            const read_fd = fds[0];
+            const write_fd = fds[1];
+
+            offer.receive("text/plain;charset=utf-8", write_fd);
+            _ = std.posix.system.close(write_fd);
+
+            // wayland.io_manager.clipboard.active.?.destroy();
+            wayland.io_manager.clipboard.file = .{ .handle = read_fd, .flags = .{ .nonblocking = false } };
         }
     }
 }
