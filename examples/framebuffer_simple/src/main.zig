@@ -52,19 +52,16 @@ pub fn main(init: std.process.Init) !void {
 
         const wayland: *yes.Platform.Wayland = @ptrCast(@alignCast(platform.ptr));
 
-        if (wayland.io_manager.clipboard.file) |file| {
-            var clipboard_buffer: [128]u8 = undefined;
-            var clipboard_reader = file.reader(io, &clipboard_buffer);
-            const reader = &clipboard_reader.interface;
+        if (wayland.io_manager.clipboard.fd != 0) {
+            const fd = wayland.io_manager.clipboard.fd;
+            var buffer: [128]u8 = undefined;
+            const read = buffer[0..@intCast(try std.posix.read(fd, &buffer))];
+            std.log.info("clipboard:\n{s}", .{std.mem.trimEnd(u8, read, "\n\r")});
 
-            try reader.fillMore();
-
-            if (reader.bufferedLen() > 0) std.log.info("clipboard: {s}", .{reader.buffered()});
-
-            reader.tossBuffered();
+            wayland.io_manager.clipboard.fd = 0;
         }
 
-        if (wayland.io_manager.clipboard.active) |offer| {
+        if (wayland.io_manager.clipboard.offer) |offer| {
             var fds: [2]std.posix.fd_t = undefined;
             _ = std.posix.system.pipe(&fds);
 
@@ -74,8 +71,8 @@ pub fn main(init: std.process.Init) !void {
             offer.receive("text/plain;charset=utf-8", write_fd);
             _ = std.posix.system.close(write_fd);
 
-            // wayland.io_manager.clipboard.active.?.destroy();
-            wayland.io_manager.clipboard.file = .{ .handle = read_fd, .flags = .{ .nonblocking = false } };
+            wayland.io_manager.clipboard.fd = read_fd;
+            wayland.io_manager.clipboard.offer = null;
         }
     }
 }

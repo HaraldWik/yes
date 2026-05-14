@@ -67,9 +67,8 @@ const IoManager = struct {
         fd: std.posix.fd_t = 0,
     } = .{},
     clipboard: struct {
-        pending: ?*wl.DataOffer = null,
-        active: ?*wl.DataOffer = null,
-        file: ?std.Io.File = null,
+        offer: ?*wl.DataOffer = null,
+        fd: std.posix.fd_t = 0,
     } = .{},
 };
 
@@ -701,7 +700,7 @@ fn touchListener(_: *wl.Touch, event: wl.Touch.Event, io_manager: *IoManager) vo
 fn dataDeviceListener(_: *wl.DataDevice, event: wl.DataDevice.Event, io_manager: *IoManager) void {
     switch (event) {
         .data_offer => |offer| {
-            io_manager.clipboard.pending = offer.id;
+            io_manager.clipboard.offer = offer.id;
             offer.id.setListener(*IoManager, dataOfferListener, io_manager);
         },
         .enter => |enter| {
@@ -746,8 +745,6 @@ fn dataDeviceListener(_: *wl.DataDevice, event: wl.DataDevice.Event, io_manager:
             offer.receive("text/plain", write_fd);
             _ = std.posix.system.close(write_fd);
 
-            io_manager.clipboard.file = .{ .handle = read_fd, .flags = .{ .nonblocking = false } };
-
             const window = io_manager.current_window.load(.seq_cst) orelse return;
             window.events.append(window.gpa, .{ .drag_drop = .{ .action = .copy, .kind = .text, .fd = read_fd } }) catch |err| {
                 window.err = err;
@@ -757,12 +754,11 @@ fn dataDeviceListener(_: *wl.DataDevice, event: wl.DataDevice.Event, io_manager:
             std.log.scoped(.data_device).info("{t}", .{event});
 
             const offer = selection.id orelse {
-                io_manager.clipboard.active = null;
+                io_manager.clipboard.offer = null;
                 return;
             };
-            io_manager.clipboard.active = offer;
 
-            // io_manager.clipboard.file = .{ .handle = read_fd, .flags = .{ .nonblocking = false } };
+            io_manager.clipboard.offer = offer;
         },
     }
 }

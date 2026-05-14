@@ -48,5 +48,85 @@ pub const VTable = struct {
     openglGetProcAddress: *const fn (procname: [*:0]const u8) callconv(opengl.APIENTRY) ?opengl.Proc,
 
     setClipboard: *const fn (*anyopaque, serial: u32, clipboard: Clipboard) anyerror!void = undefined,
-    getClipboard: *const fn (*anyopaque, serial: u32) anyerror!Clipboard = undefined,
 };
+
+pub const failing: @This() = .{
+    .ptr = undefined,
+    .vtable = &VTable{
+        .windowOpen = noWindowOpen,
+        .windowClose = noWindowClose,
+        .windowPoll = noWindowPoll,
+        .windowSetProperty = noWindowSetProperty,
+        .windowNative = unreachableWindowNative,
+        .windowFramebuffer = failingWindowFramebuffer,
+        .windowOpenglMakeCurrent = noWindowOpenglMakeCurrent,
+        .windowOpenglSwapBuffers = failingWindowOpenglSwapBuffers,
+        .windowOpenglSwapInterval = failingWindowOpenglSwapInterval,
+        .windowVulkanCreateSurface = failingWindowVulkanCreateSurface,
+        .openglGetProcAddress = noOpenglGetProcAddress,
+    },
+};
+
+pub fn noWindowOpen(self: *anyopaque, window: *Window, options: Window.OpenOptions) anyerror!void {
+    _ = self;
+    _ = window;
+    _ = options;
+}
+pub fn noWindowClose(self: *anyopaque, window: *Window) void {
+    _ = self;
+    _ = window;
+}
+pub fn noWindowPoll(self: *anyopaque, window: *Window) anyerror!?Window.Event {
+    _ = self;
+    _ = window;
+
+    return null;
+}
+pub fn noWindowSetProperty(self: *anyopaque, window: *Window, property: Window.Property) anyerror!void {
+    _ = self;
+    _ = window;
+    _ = property;
+}
+pub fn unreachableWindowNative(self: *anyopaque, window: *Window) Window.Native {
+    _ = self;
+    _ = window;
+    unreachable;
+}
+pub fn failingWindowFramebuffer(self: *anyopaque, window: *Window) anyerror!Window.Framebuffer {
+    _ = self;
+    _ = window;
+    return error.Failing;
+}
+pub fn noWindowOpenglMakeCurrent(self: *anyopaque, window: *Window) anyerror!void {
+    _ = self;
+    _ = window;
+}
+pub fn failingWindowOpenglSwapBuffers(self: *anyopaque, window: *Window) anyerror!void {
+    _ = self;
+    _ = window;
+    return error.SwapBuffers;
+}
+pub fn failingWindowOpenglSwapInterval(self: *anyopaque, window: *Window, interval: i32) anyerror!void {
+    _ = self;
+    _ = window;
+    _ = interval;
+    return error.SwapInterval;
+}
+pub fn failingWindowVulkanCreateSurface(self: *anyopaque, window: *Window, instance: *anyopaque, allocator: ?*const anyopaque, loader: vulkan.PfnGetInstanceProcAddr) anyerror!*anyopaque {
+    _ = self;
+    _ = window;
+    _ = instance;
+    _ = allocator;
+    _ = loader;
+    return error.CreateSurface;
+}
+pub fn noOpenglGetProcAddress(procname: [*:0]const u8) callconv(opengl.APIENTRY) ?opengl.Proc {
+    _ = procname;
+    return null;
+}
+pub fn failingSetClipboard(self: *anyopaque, serial: u32, clipboard: Clipboard) anyerror!void {
+    _ = self;
+    _ = serial;
+    _ = clipboard;
+    return error.SetClipboard;
+}
