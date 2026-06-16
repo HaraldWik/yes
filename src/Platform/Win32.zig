@@ -115,8 +115,8 @@ fn windowOpen(context: *anyopaque, platform_window: *PlatformWindow, options: Pl
         window.class.lpszClassName,
         @ptrCast(title),
         win32.WS_OVERLAPPEDWINDOW,
-        if (options.position) |position| position.x else win32.CW_USEDEFAULT,
-        if (options.position) |position| position.y else win32.CW_USEDEFAULT,
+        if (options.position) |position| position.x else @max(0, @divTrunc(win32.GetSystemMetrics(.CXSCREEN) - @as(i32, @intCast(options.size.width)), 2)),
+        if (options.position) |position| position.y else @max(0, @divTrunc(win32.GetSystemMetrics(.CYSCREEN) - @as(i32, @intCast(options.size.height)), 2)),
         @intCast(options.size.width),
         @intCast(options.size.height),
         null,
@@ -257,14 +257,7 @@ fn windowPoll(context: *anyopaque, platform_window: *PlatformWindow) anyerror!?P
 
             return null;
         },
-        win32.WM_DESTROY => .close,
-        win32.WM_SYSCOMMAND => switch (msg.wParam) {
-            win32.SC_CLOSE => .close,
-            else => {
-                std.log.warn("unknown WM_SYSCOMMAND: {d}", .{msg.wParam});
-                return null;
-            },
-        },
+        win32.WM_USER + win32.WM_CLOSE => .close,
         win32.WM_USER + win32.WM_SETFOCUS => .{ .focus = true },
         win32.WM_USER + win32.WM_KILLFOCUS => .{ .focus = false },
         win32.WM_USER + win32.WM_SIZE => .{ .resize = .{
@@ -285,13 +278,12 @@ fn windowPoll(context: *anyopaque, platform_window: *PlatformWindow) anyerror!?P
             .y = @floatFromInt(@as(u16, @truncate(@as(usize, @intCast(msg.lParam >> 16))))),
         } },
         win32.WM_MOUSEWHEEL, win32.WM_MOUSEHWHEEL => {
-            const delta: isize = @intCast((msg.wParam >> 16) & 0xFFFF);
-            var lines: isize = @intCast(@divTrunc(delta, @as(isize, @intCast(win32.WHEEL_DELTA)))); // lines > 0 -> scroll right, lines < 0 -> left
-            if (lines == 545) lines = -1;
+            const delta: isize = @as(i16, @bitCast(@as(u16, @truncate(msg.wParam >> 16)))); // signed high word: up/right > 0, down/left < 0
+            const lines: isize = @divTrunc(delta, @as(isize, @intCast(win32.WHEEL_DELTA)));
             return .{
                 .mouse_scroll = switch (msg.message) {
-                    win32.WM_MOUSEWHEEL => .{ .horizontal = @floatFromInt(lines) },
-                    win32.WM_MOUSEHWHEEL => .{ .vertical = @floatFromInt(lines) },
+                    win32.WM_MOUSEWHEEL => .{ .vertical = @floatFromInt(lines) },
+                    win32.WM_MOUSEHWHEEL => .{ .horizontal = @floatFromInt(lines) },
                     else => unreachable,
                 },
             };
@@ -509,7 +501,7 @@ fn openglGetProcAddress(procname: [*:0]const u8) callconv(opengl.APIENTRY) ?open
 
 fn wndProc(hwnd: win32.HWND, msg: u32, wParam: usize, lParam: isize) callconv(.winapi) isize {
     return switch (msg) {
-        win32.WM_GETMINMAXINFO, win32.WM_SIZE, win32.WM_MOVE, win32.WM_SETFOCUS, win32.WM_KILLFOCUS => |wm| {
+        win32.WM_GETMINMAXINFO, win32.WM_SIZE, win32.WM_MOVE, win32.WM_SETFOCUS, win32.WM_KILLFOCUS, win32.WM_CLOSE => |wm| {
             if (!win32.SUCCEEDED(win32.PostMessageW(hwnd, win32.WM_USER + wm, wParam, lParam))) reportErr(error.PostMessage) catch {};
             return 0;
         },

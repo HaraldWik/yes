@@ -1,5 +1,4 @@
 const std = @import("std");
-const builtin = @import("builtin");
 const yes = @import("yes");
 
 // example args "zig build run -- --xdg=wayland"
@@ -7,10 +6,10 @@ const yes = @import("yes");
 // if none are selected it will detect it in yes.Platform.unix.SessionType
 
 pub fn main(init: std.process.Init) !void {
-    const allocator = init.gpa;
+    const gpa = init.gpa;
     const io = init.io;
 
-    var cross_platform: yes.Platform.Cross = try .init(allocator, io, init.minimal);
+    var cross_platform: yes.Platform.Cross = try .init(gpa, io, init.minimal);
     defer cross_platform.deinit();
     const platform = cross_platform.platform();
 
