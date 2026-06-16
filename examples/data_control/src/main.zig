@@ -41,7 +41,38 @@ pub fn main(init: std.process.Init) !void {
                 }
             },
             .mouse_motion => {},
+            .drag_motion => {},
+            .drag_drop => |drop| {
+                var buf: [256]u8 = undefined;
+                const read = buf[0..@intCast(std.posix.system.read(drop.fd, &buf, buf.len))];
+                std.debug.print("drop:\n{s}\n", .{read});
+            },
             else => std.log.info("{any}", .{event}),
         };
+
+        const wayland: *yes.Platform.Wayland = @ptrCast(@alignCast(platform.ptr));
+
+        if (wayland.io_manager.clipboard.fd != 0) {
+            const fd = wayland.io_manager.clipboard.fd;
+            var buffer: [128]u8 = undefined;
+            const read = buffer[0..@intCast(try std.posix.read(fd, &buffer))];
+            std.log.info("clipboard:\n{s}", .{std.mem.trimEnd(u8, read, "\n\r")});
+
+            wayland.io_manager.clipboard.fd = 0;
+        }
+
+        if (wayland.io_manager.clipboard.offer) |offer| {
+            var fds: [2]std.posix.fd_t = undefined;
+            _ = std.posix.system.pipe(&fds);
+
+            const read_fd = fds[0];
+            const write_fd = fds[1];
+
+            offer.receive("text/plain;charset=utf-8", write_fd);
+            _ = std.posix.system.close(write_fd);
+
+            wayland.io_manager.clipboard.fd = read_fd;
+            wayland.io_manager.clipboard.offer = null;
+        }
     }
 }
