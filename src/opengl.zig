@@ -1,7 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const build_options = @import("build_options");
-const Platform = @import("Platform.zig");
+const Desktop = @import("Desktop.zig");
 const Window = @import("Window.zig");
 
 pub const APIENTRY: std.builtin.CallingConvention = if (builtin.os.tag == .windows) .winapi else .c;
@@ -17,27 +17,27 @@ pub extern "opengl32" fn wglGetProcAddress(param0: [*:0]const u8) callconv(.wina
 pub extern "glx" fn glXGetProcAddress(procname: [*:0]const u8) callconv(.c) ?Proc;
 pub extern "egl" fn eglGetProcAddress(procname: [*:0]const u8) callconv(.c) ?Proc;
 
-pub fn getProcAddressProc(platform: Platform) *const fn (procname: [*:0]const u8) callconv(APIENTRY) ?Proc {
+pub fn getProcAddressProc(desktop: Desktop) *const fn (procname: [*:0]const u8) callconv(APIENTRY) ?Proc {
     if (!build_options.opengl) invalid();
-    return platform.vtable.openglGetProcAddress;
+    return desktop.vtable.openglGetProcAddress;
 }
 
-pub fn makeCurrent(platform: Platform, window: *Window) !void {
+pub fn makeCurrent(desktop: Desktop, window: *Window) !void {
     if (!build_options.opengl) invalid();
     if (window.surface_type != .opengl) return error.WrongSurfaceType;
-    try platform.vtable.windowOpenglMakeCurrent(platform.ptr, window);
+    try desktop.vtable.windowOpenglMakeCurrent(desktop.ptr, window);
 }
 
-pub fn swapBuffers(platform: Platform, window: *Window) !void {
+pub fn swapBuffers(desktop: Desktop, window: *Window) !void {
     if (!build_options.opengl) invalid();
     if (window.surface_type != .opengl) return error.WrongSurfaceType;
-    try platform.vtable.windowOpenglSwapBuffers(platform.ptr, window);
+    try desktop.vtable.windowOpenglSwapBuffers(desktop.ptr, window);
 }
 
-pub fn swapInterval(platform: Platform, window: *Window, interval: i32) !void {
+pub fn swapInterval(desktop: Desktop, window: *Window, interval: i32) !void {
     if (!build_options.opengl) invalid();
     if (window.surface_type != .opengl) return error.WrongSurfaceType;
-    try platform.vtable.windowOpenglSwapInterval(platform.ptr, window, interval);
+    try desktop.vtable.windowOpenglSwapInterval(desktop.ptr, window, interval);
 }
 
 fn invalid() callconv(.c) noreturn {

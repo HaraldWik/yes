@@ -1,6 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
-const Platform = @import("Platform.zig");
+const Desktop = @import("Desktop.zig");
 const opengl = @import("opengl.zig");
 
 const Window = @This();
@@ -203,7 +203,7 @@ pub const OpenOptions = struct {
     surface_type: SurfaceType = .empty,
 };
 
-pub fn open(window: *Window, platform: Platform, options: OpenOptions) anyerror!void {
+pub fn open(window: *Window, desktop: Desktop, options: OpenOptions) anyerror!void {
     if (builtin.os.tag.isDarwin()) switch (options.surface_type) {
         .opengl => |gl| if (gl.major == 4) std.debug.assert(gl <= 1),
         else => {},
@@ -212,13 +212,13 @@ pub fn open(window: *Window, platform: Platform, options: OpenOptions) anyerror!
     window.position = options.position orelse .{};
     window.surface_type = options.surface_type;
     window.focused = options.focused;
-    try platform.vtable.windowOpen(platform.ptr, window, options);
+    try desktop.vtable.windowOpen(desktop.ptr, window, options);
 }
-pub fn close(window: *Window, platform: Platform) void {
-    platform.vtable.windowClose(platform.ptr, window);
+pub fn close(window: *Window, desktop: Desktop) void {
+    desktop.vtable.windowClose(desktop.ptr, window);
 }
-pub fn poll(window: *Window, platform: Platform) anyerror!?Event {
-    const event = try platform.vtable.windowPoll(platform.ptr, window) orelse return null;
+pub fn poll(window: *Window, desktop: Desktop) anyerror!?Event {
+    const event = try desktop.vtable.windowPoll(desktop.ptr, window) orelse return null;
     switch (event) {
         .resize => |size| window.size = size,
         .move => |position| window.position = position,
@@ -227,7 +227,7 @@ pub fn poll(window: *Window, platform: Platform) anyerror!?Event {
             window.focused = focus;
         },
         .key => |key| {
-            if (key.state == window.keyboard.get(key.sym)) return window.poll(platform);
+            if (key.state == window.keyboard.get(key.sym)) return window.poll(desktop);
             window.keyboard.set(key.sym, key.state);
         },
         .mouse_motion => |motion| window.mouse_position = motion,
@@ -236,55 +236,55 @@ pub fn poll(window: *Window, platform: Platform) anyerror!?Event {
     return event;
 }
 
-pub fn setProperties(window: *Window, platform: Platform, properties: []const Property) anyerror!void {
-    for (properties) |property| try platform.vtable.windowSetProperty(platform.ptr, window, property);
+pub fn setProperties(window: *Window, desktop: Desktop, properties: []const Property) anyerror!void {
+    for (properties) |property| try desktop.vtable.windowSetProperty(desktop.ptr, window, property);
 }
 
-pub fn native(window: *Window, platform: Platform) Native {
-    return platform.vtable.windowNative(platform.ptr, window);
+pub fn native(window: *Window, desktop: Desktop) Native {
+    return desktop.vtable.windowNative(desktop.ptr, window);
 }
 
-pub fn setTitle(window: *Window, platform: Platform, title: []const u8) anyerror!void {
-    try platform.vtable.windowSetProperty(platform.ptr, window, .{ .title = title });
+pub fn setTitle(window: *Window, desktop: Desktop, title: []const u8) anyerror!void {
+    try desktop.vtable.windowSetProperty(desktop.ptr, window, .{ .title = title });
 }
-pub fn setSize(window: *Window, platform: Platform, size: Size) anyerror!void {
-    try platform.vtable.windowSetProperty(platform.ptr, window, .{ .size = size });
+pub fn setSize(window: *Window, desktop: Desktop, size: Size) anyerror!void {
+    try desktop.vtable.windowSetProperty(desktop.ptr, window, .{ .size = size });
 }
-pub fn setPosition(window: *Window, platform: Platform, position: Position) anyerror!void {
-    try platform.vtable.windowSetProperty(platform.ptr, window, .{ .position = position });
+pub fn setPosition(window: *Window, desktop: Desktop, position: Position) anyerror!void {
+    try desktop.vtable.windowSetProperty(desktop.ptr, window, .{ .position = position });
 }
-pub fn setResizePolicy(window: *Window, platform: Platform, resize_policy: ResizePolicy) anyerror!void {
-    try platform.vtable.windowSetProperty(platform.ptr, window, .{ .resize_policy = resize_policy });
+pub fn setResizePolicy(window: *Window, desktop: Desktop, resize_policy: ResizePolicy) anyerror!void {
+    try desktop.vtable.windowSetProperty(desktop.ptr, window, .{ .resize_policy = resize_policy });
 }
-pub fn setFullscreen(window: *Window, platform: Platform, fullscreen: bool) anyerror!void {
-    try platform.vtable.windowSetProperty(platform.ptr, window, .{ .fullscreen = fullscreen });
+pub fn setFullscreen(window: *Window, desktop: Desktop, fullscreen: bool) anyerror!void {
+    try desktop.vtable.windowSetProperty(desktop.ptr, window, .{ .fullscreen = fullscreen });
 }
-pub fn setMaximized(window: *Window, platform: Platform, maximize: bool) anyerror!void {
-    try platform.vtable.windowSetProperty(platform.ptr, window, .{ .maximized = maximize });
+pub fn setMaximized(window: *Window, desktop: Desktop, maximize: bool) anyerror!void {
+    try desktop.vtable.windowSetProperty(desktop.ptr, window, .{ .maximized = maximize });
 }
-pub fn setMinimized(window: *Window, platform: Platform, minimize: bool) anyerror!void {
-    try platform.vtable.windowSetProperty(platform.ptr, window, .{ .minimized = minimize });
+pub fn setMinimized(window: *Window, desktop: Desktop, minimize: bool) anyerror!void {
+    try desktop.vtable.windowSetProperty(desktop.ptr, window, .{ .minimized = minimize });
 }
-pub fn setFocused(window: *Window, platform: Platform, focused: bool) anyerror!void {
-    try platform.vtable.windowSetProperty(platform.ptr, window, .{ .focused = focused });
+pub fn setFocused(window: *Window, desktop: Desktop, focused: bool) anyerror!void {
+    try desktop.vtable.windowSetProperty(desktop.ptr, window, .{ .focused = focused });
 }
-pub fn setAlwaysOnTop(window: *Window, platform: Platform, always_on_top: bool) anyerror!void {
-    try platform.vtable.windowSetProperty(platform.ptr, window, .{ .always_on_top = always_on_top });
+pub fn setAlwaysOnTop(window: *Window, desktop: Desktop, always_on_top: bool) anyerror!void {
+    try desktop.vtable.windowSetProperty(desktop.ptr, window, .{ .always_on_top = always_on_top });
 }
-pub fn setFloating(window: *Window, platform: Platform, floating: bool) anyerror!void {
-    try platform.vtable.windowSetProperty(platform.ptr, window, .{ .floating = floating });
+pub fn setFloating(window: *Window, desktop: Desktop, floating: bool) anyerror!void {
+    try desktop.vtable.windowSetProperty(desktop.ptr, window, .{ .floating = floating });
 }
-pub fn setDecorated(window: *Window, platform: Platform, decorated: bool) anyerror!void {
-    try platform.vtable.windowSetProperty(platform.ptr, window, .{ .decorated = decorated });
+pub fn setDecorated(window: *Window, desktop: Desktop, decorated: bool) anyerror!void {
+    try desktop.vtable.windowSetProperty(desktop.ptr, window, .{ .decorated = decorated });
 }
-pub fn setCursor(window: *Window, platform: Platform, cursor: Cursor) anyerror!void {
-    try platform.vtable.windowSetProperty(platform.ptr, window, .{ .cursor = cursor });
+pub fn setCursor(window: *Window, desktop: Desktop, cursor: Cursor) anyerror!void {
+    try desktop.vtable.windowSetProperty(desktop.ptr, window, .{ .cursor = cursor });
 }
 
 /// Returns a pointer to the current framebuffer for the given window.
 /// Note: The framebuffer pointer may change after a resize event,
 /// so it’s best to retrieve it either each time it’s needed or on each resize event.
-pub fn framebuffer(window: *Window, platform: Platform) anyerror!Framebuffer {
+pub fn framebuffer(window: *Window, desktop: Desktop) anyerror!Framebuffer {
     if (window.surface_type != .framebuffer) return error.WrongSurfaceType;
-    return platform.vtable.windowFramebuffer(platform.ptr, window);
+    return desktop.vtable.windowFramebuffer(desktop.ptr, window);
 }

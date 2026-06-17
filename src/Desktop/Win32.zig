@@ -1,8 +1,8 @@
 const std = @import("std");
 const opengl = @import("../opengl.zig");
 const vulkan = @import("../vulkan.zig");
-const Platform = @import("../Platform.zig");
-const PlatformWindow = @import("../Window.zig");
+const Desktop = @import("../Desktop.zig");
+const DesktopWindow = @import("../Window.zig");
 const win32 = @import("win32").everything;
 
 // zig build -Dtarget=x86_64-windows && wine zig-out/bin/example.exe
@@ -27,7 +27,7 @@ cursors: struct {
 } = .{},
 
 pub const Window = struct {
-    interface: PlatformWindow = .{},
+    interface: DesktopWindow = .{},
     class: win32.WNDCLASSEXW = undefined,
     hwnd: std.os.windows.HWND = undefined,
     surface: Surface = .empty,
@@ -49,8 +49,8 @@ pub const Window = struct {
     };
 
     pub const SizeData = struct {
-        size: PlatformWindow.Size,
-        resize_policy: PlatformWindow.ResizePolicy,
+        size: DesktopWindow.Size,
+        resize_policy: DesktopWindow.ResizePolicy,
     };
 };
 
@@ -69,7 +69,7 @@ pub fn deinit(self: @This()) void {
     }
 }
 
-pub fn platform(self: *@This()) Platform {
+pub fn platform(self: *@This()) Desktop {
     return .{
         .ptr = @ptrCast(@alignCast(self)),
         .vtable = &.{
@@ -88,9 +88,9 @@ pub fn platform(self: *@This()) Platform {
     };
 }
 
-fn windowOpen(context: *anyopaque, platform_window: *PlatformWindow, options: PlatformWindow.OpenOptions) anyerror!void {
+fn windowOpen(context: *anyopaque, desktop_window: *DesktopWindow, options: DesktopWindow.OpenOptions) anyerror!void {
     const self: *@This() = @ptrCast(@alignCast(context));
-    const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
+    const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     window.size_data = .{
         .size = options.size,
@@ -203,18 +203,18 @@ fn windowOpen(context: *anyopaque, platform_window: *PlatformWindow, options: Pl
     if (!win32.SUCCEEDED(win32.UpdateWindow(@ptrCast(window.hwnd)))) return error.UpdateWindow;
     _ = win32.RegisterTouchWindow(@ptrCast(window.hwnd), .FINETOUCH);
 
-    if (options.fullscreen) try windowSetProperty(context, platform_window, .{ .fullscreen = options.fullscreen });
-    if (options.maximized) try windowSetProperty(context, platform_window, .{ .maximized = options.maximized });
-    if (options.minimized) try windowSetProperty(context, platform_window, .{ .minimized = options.minimized });
-    try windowSetProperty(context, platform_window, .{ .focused = options.focused });
-    try windowSetProperty(context, platform_window, .{ .always_on_top = options.always_on_top });
-    if (options.floating) |floating| try windowSetProperty(context, platform_window, .{ .floating = floating });
-    try windowSetProperty(context, platform_window, .{ .decorated = options.decorated });
-    try windowSetProperty(context, platform_window, .{ .cursor = .default });
+    if (options.fullscreen) try windowSetProperty(context, desktop_window, .{ .fullscreen = options.fullscreen });
+    if (options.maximized) try windowSetProperty(context, desktop_window, .{ .maximized = options.maximized });
+    if (options.minimized) try windowSetProperty(context, desktop_window, .{ .minimized = options.minimized });
+    try windowSetProperty(context, desktop_window, .{ .focused = options.focused });
+    try windowSetProperty(context, desktop_window, .{ .always_on_top = options.always_on_top });
+    if (options.floating) |floating| try windowSetProperty(context, desktop_window, .{ .floating = floating });
+    try windowSetProperty(context, desktop_window, .{ .decorated = options.decorated });
+    try windowSetProperty(context, desktop_window, .{ .cursor = .default });
 }
-fn windowClose(context: *anyopaque, platform_window: *PlatformWindow) void {
+fn windowClose(context: *anyopaque, desktop_window: *DesktopWindow) void {
     const self: *@This() = @ptrCast(@alignCast(context));
-    const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
+    const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     if (window.surface == .opengl) {
         _ = win32.wglDeleteContext(@ptrCast(window.surface.opengl.render_context));
@@ -224,9 +224,9 @@ fn windowClose(context: *anyopaque, platform_window: *PlatformWindow) void {
     _ = win32.DestroyWindow(@ptrCast(window.hwnd));
     _ = win32.UnregisterClassW(window.class.lpszClassName, @ptrCast(self.hinstance));
 }
-fn windowPoll(context: *anyopaque, platform_window: *PlatformWindow) anyerror!?PlatformWindow.Event {
+fn windowPoll(context: *anyopaque, desktop_window: *DesktopWindow) anyerror!?DesktopWindow.Event {
     const self: *@This() = @ptrCast(@alignCast(context));
-    const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
+    const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     _ = self;
 
@@ -239,7 +239,7 @@ fn windowPoll(context: *anyopaque, platform_window: *PlatformWindow) anyerror!?P
         win32.WM_USER + win32.WM_GETMINMAXINFO => {
             var mmi: *win32.MINMAXINFO = @ptrFromInt(@as(usize, @intCast(msg.lParam)));
 
-            const max_size: ?PlatformWindow.Size, const min_size: ?PlatformWindow.Size = switch (window.size_data.resize_policy) {
+            const max_size: ?DesktopWindow.Size, const min_size: ?DesktopWindow.Size = switch (window.size_data.resize_policy) {
                 .resizable => |resizable| if (resizable) return null else .{ window.interface.size, window.interface.size },
                 .specified => |specified| .{ specified.max_size, specified.min_size },
             };
@@ -295,13 +295,13 @@ fn windowPoll(context: *anyopaque, platform_window: *PlatformWindow) anyerror!?P
                     win32.WM_RBUTTONUP, win32.WM_MBUTTONUP, win32.WM_LBUTTONUP, win32.WM_XBUTTONUP => .released,
                     else => unreachable,
                 },
-                .button = PlatformWindow.Event.MouseButton.Button.fromWin32(button, msg.wParam) orelse return null,
+                .button = DesktopWindow.Event.MouseButton.Button.fromWin32(button, msg.wParam) orelse return null,
             },
         },
 
         // Key
         win32.WM_KEYDOWN, win32.WM_KEYUP => {
-            const sym = PlatformWindow.Event.Key.Sym.fromWin32(std.enums.fromInt(win32.VIRTUAL_KEY, msg.wParam).?, msg.lParam) orelse return null;
+            const sym = DesktopWindow.Event.Key.Sym.fromWin32(std.enums.fromInt(win32.VIRTUAL_KEY, msg.wParam).?, msg.lParam) orelse return null;
             return .{ .key = .{
                 .state = switch (msg.message) {
                     win32.WM_KEYDOWN => .pressed,
@@ -314,7 +314,7 @@ fn windowPoll(context: *anyopaque, platform_window: *PlatformWindow) anyerror!?P
         },
         win32.WM_SETCURSOR => {
             _ = win32.SetCursor(@ptrCast(window.cursor));
-            return windowPoll(context, platform_window);
+            return windowPoll(context, desktop_window);
         },
         win32.WM_TOUCH => touch: {
             const c_inputs = win32.zig.loword(msg.wParam);
@@ -324,7 +324,7 @@ fn windowPoll(context: *anyopaque, platform_window: *PlatformWindow) anyerror!?P
                 for (&inputs, 0..) |*input, i| {
                     const x = @as(f64, @floatFromInt(input.x)) / 100;
                     const y = @as(f64, @floatFromInt(input.y)) / 100;
-                    const touch: PlatformWindow.Event.Touch = .{ .id = @intCast(i), .x = x, .y = y };
+                    const touch: DesktopWindow.Event.Touch = .{ .id = @intCast(i), .x = x, .y = y };
 
                     if (input.dwFlags.DOWN == 1) break :touch .{ .touch_down = touch };
                     if (input.dwFlags.UP == 1) break :touch .{ .touch_up = touch };
@@ -333,12 +333,12 @@ fn windowPoll(context: *anyopaque, platform_window: *PlatformWindow) anyerror!?P
             }
             break :touch null;
         },
-        else => windowPoll(context, platform_window),
+        else => windowPoll(context, desktop_window),
     };
 }
-fn windowSetProperty(context: *anyopaque, platform_window: *PlatformWindow, property: PlatformWindow.Property) anyerror!void {
+fn windowSetProperty(context: *anyopaque, desktop_window: *DesktopWindow, property: DesktopWindow.Property) anyerror!void {
     const self: *@This() = @ptrCast(@alignCast(context));
-    const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
+    const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     switch (property) {
         .title => |title| {
@@ -432,17 +432,17 @@ fn windowSetProperty(context: *anyopaque, platform_window: *PlatformWindow, prop
         },
     }
 }
-fn windowNative(context: *anyopaque, platform_window: *PlatformWindow) PlatformWindow.Native {
+fn windowNative(context: *anyopaque, desktop_window: *DesktopWindow) DesktopWindow.Native {
     const self: *@This() = @ptrCast(@alignCast(context));
-    const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
+    const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
     return .{
         .hinstance = self.hinstance,
         .hwnd = window.hwnd,
     };
 }
-fn windowFramebuffer(context: *anyopaque, platform_window: *PlatformWindow) anyerror!PlatformWindow.Framebuffer {
+fn windowFramebuffer(context: *anyopaque, desktop_window: *DesktopWindow) anyerror!DesktopWindow.Framebuffer {
     const self: *@This() = @ptrCast(@alignCast(context));
-    const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
+    const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     _ = self;
     _ = window;
@@ -451,34 +451,34 @@ fn windowFramebuffer(context: *anyopaque, platform_window: *PlatformWindow) anye
 
     return undefined;
 }
-fn windowOpenglMakeCurrent(context: *anyopaque, platform_window: *PlatformWindow) anyerror!void {
+fn windowOpenglMakeCurrent(context: *anyopaque, desktop_window: *DesktopWindow) anyerror!void {
     const self: *@This() = @ptrCast(@alignCast(context));
-    const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
+    const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
     _ = self;
 
     const gl = window.surface.opengl;
     if (!win32.SUCCEEDED(win32.wglMakeCurrent(@ptrCast(gl.device_context), @ptrCast(gl.render_context)))) return reportErr(error.WglMakeCurrent);
 }
-fn windowOpenglSwapBuffers(context: *anyopaque, platform_window: *PlatformWindow) anyerror!void {
+fn windowOpenglSwapBuffers(context: *anyopaque, desktop_window: *DesktopWindow) anyerror!void {
     const self: *@This() = @ptrCast(@alignCast(context));
-    const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
+    const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
     _ = self;
 
     const gl = window.surface.opengl;
     if (!win32.SUCCEEDED(win32.SwapBuffers(@ptrCast(gl.device_context)))) return reportErr(error.WglSwapBuffers);
 }
-fn windowOpenglSwapInterval(context: *anyopaque, platform_window: *PlatformWindow, interval: i32) anyerror!void {
+fn windowOpenglSwapInterval(context: *anyopaque, desktop_window: *DesktopWindow, interval: i32) anyerror!void {
     const self: *@This() = @ptrCast(@alignCast(context));
-    const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
+    const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     std.debug.assert(window.surface == .opengl);
     std.debug.assert(self.wglSwapIntervalEXT != null);
 
     if (!win32.SUCCEEDED(self.wglSwapIntervalEXT.?(interval))) return reportErr(error.WglMakeCurrent);
 }
-fn windowVulkanCreateSurface(context: *anyopaque, platform_window: *PlatformWindow, instance: *anyopaque, allocator: ?*const anyopaque, loader: vulkan.PfnGetInstanceProcAddr) anyerror!*anyopaque {
+fn windowVulkanCreateSurface(context: *anyopaque, desktop_window: *DesktopWindow, instance: *anyopaque, allocator: ?*const anyopaque, loader: vulkan.PfnGetInstanceProcAddr) anyerror!*anyopaque {
     const self: *@This() = @ptrCast(@alignCast(context));
-    const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
+    const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     const vkCreateWin32SurfaceKHR: vulkan.SurfaceCreateProc = @ptrCast(loader(instance, "vkCreateWin32SurfaceKHR") orelse return error.LoadVkCreateWin32SurfaceKHR);
 

@@ -6,28 +6,30 @@ pub fn main(init: std.process.Init) !void {
     const allocator = init.gpa;
     const io = init.io;
 
-    var cross_platform: yes.Platform.Cross = try .init(allocator, io, init.minimal);
+    var cross_platform: yes.Desktop.Cross = try .init(allocator, io, init.minimal);
     defer cross_platform.deinit();
-    const platform = cross_platform.platform();
+    const desktop = cross_platform.desktop();
 
-    var cross_window: yes.Platform.Cross.Window = .empty(platform);
-    const window = cross_window.interface(platform);
-    try window.open(platform, .{
+    var cross_window: yes.Desktop.Cross.Window = .empty(desktop);
+    const window = cross_window.interface(desktop);
+    try window.open(desktop, .{
         .title = "Window!",
         .size = .{ .width = 600, .height = 400 },
-        .resize_policy = .{ .specified = .{
-            .min_size = .{ .width = 300, .height = 200 },
-        } },
+        .resize_policy = .{
+            .specified = .{
+                .min_size = .{ .width = 300, .height = 200 },
+            },
+        },
         .surface_type = .framebuffer,
     });
-    defer window.close(platform);
+    defer window.close(desktop);
 
     main: while (true) {
-        while (try window.poll(platform)) |event| switch (event) {
+        while (try window.poll(desktop)) |event| switch (event) {
             .close => break :main,
             .resize => |size| {
                 std.log.info("resize: {d}x{d}", .{ size.width, size.height });
-                const framebuffer = try window.framebuffer(platform);
+                const framebuffer = try window.framebuffer(desktop);
                 const format = yes.Window.Framebuffer.format;
 
                 for (0..size.width * size.height) |i| {
@@ -50,7 +52,7 @@ pub fn main(init: std.process.Init) !void {
             else => std.log.info("{any}", .{event}),
         };
 
-        const wayland: *yes.Platform.Wayland = @ptrCast(@alignCast(platform.ptr));
+        const wayland: *yes.Desktop.Wayland = @ptrCast(@alignCast(desktop.ptr));
 
         if (wayland.io_manager.clipboard.fd != 0) {
             const fd = wayland.io_manager.clipboard.fd;

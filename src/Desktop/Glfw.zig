@@ -3,8 +3,8 @@ const builtin = @import("builtin");
 const build_options = @import("build_options");
 const glfw = @import("glfw");
 const vulkan = @import("../root.zig").vulkan;
-const Platform = @import("../Platform.zig");
-const PlatformWindow = @import("../Window.zig");
+const Desktop = @import("../Desktop.zig");
+const DesktopWindow = @import("../Window.zig");
 
 comptime {
     if (!build_options.glfw) @compileError("glfw unavailable, build option not true");
@@ -13,10 +13,10 @@ comptime {
 allocator: std.mem.Allocator,
 
 pub const Window = struct {
-    interface: PlatformWindow = .{},
+    interface: DesktopWindow = .{},
     handle: *glfw.GLFWwindow = undefined,
     allocator: std.mem.Allocator = undefined,
-    events: std.ArrayList(PlatformWindow.Event) = .empty,
+    events: std.ArrayList(DesktopWindow.Event) = .empty,
     err: ?anyerror = null,
 };
 
@@ -29,7 +29,7 @@ pub fn deinit(_: @This()) void {
     glfw.glfwTerminate();
 }
 
-pub fn platform(self: *@This()) Platform {
+pub fn platform(self: *@This()) Desktop {
     return .{
         .ptr = @ptrCast(@alignCast(self)),
         .vtable = &.{
@@ -48,9 +48,9 @@ pub fn platform(self: *@This()) Platform {
     };
 }
 
-fn windowOpen(context: *anyopaque, platform_window: *PlatformWindow, options: PlatformWindow.OpenOptions) anyerror!void {
+fn windowOpen(context: *anyopaque, desktop_window: *DesktopWindow, options: DesktopWindow.OpenOptions) anyerror!void {
     const self: *@This() = @ptrCast(@alignCast(context));
-    const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
+    const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     switch (options.surface_type) {
         .opengl => {
@@ -79,16 +79,16 @@ fn windowOpen(context: *anyopaque, platform_window: *PlatformWindow, options: Pl
 
     try window.events.append(self.allocator, .{ .resize = options.size });
 }
-fn windowClose(context: *anyopaque, platform_window: *PlatformWindow) void {
+fn windowClose(context: *anyopaque, desktop_window: *DesktopWindow) void {
     const self: *@This() = @ptrCast(@alignCast(context));
-    const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
+    const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     glfw.glfwDestroyWindow(window.handle);
     window.events.deinit(self.allocator);
 }
-fn windowPoll(context: *anyopaque, platform_window: *PlatformWindow) anyerror!?PlatformWindow.Event {
+fn windowPoll(context: *anyopaque, desktop_window: *DesktopWindow) anyerror!?DesktopWindow.Event {
     const self: *@This() = @ptrCast(@alignCast(context));
-    const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
+    const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     _ = self;
 
@@ -104,9 +104,9 @@ fn windowPoll(context: *anyopaque, platform_window: *PlatformWindow) anyerror!?P
 
     return window.events.pop();
 }
-fn windowSetProperty(context: *anyopaque, platform_window: *PlatformWindow, property: PlatformWindow.Property) anyerror!void {
+fn windowSetProperty(context: *anyopaque, desktop_window: *DesktopWindow, property: DesktopWindow.Property) anyerror!void {
     const self: *@This() = @ptrCast(@alignCast(context));
-    const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
+    const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     switch (property) {
         .title => |title| {
@@ -146,9 +146,9 @@ fn windowSetProperty(context: *anyopaque, platform_window: *PlatformWindow, prop
         },
     }
 }
-fn windowNative(context: *anyopaque, platform_window: *PlatformWindow) PlatformWindow.Native {
+fn windowNative(context: *anyopaque, desktop_window: *DesktopWindow) DesktopWindow.Native {
     const self: *@This() = @ptrCast(@alignCast(context));
-    const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
+    const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
     _ = self;
 
     switch (builtin.os.tag) {
@@ -174,40 +174,40 @@ fn windowNative(context: *anyopaque, platform_window: *PlatformWindow) PlatformW
     }
     @panic("platform does not expose native");
 }
-fn windowFramebuffer(context: *anyopaque, platform_window: *PlatformWindow) anyerror!PlatformWindow.Framebuffer {
+fn windowFramebuffer(context: *anyopaque, desktop_window: *DesktopWindow) anyerror!DesktopWindow.Framebuffer {
     const self: *@This() = @ptrCast(@alignCast(context));
-    const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
+    const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     _ = self;
     _ = window;
 
     return .{ .pixels = undefined };
 }
-fn windowOpenglMakeCurrent(context: *anyopaque, platform_window: *PlatformWindow) anyerror!void {
+fn windowOpenglMakeCurrent(context: *anyopaque, desktop_window: *DesktopWindow) anyerror!void {
     const self: *@This() = @ptrCast(@alignCast(context));
-    const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
+    const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     _ = self;
     glfw.glfwMakeContextCurrent(window.handle);
 }
-fn windowOpenglSwapBuffers(context: *anyopaque, platform_window: *PlatformWindow) anyerror!void {
+fn windowOpenglSwapBuffers(context: *anyopaque, desktop_window: *DesktopWindow) anyerror!void {
     const self: *@This() = @ptrCast(@alignCast(context));
-    const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
+    const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     _ = self;
     glfw.glfwSwapBuffers(window.handle);
 }
-fn windowOpenglSwapInterval(context: *anyopaque, platform_window: *PlatformWindow, interval: i32) anyerror!void {
+fn windowOpenglSwapInterval(context: *anyopaque, desktop_window: *DesktopWindow, interval: i32) anyerror!void {
     const self: *@This() = @ptrCast(@alignCast(context));
-    const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
+    const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     _ = self;
     _ = window;
     glfw.glfwSwapInterval(@intCast(interval));
 }
-fn windowVulkanCreateSurface(context: *anyopaque, platform_window: *PlatformWindow, instance: *anyopaque, allocator: ?*const anyopaque, getProcAddress: vulkan.PfnGetInstanceProcAddr) anyerror!*anyopaque {
+fn windowVulkanCreateSurface(context: *anyopaque, desktop_window: *DesktopWindow, instance: *anyopaque, allocator: ?*const anyopaque, getProcAddress: vulkan.PfnGetInstanceProcAddr) anyerror!*anyopaque {
     const self: *@This() = @ptrCast(@alignCast(context));
-    const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
+    const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
     _ = self;
 
     var surface: ?*anyopaque = null;

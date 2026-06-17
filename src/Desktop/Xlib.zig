@@ -2,9 +2,11 @@ const std = @import("std");
 const builtin = @import("builtin");
 const opengl = @import("../opengl.zig");
 const vulkan = @import("../vulkan.zig");
-const Platform = @import("../Platform.zig");
-const PlatformWindow = @import("../Window.zig");
+const Desktop = @import("../Desktop.zig");
+const DesktopWindow = @import("../Window.zig");
 const xlib = @import("xlib");
+
+const Xlib = @This();
 
 display: *xlib.Display,
 atom_table: AtomTable,
@@ -31,7 +33,7 @@ pub const AtomTable = struct {
         hints: xlib.Atom,
     },
 
-    pub fn load(display: *xlib.Display) @This() {
+    pub fn load(display: *xlib.Display) AtomTable {
         return .{
             .utf8_string = xlib.XInternAtom(display, "UTF8_STRING", xlib.False),
             .net_wm = .{
@@ -79,7 +81,7 @@ pub const CursorTable = struct {
         image: xlib.XcursorImage,
     };
 
-    pub fn load(display: *xlib.Display) @This() {
+    pub fn load(display: *xlib.Display) CursorTable {
         return .{
             .left_ptr = xlib.XCreateFontCursor(display, xlib.XC_left_ptr),
             .xterm = xlib.XCreateFontCursor(display, xlib.XC_xterm),
@@ -96,14 +98,14 @@ pub const CursorTable = struct {
         };
     }
 
-    pub fn deinit(self: @This(), display: *xlib.Display) void {
-        inline for (std.meta.fields(@This())) |field| {
+    pub fn deinit(self: AtomTable, display: *xlib.Display) void {
+        inline for (std.meta.fields(AtomTable)) |field| {
             const cursor: xlib.Cursor = @field(self, field.name);
             if (cursor != 0) _ = xlib.XFreeCursor(display, cursor);
         }
     }
 
-    pub fn get(self: @This(), cursor: PlatformWindow.Cursor) xlib.Cursor {
+    pub fn get(self: AtomTable, cursor: DesktopWindow.Cursor) xlib.Cursor {
         // XDefineCursor
         return switch (cursor) {
             .arrow => self.left_ptr,
@@ -124,15 +126,15 @@ pub const CursorTable = struct {
 };
 
 pub const Window = struct {
-    interface: PlatformWindow = .{},
+    interface: DesktopWindow = .{},
     handle: xlib.Window = 0,
     wm_delete_window: xlib.Atom = 0,
     colormap: xlib.Colormap = 0,
     glx_context: ?*anyopaque = null,
-    move_event: ?PlatformWindow.Position = null,
+    move_event: ?DesktopWindow.Position = null,
 };
 
-pub fn init() !@This() {
+pub fn open() !Xlib {
     const display: *xlib.Display = xlib.XOpenDisplay(null) orelse return error.OpenDisplay;
 
     var extensions_info = std.mem.zeroes(ExtensionsInfo);
@@ -149,12 +151,12 @@ pub fn init() !@This() {
     return .{ .display = display, .atom_table = .load(display), .cursor_table = .load(display), .extensions_info = extensions_info };
 }
 
-pub fn deinit(self: @This()) void {
+pub fn close(self: Xlib) void {
     self.cursor_table.deinit(self.display);
     _ = xlib.XCloseDisplay(self.display);
 }
 
-pub fn platform(self: *@This()) Platform {
+pub fn desktop(self: *Xlib) Desktop {
     return .{
         .ptr = @ptrCast(@alignCast(self)),
         .vtable = &.{
@@ -173,9 +175,9 @@ pub fn platform(self: *@This()) Platform {
     };
 }
 
-fn windowOpen(context: *anyopaque, platform_window: *PlatformWindow, options: PlatformWindow.OpenOptions) anyerror!void {
-    const self: *@This() = @ptrCast(@alignCast(context));
-    const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
+fn windowOpen(context: *anyopaque, desktop_window: *DesktopWindow, options: DesktopWindow.OpenOptions) anyerror!void {
+    const self: *Xlib = @ptrCast(@alignCast(context));
+    const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     const screen = xlib.DefaultScreen(self.display);
     const screen_window = xlib.RootWindow(self.display, screen);
@@ -253,18 +255,18 @@ fn windowOpen(context: *anyopaque, platform_window: *PlatformWindow, options: Pl
     );
     errdefer _ = xlib.XDestroyWindow(self.display, window.handle);
 
-    try windowSetProperty(context, platform_window, .{ .title = options.title });
-    try windowSetProperty(context, platform_window, .{ .resize_policy = options.resize_policy });
+    try windowSetProperty(context, desktop_window, .{ .title = options.title });
+    try windowSetProperty(context, desktop_window, .{ .resize_policy = options.resize_policy });
 
     window.wm_delete_window = xlib.XInternAtom(self.display, "WM_DELETE_WINDOW", @intFromBool(false));
     if (xlib.XSetWMProtocols(self.display, window.handle, &window.wm_delete_window, 1) == xlib.False) return error.SetWMProtocols;
     if (xlib.XMapWindow(self.display, window.handle) == xlib.False) return error.MapWindow;
-    try windowSetProperty(context, platform_window, .{ .always_on_top = options.always_on_top });
-    if (options.fullscreen) try windowSetProperty(context, platform_window, .{ .fullscreen = options.fullscreen });
-    if (options.maximized) try windowSetProperty(context, platform_window, .{ .maximized = options.maximized });
-    if (options.minimized) try windowSetProperty(context, platform_window, .{ .minimized = options.minimized });
-    if (!options.decorated) try windowSetProperty(context, platform_window, .{ .decorated = options.decorated });
-    if (options.floating) |floating| try windowSetProperty(context, platform_window, .{ .floating = floating });
+    try windowSetProperty(context, desktop_window, .{ .always_on_top = options.always_on_top });
+    if (options.fullscreen) try windowSetProperty(context, desktop_window, .{ .fullscreen = options.fullscreen });
+    if (options.maximized) try windowSetProperty(context, desktop_window, .{ .maximized = options.maximized });
+    if (options.minimized) try windowSetProperty(context, desktop_window, .{ .minimized = options.minimized });
+    if (!options.decorated) try windowSetProperty(context, desktop_window, .{ .decorated = options.decorated });
+    if (options.floating) |floating| try windowSetProperty(context, desktop_window, .{ .floating = floating });
     if (xlib.XFlush(self.display) == xlib.False) return error.Flush;
 
     // Create OpenGL context
@@ -314,17 +316,17 @@ fn windowOpen(context: *anyopaque, platform_window: *PlatformWindow, options: Pl
     if (xlib.XISelectEvents(self.display, window.handle, &evmask, 1) != 0) return error.XISelectEvents;
     _ = xlib.XFlush(self.display);
 }
-fn windowClose(context: *anyopaque, platform_window: *PlatformWindow) void {
-    const self: *@This() = @ptrCast(@alignCast(context));
-    const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
+fn windowClose(context: *anyopaque, desktop_window: *DesktopWindow) void {
+    const self: *Xlib = @ptrCast(@alignCast(context));
+    const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     if (window.glx_context) |glx_context| xlib.glXDestroyContext(self.display, @ptrCast(glx_context));
     _ = xlib.XDestroyWindow(self.display, window.handle);
     window.* = undefined;
 }
-fn windowPoll(context: *anyopaque, platform_window: *PlatformWindow) anyerror!?PlatformWindow.Event {
-    const self: *@This() = @ptrCast(@alignCast(context));
-    const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
+fn windowPoll(context: *anyopaque, desktop_window: *DesktopWindow) anyerror!?DesktopWindow.Event {
+    const self: *Xlib = @ptrCast(@alignCast(context));
+    const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     if (window.move_event) |move_event| {
         window.move_event = null;
@@ -348,8 +350,8 @@ fn windowPoll(context: *anyopaque, platform_window: *PlatformWindow) anyerror!?P
             var child: xlib.Window = 0;
             _ = xlib.XTranslateCoordinates(self.display, window.handle, xlib.XDefaultRootWindow(self.display), 0, 0, &root_x, &root_y, &child);
 
-            const size: PlatformWindow.Size = .{ .width = @intCast(attrs.width), .height = @intCast(attrs.height) };
-            const position: PlatformWindow.Position = .{ .x = @intCast(root_x), .y = @intCast(root_y) };
+            const size: DesktopWindow.Size = .{ .width = @intCast(attrs.width), .height = @intCast(attrs.height) };
+            const position: DesktopWindow.Position = .{ .x = @intCast(root_x), .y = @intCast(root_y) };
 
             if (window.interface.size.eql(size)) return .{ .move = position };
             if (window.interface.position.x != position.x or window.interface.position.y != position.y) {
@@ -374,11 +376,11 @@ fn windowPoll(context: *anyopaque, platform_window: *PlatformWindow) anyerror!?P
                     xlib.ButtonRelease => .released,
                     else => unreachable,
                 },
-                .button = PlatformWindow.Event.MouseButton.Button.fromX(event.xbutton.button) orelse return null,
+                .button = DesktopWindow.Event.MouseButton.Button.fromX(event.xbutton.button) orelse return null,
             } },
         },
         xlib.MotionNotify => if (!self.extensions_info.xi_supported) {
-            const mouse_motion: PlatformWindow.Event.MouseMotion = .{
+            const mouse_motion: DesktopWindow.Event.MouseMotion = .{
                 .x = @floatFromInt(event.xmotion.x),
                 .y = @floatFromInt(event.xmotion.y),
             };
@@ -392,7 +394,7 @@ fn windowPoll(context: *anyopaque, platform_window: *PlatformWindow) anyerror!?P
                 else => unreachable,
             },
             .code = @intCast(event.xkey.keycode),
-            .sym = PlatformWindow.Event.Key.Sym.fromXkb(xlib.XLookupKeysym(&event.xkey, @intCast(event.xkey.state & xlib.ShiftMask))) orelse return null,
+            .sym = DesktopWindow.Event.Key.Sym.fromXkb(xlib.XLookupKeysym(&event.xkey, @intCast(event.xkey.state & xlib.ShiftMask))) orelse return null,
         } },
         xlib.GenericEvent => {
             const gevent: *xlib.XGenericEventCookie = @ptrCast(&event);
@@ -404,7 +406,7 @@ fn windowPoll(context: *anyopaque, platform_window: *PlatformWindow) anyerror!?P
             // Xinput
             if (self.extensions_info.xi_supported and gevent.extension == @as(c_int, @intCast(self.extensions_info.xi_opcode))) switch (gevent.evtype) {
                 xlib.XI_Motion => {
-                    const mouse_motion: PlatformWindow.Event.MouseMotion = .{
+                    const mouse_motion: DesktopWindow.Event.MouseMotion = .{
                         .x = xiev.event_x,
                         .y = xiev.event_y,
                     };
@@ -412,7 +414,7 @@ fn windowPoll(context: *anyopaque, platform_window: *PlatformWindow) anyerror!?P
                         return .{ .mouse_motion = mouse_motion };
                 },
                 xlib.XI_TouchBegin => {
-                    const touch_down: PlatformWindow.Event.Touch = .{
+                    const touch_down: DesktopWindow.Event.Touch = .{
                         .id = @intCast(xiev.detail),
                         .x = xiev.event_x,
                         .y = xiev.event_y,
@@ -420,7 +422,7 @@ fn windowPoll(context: *anyopaque, platform_window: *PlatformWindow) anyerror!?P
                     return .{ .touch_down = touch_down };
                 },
                 xlib.XI_TouchEnd => {
-                    const touch_up: PlatformWindow.Event.Touch = .{
+                    const touch_up: DesktopWindow.Event.Touch = .{
                         .id = @intCast(xiev.detail),
                         .x = xiev.event_x,
                         .y = xiev.event_y,
@@ -428,7 +430,7 @@ fn windowPoll(context: *anyopaque, platform_window: *PlatformWindow) anyerror!?P
                     return .{ .touch_up = touch_up };
                 },
                 xlib.XI_TouchUpdate => {
-                    const touch_motion: PlatformWindow.Event.Touch = .{
+                    const touch_motion: DesktopWindow.Event.Touch = .{
                         .id = @intCast(xiev.detail),
                         .x = xiev.event_x,
                         .y = xiev.event_y,
@@ -440,11 +442,11 @@ fn windowPoll(context: *anyopaque, platform_window: *PlatformWindow) anyerror!?P
         },
         else => {},
     }
-    return windowPoll(context, platform_window);
+    return windowPoll(context, desktop_window);
 }
-fn windowSetProperty(context: *anyopaque, platform_window: *PlatformWindow, property: PlatformWindow.Property) anyerror!void {
-    const self: *@This() = @ptrCast(@alignCast(context));
-    const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
+fn windowSetProperty(context: *anyopaque, desktop_window: *DesktopWindow, property: DesktopWindow.Property) anyerror!void {
+    const self: *Xlib = @ptrCast(@alignCast(context));
+    const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     const screen = xlib.XDefaultRootWindow(self.display);
 
@@ -629,9 +631,9 @@ fn windowSetProperty(context: *anyopaque, platform_window: *PlatformWindow, prop
 
     _ = xlib.XFlush(self.display);
 }
-fn windowNative(context: *anyopaque, platform_window: *PlatformWindow) PlatformWindow.Native {
-    const self: *@This() = @ptrCast(@alignCast(context));
-    const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
+fn windowNative(context: *anyopaque, desktop_window: *DesktopWindow) DesktopWindow.Native {
+    const self: *Xlib = @ptrCast(@alignCast(context));
+    const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     const screen = xlib.DefaultScreen(self.display);
 
@@ -643,9 +645,9 @@ fn windowNative(context: *anyopaque, platform_window: *PlatformWindow) PlatformW
         },
     };
 }
-fn windowFramebuffer(context: *anyopaque, platform_window: *PlatformWindow) anyerror!PlatformWindow.Framebuffer {
-    const self: *@This() = @ptrCast(@alignCast(context));
-    const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
+fn windowFramebuffer(context: *anyopaque, desktop_window: *DesktopWindow) anyerror!DesktopWindow.Framebuffer {
+    const self: *Xlib = @ptrCast(@alignCast(context));
+    const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     _ = self;
     _ = window;
@@ -654,25 +656,25 @@ fn windowFramebuffer(context: *anyopaque, platform_window: *PlatformWindow) anye
 
     return undefined;
 }
-fn windowOpenglMakeCurrent(context: *anyopaque, platform_window: *PlatformWindow) anyerror!void {
-    const self: *@This() = @ptrCast(@alignCast(context));
-    const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
+fn windowOpenglMakeCurrent(context: *anyopaque, desktop_window: *DesktopWindow) anyerror!void {
+    const self: *Xlib = @ptrCast(@alignCast(context));
+    const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
     if (xlib.glXMakeCurrent(self.display, window.handle, @ptrCast(window.glx_context)) == xlib.False) return error.GlxMakeCurrent;
 }
-fn windowOpenglSwapBuffers(context: *anyopaque, platform_window: *PlatformWindow) anyerror!void {
-    const self: *@This() = @ptrCast(@alignCast(context));
-    const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
+fn windowOpenglSwapBuffers(context: *anyopaque, desktop_window: *DesktopWindow) anyerror!void {
+    const self: *Xlib = @ptrCast(@alignCast(context));
+    const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
     xlib.glXSwapBuffers(@ptrCast(self.display), window.handle);
 }
-fn windowOpenglSwapInterval(context: *anyopaque, platform_window: *PlatformWindow, interval: i32) anyerror!void {
-    const self: *@This() = @ptrCast(@alignCast(context));
-    const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
+fn windowOpenglSwapInterval(context: *anyopaque, desktop_window: *DesktopWindow, interval: i32) anyerror!void {
+    const self: *Xlib = @ptrCast(@alignCast(context));
+    const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
     const glXSwapIntervalEXT: *const fn (display: *xlib.Display, drawable: xlib.Drawable, interval: i32) callconv(.c) void = @ptrCast(xlib.glXGetProcAddress("glXSwapIntervalEXT") orelse return error.SwapIntervalLoad);
     glXSwapIntervalEXT(self.display, window.handle, interval);
 }
-fn windowVulkanCreateSurface(context: *anyopaque, platform_window: *PlatformWindow, instance: *anyopaque, allocator: ?*const anyopaque, loader: vulkan.PfnGetInstanceProcAddr) anyerror!*anyopaque {
-    const self: *@This() = @ptrCast(@alignCast(context));
-    const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
+fn windowVulkanCreateSurface(context: *anyopaque, desktop_window: *DesktopWindow, instance: *anyopaque, allocator: ?*const anyopaque, loader: vulkan.PfnGetInstanceProcAddr) anyerror!*anyopaque {
+    const self: *Xlib = @ptrCast(@alignCast(context));
+    const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     const vkCreateXlibSurfaceKHR: vulkan.SurfaceCreateProc = @ptrCast(loader(instance, "vkCreateXlibSurfaceKHR") orelse return error.LoadVkCreateXlibSurfaceKHR);
 

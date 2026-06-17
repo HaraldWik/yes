@@ -1,7 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const build_options = @import("build_options");
-const Platform = @import("Platform.zig");
+const Desktop = @import("Desktop.zig");
 const Window = @import("Window.zig");
 
 pub const Result = enum(c_int) {
@@ -63,9 +63,9 @@ pub const SurfaceCreateInfo = switch (builtin.os.tag) {
 
 pub const SurfaceCreateProc = *const fn (instance: *anyopaque, create_info: *const SurfaceCreateInfo, allocator: ?*const anyopaque, surface: *?*anyopaque) callconv(.c) Result;
 
-pub fn createSurface(platform: Platform, window: *Window, instance: *anyopaque, allocator: ?*const anyopaque, loader: PfnGetInstanceProcAddr) !*anyopaque {
+pub fn createSurface(desktop: Desktop, window: *Window, instance: *anyopaque, allocator: ?*const anyopaque, loader: PfnGetInstanceProcAddr) !*anyopaque {
     if (window.surface_type != .vulkan) return error.WrongSurfaceType;
-    return platform.vtable.windowVulkanCreateSurface(platform.ptr, window, instance, allocator, loader);
+    return desktop.vtable.windowVulkanCreateSurface(desktop.ptr, window, instance, allocator, loader);
 }
 
 pub fn isSupported() bool {
@@ -79,7 +79,7 @@ pub fn isSupported() bool {
 
 /// T is the string type
 /// example of T [*:0]const u8 or [:0]const u8 or [:0]const u8
-pub fn getRequiredInstanceExtensions(comptime T: type, platform: Platform, window: *Window) []const T {
+pub fn getRequiredInstanceExtensions(comptime T: type, desktop: Desktop, window: *Window) []const T {
     return switch (builtin.os.tag) {
         .windows => &.{
             "VK_KHR_surface",
@@ -96,7 +96,7 @@ pub fn getRequiredInstanceExtensions(comptime T: type, platform: Platform, windo
         .linux, .freebsd, .netbsd, .openbsd => if (builtin.abi == .android) &.{
             "VK_KHR_surface",
             "VK_KHR_android_surface",
-        } else switch (window.native(platform)) {
+        } else switch (window.native(desktop)) {
             .wayland => &.{
                 "VK_KHR_surface",
                 "VK_KHR_wayland_surface",

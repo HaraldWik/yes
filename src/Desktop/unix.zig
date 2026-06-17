@@ -1,5 +1,5 @@
 const std = @import("std");
-const Platform = @import("../Platform.zig");
+const Desktop = @import("../Desktop.zig");
 
 pub const SessionType = enum(u2) {
     wayland,
