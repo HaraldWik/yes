@@ -25,19 +25,19 @@ pub fn getProcAddressProc(desktop: Desktop) *const fn (procname: [*:0]const u8) 
 pub fn makeCurrent(desktop: Desktop, window: *Window) !void {
     if (!build_options.opengl) invalid();
     if (window.surface_type != .opengl) return error.WrongSurfaceType;
-    try desktop.vtable.windowOpenglMakeCurrent(desktop.ptr, window);
+    try desktop.vtable.windowOpenglMakeCurrent(desktop.userdata, window);
 }
 
 pub fn swapBuffers(desktop: Desktop, window: *Window) !void {
     if (!build_options.opengl) invalid();
     if (window.surface_type != .opengl) return error.WrongSurfaceType;
-    try desktop.vtable.windowOpenglSwapBuffers(desktop.ptr, window);
+    try desktop.vtable.windowOpenglSwapBuffers(desktop.userdata, window);
 }
 
 pub fn swapInterval(desktop: Desktop, window: *Window, interval: i32) !void {
     if (!build_options.opengl) invalid();
     if (window.surface_type != .opengl) return error.WrongSurfaceType;
-    try desktop.vtable.windowOpenglSwapInterval(desktop.ptr, window, interval);
+    try desktop.vtable.windowOpenglSwapInterval(desktop.userdata, window, interval);
 }
 
 fn invalid() callconv(.c) noreturn {

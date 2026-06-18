@@ -45,7 +45,7 @@ pub const Window = struct {
     },
 
     pub fn empty(p: Desktop) @This() {
-        const cross: *Cross = @ptrCast(@alignCast(p.ptr));
+        const cross: *Cross = @ptrCast(@alignCast(p.userdata));
         return if (build_options.glfw) .{ .inner = .{} } else switch (builtin.os.tag) {
             .windows => .{ .inner = .{} },
             .macos, .ios, .tvos => .{ .inner = .{} },
@@ -59,7 +59,7 @@ pub const Window = struct {
     }
 
     pub fn interface(self: *@This(), p: Desktop) *DesktopWindow {
-        const cross: *Cross = @ptrCast(@alignCast(p.ptr));
+        const cross: *Cross = @ptrCast(@alignCast(p.userdata));
         return if (build_options.glfw) &self.inner.interface else switch (builtin.os.tag) {
             .windows => &self.inner.interface,
             .macos, .ios, .tvos => &self.inner.interface,

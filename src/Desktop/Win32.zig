@@ -71,7 +71,7 @@ pub fn deinit(self: @This()) void {
 
 pub fn platform(self: *@This()) Desktop {
     return .{
-        .ptr = @ptrCast(@alignCast(self)),
+        .userdata = @ptrCast(@alignCast(self)),
         .vtable = &.{
             .windowOpen = windowOpen,
             .windowClose = windowClose,
@@ -88,8 +88,8 @@ pub fn platform(self: *@This()) Desktop {
     };
 }
 
-fn windowOpen(context: *anyopaque, desktop_window: *DesktopWindow, options: DesktopWindow.OpenOptions) anyerror!void {
-    const self: *@This() = @ptrCast(@alignCast(context));
+fn windowOpen(userdata: ?*anyopaque, desktop_window: *DesktopWindow, options: DesktopWindow.OpenOptions) anyerror!void {
+    const self: *@This() = @ptrCast(@alignCast(userdata));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     window.size_data = .{
@@ -203,17 +203,17 @@ fn windowOpen(context: *anyopaque, desktop_window: *DesktopWindow, options: Desk
     if (!win32.SUCCEEDED(win32.UpdateWindow(@ptrCast(window.hwnd)))) return error.UpdateWindow;
     _ = win32.RegisterTouchWindow(@ptrCast(window.hwnd), .FINETOUCH);
 
-    if (options.fullscreen) try windowSetProperty(context, desktop_window, .{ .fullscreen = options.fullscreen });
-    if (options.maximized) try windowSetProperty(context, desktop_window, .{ .maximized = options.maximized });
-    if (options.minimized) try windowSetProperty(context, desktop_window, .{ .minimized = options.minimized });
-    try windowSetProperty(context, desktop_window, .{ .focused = options.focused });
-    try windowSetProperty(context, desktop_window, .{ .always_on_top = options.always_on_top });
-    if (options.floating) |floating| try windowSetProperty(context, desktop_window, .{ .floating = floating });
-    try windowSetProperty(context, desktop_window, .{ .decorated = options.decorated });
-    try windowSetProperty(context, desktop_window, .{ .cursor = .default });
+    if (options.fullscreen) try windowSetProperty(userdata, desktop_window, .{ .fullscreen = options.fullscreen });
+    if (options.maximized) try windowSetProperty(userdata, desktop_window, .{ .maximized = options.maximized });
+    if (options.minimized) try windowSetProperty(userdata, desktop_window, .{ .minimized = options.minimized });
+    try windowSetProperty(userdata, desktop_window, .{ .focused = options.focused });
+    try windowSetProperty(userdata, desktop_window, .{ .always_on_top = options.always_on_top });
+    if (options.floating) |floating| try windowSetProperty(userdata, desktop_window, .{ .floating = floating });
+    try windowSetProperty(userdata, desktop_window, .{ .decorated = options.decorated });
+    try windowSetProperty(userdata, desktop_window, .{ .cursor = .default });
 }
-fn windowClose(context: *anyopaque, desktop_window: *DesktopWindow) void {
-    const self: *@This() = @ptrCast(@alignCast(context));
+fn windowClose(userdata: ?*anyopaque, desktop_window: *DesktopWindow) void {
+    const self: *@This() = @ptrCast(@alignCast(userdata));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     if (window.surface == .opengl) {
@@ -224,8 +224,8 @@ fn windowClose(context: *anyopaque, desktop_window: *DesktopWindow) void {
     _ = win32.DestroyWindow(@ptrCast(window.hwnd));
     _ = win32.UnregisterClassW(window.class.lpszClassName, @ptrCast(self.hinstance));
 }
-fn windowPoll(context: *anyopaque, desktop_window: *DesktopWindow) anyerror!?DesktopWindow.Event {
-    const self: *@This() = @ptrCast(@alignCast(context));
+fn windowPoll(userdata: ?*anyopaque, desktop_window: *DesktopWindow) anyerror!?DesktopWindow.Event {
+    const self: *@This() = @ptrCast(@alignCast(userdata));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     _ = self;
@@ -314,7 +314,7 @@ fn windowPoll(context: *anyopaque, desktop_window: *DesktopWindow) anyerror!?Des
         },
         win32.WM_SETCURSOR => {
             _ = win32.SetCursor(@ptrCast(window.cursor));
-            return windowPoll(context, desktop_window);
+            return windowPoll(userdata, desktop_window);
         },
         win32.WM_TOUCH => touch: {
             const c_inputs = win32.zig.loword(msg.wParam);
@@ -333,11 +333,11 @@ fn windowPoll(context: *anyopaque, desktop_window: *DesktopWindow) anyerror!?Des
             }
             break :touch null;
         },
-        else => windowPoll(context, desktop_window),
+        else => windowPoll(userdata, desktop_window),
     };
 }
-fn windowSetProperty(context: *anyopaque, desktop_window: *DesktopWindow, property: DesktopWindow.Property) anyerror!void {
-    const self: *@This() = @ptrCast(@alignCast(context));
+fn windowSetProperty(userdata: ?*anyopaque, desktop_window: *DesktopWindow, property: DesktopWindow.Property) anyerror!void {
+    const self: *@This() = @ptrCast(@alignCast(userdata));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     switch (property) {
@@ -432,16 +432,16 @@ fn windowSetProperty(context: *anyopaque, desktop_window: *DesktopWindow, proper
         },
     }
 }
-fn windowNative(context: *anyopaque, desktop_window: *DesktopWindow) DesktopWindow.Native {
-    const self: *@This() = @ptrCast(@alignCast(context));
+fn windowNative(userdata: ?*anyopaque, desktop_window: *DesktopWindow) DesktopWindow.Native {
+    const self: *@This() = @ptrCast(@alignCast(userdata));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
     return .{
         .hinstance = self.hinstance,
         .hwnd = window.hwnd,
     };
 }
-fn windowFramebuffer(context: *anyopaque, desktop_window: *DesktopWindow) anyerror!DesktopWindow.Framebuffer {
-    const self: *@This() = @ptrCast(@alignCast(context));
+fn windowFramebuffer(userdata: ?*anyopaque, desktop_window: *DesktopWindow) anyerror!DesktopWindow.Framebuffer {
+    const self: *@This() = @ptrCast(@alignCast(userdata));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     _ = self;
@@ -451,24 +451,24 @@ fn windowFramebuffer(context: *anyopaque, desktop_window: *DesktopWindow) anyerr
 
     return undefined;
 }
-fn windowOpenglMakeCurrent(context: *anyopaque, desktop_window: *DesktopWindow) anyerror!void {
-    const self: *@This() = @ptrCast(@alignCast(context));
+fn windowOpenglMakeCurrent(userdata: ?*anyopaque, desktop_window: *DesktopWindow) anyerror!void {
+    const self: *@This() = @ptrCast(@alignCast(userdata));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
     _ = self;
 
     const gl = window.surface.opengl;
     if (!win32.SUCCEEDED(win32.wglMakeCurrent(@ptrCast(gl.device_context), @ptrCast(gl.render_context)))) return reportErr(error.WglMakeCurrent);
 }
-fn windowOpenglSwapBuffers(context: *anyopaque, desktop_window: *DesktopWindow) anyerror!void {
-    const self: *@This() = @ptrCast(@alignCast(context));
+fn windowOpenglSwapBuffers(userdata: ?*anyopaque, desktop_window: *DesktopWindow) anyerror!void {
+    const self: *@This() = @ptrCast(@alignCast(userdata));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
     _ = self;
 
     const gl = window.surface.opengl;
     if (!win32.SUCCEEDED(win32.SwapBuffers(@ptrCast(gl.device_context)))) return reportErr(error.WglSwapBuffers);
 }
-fn windowOpenglSwapInterval(context: *anyopaque, desktop_window: *DesktopWindow, interval: i32) anyerror!void {
-    const self: *@This() = @ptrCast(@alignCast(context));
+fn windowOpenglSwapInterval(userdata: ?*anyopaque, desktop_window: *DesktopWindow, interval: i32) anyerror!void {
+    const self: *@This() = @ptrCast(@alignCast(userdata));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     std.debug.assert(window.surface == .opengl);
@@ -476,8 +476,8 @@ fn windowOpenglSwapInterval(context: *anyopaque, desktop_window: *DesktopWindow,
 
     if (!win32.SUCCEEDED(self.wglSwapIntervalEXT.?(interval))) return reportErr(error.WglMakeCurrent);
 }
-fn windowVulkanCreateSurface(context: *anyopaque, desktop_window: *DesktopWindow, instance: *anyopaque, allocator: ?*const anyopaque, loader: vulkan.PfnGetInstanceProcAddr) anyerror!*anyopaque {
-    const self: *@This() = @ptrCast(@alignCast(context));
+fn windowVulkanCreateSurface(userdata: ?*anyopaque, desktop_window: *DesktopWindow, instance: *anyopaque, allocator: ?*const anyopaque, loader: vulkan.PfnGetInstanceProcAddr) anyerror!*anyopaque {
+    const self: *@This() = @ptrCast(@alignCast(userdata));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     const vkCreateWin32SurfaceKHR: vulkan.SurfaceCreateProc = @ptrCast(loader(instance, "vkCreateWin32SurfaceKHR") orelse return error.LoadVkCreateWin32SurfaceKHR);

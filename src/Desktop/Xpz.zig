@@ -75,7 +75,7 @@ pub fn disconnect(self: *Xpz) void {
 
 pub fn desktop(self: *Xpz) Desktop {
     return .{
-        .ptr = @ptrCast(@alignCast(self)),
+        .userdata = @ptrCast(@alignCast(self)),
         .vtable = &.{
             .windowOpen = windowOpen,
             .windowClose = windowClose,
@@ -92,8 +92,8 @@ pub fn desktop(self: *Xpz) Desktop {
     };
 }
 
-fn windowOpen(context: *anyopaque, desktop_window: *DesktopWindow, options: DesktopWindow.OpenOptions) anyerror!void {
-    const self: *Xpz = @ptrCast(@alignCast(context));
+fn windowOpen(userdata: ?*anyopaque, desktop_window: *DesktopWindow, options: DesktopWindow.OpenOptions) anyerror!void {
+    const self: *Xpz = @ptrCast(@alignCast(userdata));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     const connection = &self.*.connection;
@@ -132,11 +132,11 @@ fn windowOpen(context: *anyopaque, desktop_window: *DesktopWindow, options: Desk
     try window.handle.map(&self.connection);
     try self.connection.flush();
 
-    try windowSetProperty(context, desktop_window, .{ .title = options.title });
+    try windowSetProperty(userdata, desktop_window, .{ .title = options.title });
 }
 
-fn windowClose(context: *anyopaque, desktop_window: *DesktopWindow) void {
-    const self: *Xpz = @ptrCast(@alignCast(context));
+fn windowClose(userdata: ?*anyopaque, desktop_window: *DesktopWindow) void {
+    const self: *Xpz = @ptrCast(@alignCast(userdata));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     const connection = &self.*.connection;
@@ -144,8 +144,8 @@ fn windowClose(context: *anyopaque, desktop_window: *DesktopWindow) void {
     window.handle.destroy(connection);
 }
 
-fn windowPoll(context: *anyopaque, desktop_window: *DesktopWindow) anyerror!?DesktopWindow.Event {
-    const self: *Xpz = @ptrCast(@alignCast(context));
+fn windowPoll(userdata: ?*anyopaque, desktop_window: *DesktopWindow) anyerror!?DesktopWindow.Event {
+    const self: *Xpz = @ptrCast(@alignCast(userdata));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
     _ = window;
 
@@ -193,8 +193,8 @@ fn windowPoll(context: *anyopaque, desktop_window: *DesktopWindow) anyerror!?Des
         else => null,
     };
 }
-fn windowSetProperty(context: *anyopaque, desktop_window: *DesktopWindow, property: DesktopWindow.Property) anyerror!void {
-    const self: *Xpz = @ptrCast(@alignCast(context));
+fn windowSetProperty(userdata: ?*anyopaque, desktop_window: *DesktopWindow, property: DesktopWindow.Property) anyerror!void {
+    const self: *Xpz = @ptrCast(@alignCast(userdata));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     const connection = &self.*.connection;
@@ -218,8 +218,8 @@ fn windowSetProperty(context: *anyopaque, desktop_window: *DesktopWindow, proper
         .cursor => {},
     }
 }
-fn windowNative(context: *anyopaque, desktop_window: *DesktopWindow) DesktopWindow.Native {
-    const self: *Xpz = @ptrCast(@alignCast(context));
+fn windowNative(userdata: ?*anyopaque, desktop_window: *DesktopWindow) DesktopWindow.Native {
+    const self: *Xpz = @ptrCast(@alignCast(userdata));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     return .{ .x11 = .{
@@ -228,8 +228,8 @@ fn windowNative(context: *anyopaque, desktop_window: *DesktopWindow) DesktopWind
         .screen = @intCast(@intFromEnum(self.root_screen.window)),
     } };
 }
-fn windowFramebuffer(context: *anyopaque, desktop_window: *DesktopWindow) anyerror!DesktopWindow.Framebuffer {
-    const self: *Xpz = @ptrCast(@alignCast(context));
+fn windowFramebuffer(userdata: ?*anyopaque, desktop_window: *DesktopWindow) anyerror!DesktopWindow.Framebuffer {
+    const self: *Xpz = @ptrCast(@alignCast(userdata));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     _ = self;
@@ -239,30 +239,30 @@ fn windowFramebuffer(context: *anyopaque, desktop_window: *DesktopWindow) anyerr
 
     return undefined;
 }
-fn windowOpenglMakeCurrent(context: *anyopaque, desktop_window: *DesktopWindow) anyerror!void {
-    const self: *Xpz = @ptrCast(@alignCast(context));
+fn windowOpenglMakeCurrent(userdata: ?*anyopaque, desktop_window: *DesktopWindow) anyerror!void {
+    const self: *Xpz = @ptrCast(@alignCast(userdata));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     _ = self;
     _ = window;
 }
-fn windowOpenglSwapBuffers(context: *anyopaque, desktop_window: *DesktopWindow) anyerror!void {
-    const self: *Xpz = @ptrCast(@alignCast(context));
+fn windowOpenglSwapBuffers(userdata: ?*anyopaque, desktop_window: *DesktopWindow) anyerror!void {
+    const self: *Xpz = @ptrCast(@alignCast(userdata));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     _ = self;
     _ = window;
 }
-fn windowOpenglSwapInterval(context: *anyopaque, desktop_window: *DesktopWindow, interval: i32) anyerror!void {
-    const self: *Xpz = @ptrCast(@alignCast(context));
+fn windowOpenglSwapInterval(userdata: ?*anyopaque, desktop_window: *DesktopWindow, interval: i32) anyerror!void {
+    const self: *Xpz = @ptrCast(@alignCast(userdata));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     _ = self;
     _ = window;
     _ = interval;
 }
-fn windowVulkanCreateSurface(context: *anyopaque, desktop_window: *DesktopWindow, instance: *anyopaque, allocator: ?*const anyopaque, loader: vulkan.PfnGetInstanceProcAddr) anyerror!*anyopaque {
-    const self: *Xpz = @ptrCast(@alignCast(context));
+fn windowVulkanCreateSurface(userdata: ?*anyopaque, desktop_window: *DesktopWindow, instance: *anyopaque, allocator: ?*const anyopaque, loader: vulkan.PfnGetInstanceProcAddr) anyerror!*anyopaque {
+    const self: *Xpz = @ptrCast(@alignCast(userdata));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     _ = self;

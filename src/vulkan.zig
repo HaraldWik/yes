@@ -65,7 +65,7 @@ pub const SurfaceCreateProc = *const fn (instance: *anyopaque, create_info: *con
 
 pub fn createSurface(desktop: Desktop, window: *Window, instance: *anyopaque, allocator: ?*const anyopaque, loader: PfnGetInstanceProcAddr) !*anyopaque {
     if (window.surface_type != .vulkan) return error.WrongSurfaceType;
-    return desktop.vtable.windowVulkanCreateSurface(desktop.ptr, window, instance, allocator, loader);
+    return desktop.vtable.windowVulkanCreateSurface(desktop.userdata, window, instance, allocator, loader);
 }
 
 pub fn isSupported() bool {

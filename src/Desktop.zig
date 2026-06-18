@@ -4,7 +4,7 @@ const opengl = @import("opengl.zig");
 const vulkan = @import("vulkan.zig");
 const Clipboard = @import("root.zig").Clipboard;
 
-ptr: *anyopaque,
+userdata: ?*anyopaque,
 vtable: *const VTable,
 
 /// Does not open any windows nor does it execute any 'real' desktop interaction
@@ -31,27 +31,27 @@ pub const Glfw = @import("Desktop/Glfw.zig");
 pub const unix = @import("Desktop/unix.zig");
 
 pub const VTable = struct {
-    windowOpen: *const fn (*anyopaque, window: *Window, options: Window.OpenOptions) anyerror!void,
-    windowClose: *const fn (*anyopaque, window: *Window) void,
-    windowPoll: *const fn (*anyopaque, window: *Window) anyerror!?Window.Event,
-    windowSetProperty: *const fn (*anyopaque, window: *Window, property: Window.Property) anyerror!void,
-    windowNative: *const fn (*anyopaque, window: *Window) Window.Native,
+    windowOpen: *const fn (userdata: ?*anyopaque, window: *Window, options: Window.OpenOptions) anyerror!void,
+    windowClose: *const fn (userdata: ?*anyopaque, window: *Window) void,
+    windowPoll: *const fn (userdata: ?*anyopaque, window: *Window) anyerror!?Window.Event,
+    windowSetProperty: *const fn (userdata: ?*anyopaque, window: *Window, property: Window.Property) anyerror!void,
+    windowNative: *const fn (userdata: ?*anyopaque, window: *Window) Window.Native,
 
-    windowFramebuffer: *const fn (*anyopaque, window: *Window) anyerror!Window.Framebuffer,
+    windowFramebuffer: *const fn (userdata: ?*anyopaque, window: *Window) anyerror!Window.Framebuffer,
 
-    windowOpenglMakeCurrent: *const fn (*anyopaque, window: *Window) anyerror!void,
-    windowOpenglSwapBuffers: *const fn (*anyopaque, window: *Window) anyerror!void,
-    windowOpenglSwapInterval: *const fn (*anyopaque, window: *Window, interval: i32) anyerror!void,
+    windowOpenglMakeCurrent: *const fn (userdata: ?*anyopaque, window: *Window) anyerror!void,
+    windowOpenglSwapBuffers: *const fn (userdata: ?*anyopaque, window: *Window) anyerror!void,
+    windowOpenglSwapInterval: *const fn (userdata: ?*anyopaque, window: *Window, interval: i32) anyerror!void,
 
-    windowVulkanCreateSurface: *const fn (*anyopaque, window: *Window, instance: *anyopaque, allocator: ?*const anyopaque, loader: vulkan.PfnGetInstanceProcAddr) anyerror!*anyopaque,
+    windowVulkanCreateSurface: *const fn (userdata: ?*anyopaque, window: *Window, instance: *anyopaque, allocator: ?*const anyopaque, loader: vulkan.PfnGetInstanceProcAddr) anyerror!*anyopaque,
 
     openglGetProcAddress: *const fn (procname: [*:0]const u8) callconv(opengl.APIENTRY) ?opengl.Proc,
 
-    setClipboard: *const fn (*anyopaque, serial: u32, clipboard: Clipboard) anyerror!void = undefined,
+    setClipboard: *const fn (userdata: ?*anyopaque, serial: u32, clipboard: Clipboard) anyerror!void = undefined,
 };
 
 pub const failing: @This() = .{
-    .ptr = undefined,
+    .userdata = undefined,
     .vtable = &VTable{
         .windowOpen = noWindowOpen,
         .windowClose = noWindowClose,
@@ -67,53 +67,53 @@ pub const failing: @This() = .{
     },
 };
 
-pub fn noWindowOpen(self: *anyopaque, window: *Window, options: Window.OpenOptions) anyerror!void {
-    _ = self;
+pub fn noWindowOpen(userdata: ?*anyopaque, window: *Window, options: Window.OpenOptions) anyerror!void {
+    _ = userdata;
     _ = window;
     _ = options;
 }
-pub fn noWindowClose(self: *anyopaque, window: *Window) void {
-    _ = self;
+pub fn noWindowClose(userdata: ?*anyopaque, window: *Window) void {
+    _ = userdata;
     _ = window;
 }
-pub fn noWindowPoll(self: *anyopaque, window: *Window) anyerror!?Window.Event {
-    _ = self;
+pub fn noWindowPoll(userdata: ?*anyopaque, window: *Window) anyerror!?Window.Event {
+    _ = userdata;
     _ = window;
 
     return null;
 }
-pub fn noWindowSetProperty(self: *anyopaque, window: *Window, property: Window.Property) anyerror!void {
-    _ = self;
+pub fn noWindowSetProperty(userdata: ?*anyopaque, window: *Window, property: Window.Property) anyerror!void {
+    _ = userdata;
     _ = window;
     _ = property;
 }
-pub fn unreachableWindowNative(self: *anyopaque, window: *Window) Window.Native {
-    _ = self;
+pub fn unreachableWindowNative(userdata: ?*anyopaque, window: *Window) Window.Native {
+    _ = userdata;
     _ = window;
     unreachable;
 }
-pub fn failingWindowFramebuffer(self: *anyopaque, window: *Window) anyerror!Window.Framebuffer {
-    _ = self;
+pub fn failingWindowFramebuffer(userdata: ?*anyopaque, window: *Window) anyerror!Window.Framebuffer {
+    _ = userdata;
     _ = window;
     return error.Failing;
 }
-pub fn noWindowOpenglMakeCurrent(self: *anyopaque, window: *Window) anyerror!void {
-    _ = self;
+pub fn noWindowOpenglMakeCurrent(userdata: ?*anyopaque, window: *Window) anyerror!void {
+    _ = userdata;
     _ = window;
 }
-pub fn failingWindowOpenglSwapBuffers(self: *anyopaque, window: *Window) anyerror!void {
-    _ = self;
+pub fn failingWindowOpenglSwapBuffers(userdata: ?*anyopaque, window: *Window) anyerror!void {
+    _ = userdata;
     _ = window;
     return error.SwapBuffers;
 }
-pub fn failingWindowOpenglSwapInterval(self: *anyopaque, window: *Window, interval: i32) anyerror!void {
-    _ = self;
+pub fn failingWindowOpenglSwapInterval(userdata: ?*anyopaque, window: *Window, interval: i32) anyerror!void {
+    _ = userdata;
     _ = window;
     _ = interval;
     return error.SwapInterval;
 }
-pub fn failingWindowVulkanCreateSurface(self: *anyopaque, window: *Window, instance: *anyopaque, allocator: ?*const anyopaque, loader: vulkan.PfnGetInstanceProcAddr) anyerror!*anyopaque {
-    _ = self;
+pub fn failingWindowVulkanCreateSurface(userdata: ?*anyopaque, window: *Window, instance: *anyopaque, allocator: ?*const anyopaque, loader: vulkan.PfnGetInstanceProcAddr) anyerror!*anyopaque {
+    _ = userdata;
     _ = window;
     _ = instance;
     _ = allocator;
@@ -124,8 +124,8 @@ pub fn noOpenglGetProcAddress(procname: [*:0]const u8) callconv(opengl.APIENTRY)
     _ = procname;
     return null;
 }
-pub fn failingSetClipboard(self: *anyopaque, serial: u32, clipboard: Clipboard) anyerror!void {
-    _ = self;
+pub fn failingSetClipboard(userdata: ?*anyopaque, serial: u32, clipboard: Clipboard) anyerror!void {
+    _ = userdata;
     _ = serial;
     _ = clipboard;
     return error.SetClipboard;

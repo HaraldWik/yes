@@ -52,7 +52,7 @@ pub fn main(init: std.process.Init) !void {
             else => std.log.info("{any}", .{event}),
         };
 
-        const wayland: *yes.Desktop.Wayland = @ptrCast(@alignCast(desktop.ptr));
+        const wayland: *yes.Desktop.Wayland = @ptrCast(@alignCast(desktop.userdata.?));
 
         if (wayland.io_manager.clipboard.fd != 0) {
             const fd = wayland.io_manager.clipboard.fd;

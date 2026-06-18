@@ -75,7 +75,7 @@ pub const AtomTable = struct {
 };
 
 pub const Keyboard = struct {
-    context: *xkb.xkb_context,
+    context: *xkb.xkb_userdata,
     keymap: *xkb.xkb_keymap,
     state: *xkb.xkb_state,
 
@@ -153,7 +153,7 @@ pub fn disconnect(self: *Xcb) void {
 
 pub fn desktop(self: *Xcb) Desktop {
     return .{
-        .ptr = @ptrCast(@alignCast(self)),
+        .userdata = @ptrCast(@alignCast(self)),
         .vtable = &.{
             .windowOpen = windowOpen,
             .windowClose = windowClose,
@@ -181,8 +181,8 @@ fn xiSetMask(mask: []u8, event: u16) void {
     mask[event / 8] |= @as(u8, 1) << @intCast(event % 8);
 }
 
-fn windowOpen(context: *anyopaque, desktop_window: *DesktopWindow, options: DesktopWindow.OpenOptions) anyerror!void {
-    const self: *Xcb = @ptrCast(@alignCast(context));
+fn windowOpen(userdata: ?*anyopaque, desktop_window: *DesktopWindow, options: DesktopWindow.OpenOptions) anyerror!void {
+    const self: *Xcb = @ptrCast(@alignCast(userdata));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     for (self.windows.items, 0..) |other_window, index| {
@@ -334,16 +334,16 @@ fn windowOpen(context: *anyopaque, desktop_window: *DesktopWindow, options: Desk
         &window.wm_delete_atom,
     );
 
-    try windowSetProperty(context, desktop_window, .{ .title = options.title });
+    try windowSetProperty(userdata, desktop_window, .{ .title = options.title });
 
-    try windowSetProperty(context, desktop_window, .{ .resize_policy = options.resize_policy });
-    if (options.fullscreen) try windowSetProperty(context, desktop_window, .{ .fullscreen = options.fullscreen });
-    if (options.maximized) try windowSetProperty(context, desktop_window, .{ .maximized = options.maximized });
-    if (options.minimized) try windowSetProperty(context, desktop_window, .{ .minimized = options.minimized });
-    if (!options.focused) try windowSetProperty(context, desktop_window, .{ .focused = options.focused });
-    if (options.always_on_top) try windowSetProperty(context, desktop_window, .{ .always_on_top = options.always_on_top });
-    if (options.floating) |floating| try windowSetProperty(context, desktop_window, .{ .floating = floating });
-    if (!options.decorated) try windowSetProperty(context, desktop_window, .{ .decorated = options.decorated });
+    try windowSetProperty(userdata, desktop_window, .{ .resize_policy = options.resize_policy });
+    if (options.fullscreen) try windowSetProperty(userdata, desktop_window, .{ .fullscreen = options.fullscreen });
+    if (options.maximized) try windowSetProperty(userdata, desktop_window, .{ .maximized = options.maximized });
+    if (options.minimized) try windowSetProperty(userdata, desktop_window, .{ .minimized = options.minimized });
+    if (!options.focused) try windowSetProperty(userdata, desktop_window, .{ .focused = options.focused });
+    if (options.always_on_top) try windowSetProperty(userdata, desktop_window, .{ .always_on_top = options.always_on_top });
+    if (options.floating) |floating| try windowSetProperty(userdata, desktop_window, .{ .floating = floating });
+    if (!options.decorated) try windowSetProperty(userdata, desktop_window, .{ .decorated = options.decorated });
 
     switch (options.surface_type) {
         .empty => {},
@@ -371,8 +371,8 @@ fn windowOpen(context: *anyopaque, desktop_window: *DesktopWindow, options: Desk
 
     try window.event_queue.append(self.gpa, .{ .resize = options.size });
 }
-fn windowClose(context: *anyopaque, desktop_window: *DesktopWindow) void {
-    const self: *Xcb = @ptrCast(@alignCast(context));
+fn windowClose(userdata: ?*anyopaque, desktop_window: *DesktopWindow) void {
+    const self: *Xcb = @ptrCast(@alignCast(userdata));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     _, const window_index = self.windowFromId(window.id).?;
@@ -381,8 +381,8 @@ fn windowClose(context: *anyopaque, desktop_window: *DesktopWindow) void {
     window.event_queue.deinit(self.gpa);
     _ = xcb.xcb_destroy_window(self.connection, window.id);
 }
-fn windowPoll(context: *anyopaque, desktop_window: *DesktopWindow) anyerror!?DesktopWindow.Event {
-    const self: *Xcb = @ptrCast(@alignCast(context));
+fn windowPoll(userdata: ?*anyopaque, desktop_window: *DesktopWindow) anyerror!?DesktopWindow.Event {
+    const self: *Xcb = @ptrCast(@alignCast(userdata));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     if (window.event_queue.pop()) |event| return event;
@@ -544,10 +544,10 @@ fn windowPoll(context: *anyopaque, desktop_window: *DesktopWindow) anyerror!?Des
             try target.event_queue.append(self.gpa, event);
         }
     };
-    return windowPoll(context, desktop_window);
+    return windowPoll(userdata, desktop_window);
 }
-fn windowSetProperty(context: *anyopaque, desktop_window: *DesktopWindow, property: DesktopWindow.Property) anyerror!void {
-    const self: *Xcb = @ptrCast(@alignCast(context));
+fn windowSetProperty(userdata: ?*anyopaque, desktop_window: *DesktopWindow, property: DesktopWindow.Property) anyerror!void {
+    const self: *Xcb = @ptrCast(@alignCast(userdata));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     switch (property) {
@@ -726,8 +726,8 @@ fn windowSetProperty(context: *anyopaque, desktop_window: *DesktopWindow, proper
     }
     _ = xcb.xcb_flush(self.connection);
 }
-fn windowNative(context: *anyopaque, desktop_window: *DesktopWindow) DesktopWindow.Native {
-    const self: *Xcb = @ptrCast(@alignCast(context));
+fn windowNative(userdata: ?*anyopaque, desktop_window: *DesktopWindow) DesktopWindow.Native {
+    const self: *Xcb = @ptrCast(@alignCast(userdata));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     return .{ .x11 = .{
@@ -736,8 +736,8 @@ fn windowNative(context: *anyopaque, desktop_window: *DesktopWindow) DesktopWind
         .screen = @intCast(self.screen.root),
     } };
 }
-fn windowFramebuffer(context: *anyopaque, desktop_window: *DesktopWindow) anyerror!DesktopWindow.Framebuffer {
-    const self: *Xcb = @ptrCast(@alignCast(context));
+fn windowFramebuffer(userdata: ?*anyopaque, desktop_window: *DesktopWindow) anyerror!DesktopWindow.Framebuffer {
+    const self: *Xcb = @ptrCast(@alignCast(userdata));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     // const cookie = xcb.xcb_get_image(self.connection, xcb.XCB_IMAGE_FORMAT_Z_PIXMAP, // format
@@ -758,28 +758,28 @@ fn windowFramebuffer(context: *anyopaque, desktop_window: *DesktopWindow) anyerr
     _ = window;
     return undefined;
 }
-fn windowOpenglMakeCurrent(context: *anyopaque, desktop_window: *DesktopWindow) anyerror!void {
-    const self: *Xcb = @ptrCast(@alignCast(context));
+fn windowOpenglMakeCurrent(userdata: ?*anyopaque, desktop_window: *DesktopWindow) anyerror!void {
+    const self: *Xcb = @ptrCast(@alignCast(userdata));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
-    _ = xcb.xcb_glx_make_current(self.connection, window.id, window.surface.glx.context, 0);
+    _ = xcb.xcb_glx_make_current(self.connection, window.id, window.surface.glx.userdata, 0);
 }
-fn windowOpenglSwapBuffers(context: *anyopaque, desktop_window: *DesktopWindow) anyerror!void {
-    const self: *Xcb = @ptrCast(@alignCast(context));
+fn windowOpenglSwapBuffers(userdata: ?*anyopaque, desktop_window: *DesktopWindow) anyerror!void {
+    const self: *Xcb = @ptrCast(@alignCast(userdata));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     _ = xcb.xcb_glx_swap_buffers(self.connection, 0, window.id);
 }
-fn windowOpenglSwapInterval(context: *anyopaque, desktop_window: *DesktopWindow, interval: i32) anyerror!void {
-    const self: *Xcb = @ptrCast(@alignCast(context));
+fn windowOpenglSwapInterval(userdata: ?*anyopaque, desktop_window: *DesktopWindow, interval: i32) anyerror!void {
+    const self: *Xcb = @ptrCast(@alignCast(userdata));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     _ = self;
     _ = window;
     _ = interval;
 }
-fn windowVulkanCreateSurface(context: *anyopaque, desktop_window: *DesktopWindow, instance: *anyopaque, allocator: ?*const anyopaque, loader: vulkan.PfnGetInstanceProcAddr) anyerror!*anyopaque {
-    const self: *Xcb = @ptrCast(@alignCast(context));
+fn windowVulkanCreateSurface(userdata: ?*anyopaque, desktop_window: *DesktopWindow, instance: *anyopaque, allocator: ?*const anyopaque, loader: vulkan.PfnGetInstanceProcAddr) anyerror!*anyopaque {
+    const self: *Xcb = @ptrCast(@alignCast(userdata));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
     _ = self;
 
