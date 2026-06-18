@@ -1,9 +1,9 @@
+const Window = @This();
+
 const std = @import("std");
 const builtin = @import("builtin");
 const Desktop = @import("Desktop.zig");
 const opengl = @import("opengl.zig");
-
-const Window = @This();
 
 size: Size = .{},
 position: Position = .{},
@@ -21,16 +21,16 @@ pub const Size = packed struct(u64) {
     width: u32 = 0,
     height: u32 = 0,
 
-    pub fn eql(a: @This(), b: @This()) bool {
+    pub fn eql(a: Size, b: Size) bool {
         return a.width == b.width and a.height == b.height;
     }
 
-    pub fn aspect(self: @This()) f32 {
+    pub fn aspect(self: Size) f32 {
         return @as(f32, @floatFromInt(self.width)) / @as(f32, @floatFromInt(self.height));
     }
 
     /// Can be constructed into @Vector or [2]u32
-    pub fn toTuple(self: @This()) struct { u32, u32 } {
+    pub fn toTuple(self: Size) struct { u32, u32 } {
         return .{ self.width, self.height };
     }
 };
@@ -39,12 +39,12 @@ pub const Position = packed struct(i64) {
     x: i32 = 0,
     y: i32 = 0,
 
-    pub fn eql(a: @This(), b: @This()) bool {
+    pub fn eql(a: Position, b: Position) bool {
         return a.x == b.x and a.y == b.y;
     }
 
     /// Can be constructed into @Vector or [2]i32
-    pub fn toTuple(self: @This()) struct { i32, i32 } {
+    pub fn toTuple(self: Position) struct { i32, i32 } {
         return .{ self.x, self.y };
     }
 };
@@ -113,9 +113,9 @@ pub const Framebuffer = struct {
         b: usize,
         a: usize,
 
-        pub const rgba: @This() = .{ .r = 0, .g = 1, .b = 2, .a = 3 };
-        pub const argb: @This() = .{ .r = 1, .g = 2, .b = 3, .a = 0 };
-        pub const bgra: @This() = .{ .r = 2, .g = 1, .b = 0, .a = 3 };
+        pub const rgba: Format = .{ .r = 0, .g = 1, .b = 2, .a = 3 };
+        pub const argb: Format = .{ .r = 1, .g = 2, .b = 3, .a = 0 };
+        pub const bgra: Format = .{ .r = 2, .g = 1, .b = 0, .a = 3 };
     };
 
     pub const format: Format = switch (builtin.os.tag) {
@@ -172,7 +172,7 @@ pub const Cursor = enum(u32) {
     move = 13,
     _, // Incase you want a platform specific one
 
-    pub const default: @This() = .arrow;
+    pub const default: Cursor = .arrow;
 };
 
 pub const Property = union(enum) {

@@ -1,3 +1,5 @@
+const Xcb = @This();
+
 const std = @import("std");
 const opengl = @import("../opengl.zig");
 const vulkan = @import("../root.zig").vulkan;
@@ -5,8 +7,6 @@ const Desktop = @import("../Desktop.zig");
 const DesktopWindow = @import("../Window.zig");
 const xcb = @import("xcb");
 const xkb = @import("xkbcommon");
-
-const Xcb = @This();
 
 gpa: std.mem.Allocator,
 connection: *xcb.xcb_connection_t,

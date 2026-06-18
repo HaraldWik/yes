@@ -1,3 +1,5 @@
+const Xlib = @This();
+
 const std = @import("std");
 const builtin = @import("builtin");
 const opengl = @import("../opengl.zig");
@@ -5,8 +7,6 @@ const vulkan = @import("../vulkan.zig");
 const Desktop = @import("../Desktop.zig");
 const DesktopWindow = @import("../Window.zig");
 const xlib = @import("xlib");
-
-const Xlib = @This();
 
 display: *xlib.Display,
 atom_table: AtomTable,

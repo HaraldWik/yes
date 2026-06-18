@@ -172,7 +172,7 @@ pub const Event = union(enum) {
 
             iso_level3_shift,
 
-            pub fn fromWin32(key: win32.VIRTUAL_KEY, lparam: isize) ?@This() {
+            pub fn fromWin32(key: win32.VIRTUAL_KEY, lparam: isize) ?Sym {
                 const scancode: u32 = (@as(u32, @intCast(lparam)) >> 16) & 0xFF;
                 const extended: bool = ((lparam >> 24) & 1) != 0;
 
@@ -237,11 +237,11 @@ pub const Event = union(enum) {
                     .MULTIPLY => .numpad_multiply,
                     .DIVIDE => .numpad_divide,
                     .DECIMAL => .numpad_decimal,
-                    else => std.enums.fromInt(@This(), @intFromEnum(key)),
+                    else => std.enums.fromInt(Sym, @intFromEnum(key)),
                 };
             }
 
-            pub fn fromXkb(key: anytype) ?@This() {
+            pub fn fromXkb(key: anytype) ?Sym {
                 return switch (@as(xkb.xkb_keysym_t, @intCast(key))) {
                     xkb.XKB_KEY_A, xkb.XKB_KEY_a => .a,
                     xkb.XKB_KEY_B, xkb.XKB_KEY_b => .b,
@@ -332,7 +332,7 @@ pub const Event = union(enum) {
                     xkb.XKB_KEY_KP_Decimal => .numpad_decimal,
 
                     xkb.XKB_KEY_ISO_Level3_Shift => .iso_level3_shift,
-                    else => std.enums.fromInt(@This(), key) orelse {
+                    else => std.enums.fromInt(Sym, key) orelse {
                         std.log.err("missing key: {d}", .{key});
                         return null;
                     },
@@ -364,7 +364,7 @@ pub const Event = union(enum) {
             forward,
             backward,
 
-            pub fn fromWin32(button: u32, wparam: usize) ?@This() {
+            pub fn fromWin32(button: u32, wparam: usize) ?Button {
                 return switch (button) {
                     win32.WM_RBUTTONDOWN, win32.WM_RBUTTONUP => .right,
                     win32.WM_MBUTTONDOWN, win32.WM_MBUTTONUP => .middle,
@@ -378,7 +378,7 @@ pub const Event = union(enum) {
                 };
             }
 
-            pub fn fromX(button: c_uint) ?@This() {
+            pub fn fromX(button: c_uint) ?Button {
                 return switch (button) {
                     3 => .right,
                     2 => .middle,
@@ -389,7 +389,7 @@ pub const Event = union(enum) {
                 };
             }
 
-            pub fn fromWayland(button: u32) ?@This() {
+            pub fn fromWayland(button: u32) ?Button {
                 return switch (button) {
                     272 => .left,
                     274 => .middle,

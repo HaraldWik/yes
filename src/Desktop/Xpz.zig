@@ -1,11 +1,11 @@
+const Xpz = @This();
+
 const std = @import("std");
 const opengl = @import("../opengl.zig");
 const vulkan = @import("../vulkan.zig");
 const Desktop = @import("../Desktop.zig");
 const DesktopWindow = @import("../Window.zig");
 const xpz = @import("xpz");
-
-const Xpz = @This();
 
 connection: xpz.Connection,
 root_screen: xpz.Screen,

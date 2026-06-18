@@ -5,7 +5,9 @@ pub const vulkan = @import("vulkan.zig");
 
 pub const Clipboard = union(enum) {
     utf8: []const u8,
+    /// file paths
     files: []const []const u8,
+    /// image path
     image: []const u8,
     raw: []const u8,
 };

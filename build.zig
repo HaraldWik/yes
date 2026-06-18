@@ -80,6 +80,19 @@ pub fn build(b: *std.Build) void {
                 mod.linkSystemLibrary("EGL", .{ .weak = true });
                 mod.linkSystemLibrary("wayland-egl", .{ .weak = true });
             }
+
+            const egl = b.dependency("egl", .{ .target = target, .optimize = optimize });
+            const egl_translate_c = b.addTranslateC(.{
+                .root_source_file = b.addWriteFiles().add("egl.h",
+                    \\#include <EGL/egl.h>
+                    \\#include <wayland-egl.h>
+                    \\#include <wayland-egl-core.h>
+                ),
+                .target = target,
+                .optimize = optimize,
+            });
+            egl_translate_c.addIncludePath(egl.path("api/EGL/"));
+            mod.addImport("egl", egl_translate_c.createModule());
         },
     }
 

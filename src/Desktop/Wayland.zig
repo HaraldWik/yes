@@ -1,3 +1,5 @@
+const Wayland = @This();
+
 const std = @import("std");
 const build_options = @import("build_options");
 const opengl = @import("../opengl.zig");
@@ -9,14 +11,13 @@ const wl = wayland.client.wl;
 const xdg = wayland.client.xdg;
 const zxdg = wayland.client.zxdg;
 const wp = wayland.client.wp;
-const egl = @cImport({ // TODO: replace
-    @cInclude("EGL/egl.h");
-    @cInclude("wayland-egl.h");
-    @cInclude("wayland-egl-core.h");
-});
+// const egl = @cImport({ // TODO: replace
+//     @cInclude("EGL/egl.h");
+//     @cInclude("wayland-egl.h");
+//     @cInclude("wayland-egl-core.h");
+// });
+const egl = @import("egl");
 const xkb = @import("xkbcommon");
-
-const Wayland = @This();
 
 gpa: std.mem.Allocator,
 display: *wl.Display,

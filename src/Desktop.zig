@@ -1,3 +1,5 @@
+const Desktop = @This();
+
 const build_options = @import("build_options");
 const Window = @import("Window.zig");
 const opengl = @import("opengl.zig");
@@ -50,8 +52,8 @@ pub const VTable = struct {
     setClipboard: *const fn (userdata: ?*anyopaque, serial: u32, clipboard: Clipboard) anyerror!void = undefined,
 };
 
-pub const failing: @This() = .{
-    .userdata = undefined,
+pub const failing: Desktop = .{
+    .userdata = null,
     .vtable = &VTable{
         .windowOpen = noWindowOpen,
         .windowClose = noWindowClose,

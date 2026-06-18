@@ -39,6 +39,16 @@
             .hash = "libxkbcommon-1.11.0-93LaF31wAgDBmMuuxfPTZ2xJiOc3ZOb5OwOVi4FlD5iy",
         },
 
+        .libxkbcommon = .{
+            .url = "git+https://github.com/HaraldWik/libxkbcommon#54b54db10d7954cc3d4eb0b7ba8a2ad49ee8712c",
+            .hash = "libxkbcommon-1.11.0-93LaF-twAgBJ6KbPBRhi5ZjuKzg37UVw6j6Os0egOPqN",
+        },
+
+        .egl = .{
+            .url = "git+https://github.com/KhronosGroup/EGL-Registry#3d7796b3721d93976b6bfe536aa97bbc4bce8667",
+            .hash = "N-V-__8AAItrbQBen6_Wl2eZ2ax6B0G6qtKys7_uVz224o99",
+        },
+
         // If you want a more stable window experience or smth add the glfw = true build option
         .glfw_lib = .{
             .url = "git+https://codeberg.org/Games-by-Mason/glfw_zig#398e67ad42750ae16e4d11d4abb1e7455c0d0139",
@@ -49,10 +59,6 @@
             .url = "git+https://github.com/glfw/glfw#fdd14e65b1c29e4e6df875fb5669ec00d6793531",
             .hash = "N-V-__8AACo0SgD2fozxq6O88t3f1Bd5GT89PObFv1OsPK0y",
             .lazy = true,
-        },
-        .libxkbcommon = .{
-            .url = "git+https://github.com/HaraldWik/libxkbcommon#54b54db10d7954cc3d4eb0b7ba8a2ad49ee8712c",
-            .hash = "libxkbcommon-1.11.0-93LaF-twAgBJ6KbPBRhi5ZjuKzg37UVw6j6Os0egOPqN",
         },
     },
     .paths = .{

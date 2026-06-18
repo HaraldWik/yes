@@ -1,10 +1,10 @@
+const CrossPlatform = @This();
+
 const std = @import("std");
 const builtin = @import("builtin");
 const build_options = @import("build_options");
 const Desktop = @import("../Desktop.zig");
 const DesktopWindow = @import("../Window.zig");
-
-const Cross = @This();
 
 inner: Inner,
 
@@ -44,8 +44,8 @@ pub const Window = struct {
         },
     },
 
-    pub fn empty(p: Desktop) @This() {
-        const cross: *Cross = @ptrCast(@alignCast(p.userdata));
+    pub fn empty(p: Desktop) Window {
+        const cross: *CrossPlatform = @ptrCast(@alignCast(p.userdata));
         return if (build_options.glfw) .{ .inner = .{} } else switch (builtin.os.tag) {
             .windows => .{ .inner = .{} },
             .macos, .ios, .tvos => .{ .inner = .{} },
@@ -58,8 +58,8 @@ pub const Window = struct {
         };
     }
 
-    pub fn interface(self: *@This(), p: Desktop) *DesktopWindow {
-        const cross: *Cross = @ptrCast(@alignCast(p.userdata));
+    pub fn interface(self: *Window, p: Desktop) *DesktopWindow {
+        const cross: *CrossPlatform = @ptrCast(@alignCast(p.userdata));
         return if (build_options.glfw) &self.inner.interface else switch (builtin.os.tag) {
             .windows => &self.inner.interface,
             .macos, .ios, .tvos => &self.inner.interface,
@@ -73,7 +73,7 @@ pub const Window = struct {
     }
 };
 
-pub fn init(gpa: std.mem.Allocator, io: std.Io, minimal: std.process.Init.Minimal) !@This() {
+pub fn init(gpa: std.mem.Allocator, io: std.Io, minimal: std.process.Init.Minimal) !CrossPlatform {
     return if (build_options.glfw) .{ .inner = try Desktop.Glfw.init(gpa) } else switch (builtin.os.tag) {
         .windows => .{ .inner = try Desktop.Win32.init(gpa) },
         .macos, .ios, .tvos => .{ .inner = try Desktop.Cocoa.init() },
@@ -84,7 +84,7 @@ pub fn init(gpa: std.mem.Allocator, io: std.Io, minimal: std.process.Init.Minima
     };
 }
 
-fn initUnix(gpa: std.mem.Allocator, io: std.Io, minimal: std.process.Init.Minimal) !@This() {
+fn initUnix(gpa: std.mem.Allocator, io: std.Io, minimal: std.process.Init.Minimal) !CrossPlatform {
     const session_type: Desktop.unix.SessionType =
         if (build_options.wayland_backend != .none and build_options.x_backend != .none)
             Desktop.unix.SessionType.detect(minimal) orelse .wayland
