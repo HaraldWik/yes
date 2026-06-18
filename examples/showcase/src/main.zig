@@ -6,13 +6,13 @@ pub fn main(init: std.process.Init) !void {
     const allocator = init.gpa;
     const io = init.io;
 
-    var cross_platform: yes.Platform.Cross = try .init(allocator, io, init.minimal);
-    defer cross_platform.deinit();
-    const platform = cross_platform.platform();
+    var cross_desktop: yes.Desktop.Cross = try .init(allocator, io, init.minimal);
+    defer cross_desktop.deinit();
+    const desktop = cross_desktop.desktop();
 
-    var cross_window: yes.Platform.Cross.Window = .empty(platform);
-    const window = cross_window.interface(platform);
-    try window.open(platform, .{
+    var cross_window: yes.Desktop.Cross.Window = .empty(desktop);
+    const window = cross_window.interface(desktop);
+    try window.open(desktop, .{
         .title = "Window 🇸🇪👺🌶️🫑",
         .size = .{ .width = 600, .height = 400 },
         .resize_policy = .{ .specified = .{
@@ -20,17 +20,13 @@ pub fn main(init: std.process.Init) !void {
             .min_size = .{ .width = 300, .height = 200 },
         } },
     });
-    defer window.close(platform);
-    try window.setAlwaysOnTop(platform, true);
-    try window.setFloating(platform, true);
-
-    var fullscreen: bool = false;
-    var maximize: bool = false;
-    var minimize: bool = false;
+    defer window.close(desktop);
+    try window.setAlwaysOnTop(desktop, true);
+    try window.setFloating(desktop, true);
 
     var cursor_index: usize = 0;
     main: while (true) {
-        while (try window.poll(platform)) |event| switch (event) {
+        while (try window.poll(desktop)) |event| switch (event) {
             .close => break :main,
             .resize => |size| std.log.info("resize: {d} x {d}", .{ size.width, size.height }),
             .move => |position| std.log.info("move: {d} x {d}", .{ position.x, position.y }),
@@ -41,23 +37,14 @@ pub fn main(init: std.process.Init) !void {
                 std.log.info("{t:<8} {t}", .{ key.state, key.sym });
                 if (key.state != .released) continue;
 
-                if (key.sym == .enter)
-                    try window.setTitle(platform, "You pressed enter!");
+                if (key.sym == .enter) try window.setTitle(desktop, "You pressed enter!");
+                if (key.sym == .f1) try window.setMode(desktop, .windowed);
+                if (key.sym == .f2) try window.setMode(desktop, .fullscreen);
+                if (key.sym == .f3) try window.setMode(desktop, .maximized);
+                if (key.sym == .f4) try window.setMode(desktop, .minimized);
 
-                if (key.sym == .f) {
-                    fullscreen = !fullscreen;
-                    try window.setFullscreen(platform, fullscreen);
-                }
-                if (key.sym == .m) {
-                    maximize = !maximize;
-                    try window.setMaximized(platform, fullscreen);
-                }
-                if (key.sym == .n) {
-                    minimize = !minimize;
-                    try window.setMinimized(platform, fullscreen);
-                }
                 if (key.sym == .r)
-                    try window.setResizePolicy(platform, .{ .resizable = true });
+                    try window.setResizePolicy(desktop, .{ .resizable = true });
             },
             .mouse_button => |button| {
                 if (button.state == .pressed and button.button == .left) {
@@ -80,7 +67,7 @@ pub fn main(init: std.process.Init) !void {
                             break :blk .arrow;
                         },
                     };
-                    try window.setCursor(platform, cursor);
+                    try window.setCursor(desktop, cursor);
                 }
             },
             .mouse_motion => {},

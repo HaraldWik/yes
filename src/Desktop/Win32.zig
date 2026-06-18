@@ -89,7 +89,7 @@ pub fn platform(self: *@This()) Desktop {
 }
 
 fn windowOpen(userdata: ?*anyopaque, desktop_window: *DesktopWindow, options: DesktopWindow.OpenOptions) anyerror!void {
-    const self: *@This() = @ptrCast(@alignCast(userdata));
+    const self: *@This() = @ptrCast(@alignCast(userdata.?));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     window.size_data = .{
@@ -213,7 +213,7 @@ fn windowOpen(userdata: ?*anyopaque, desktop_window: *DesktopWindow, options: De
     try windowSetProperty(userdata, desktop_window, .{ .cursor = .default });
 }
 fn windowClose(userdata: ?*anyopaque, desktop_window: *DesktopWindow) void {
-    const self: *@This() = @ptrCast(@alignCast(userdata));
+    const self: *@This() = @ptrCast(@alignCast(userdata.?));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     if (window.surface == .opengl) {
@@ -225,7 +225,7 @@ fn windowClose(userdata: ?*anyopaque, desktop_window: *DesktopWindow) void {
     _ = win32.UnregisterClassW(window.class.lpszClassName, @ptrCast(self.hinstance));
 }
 fn windowPoll(userdata: ?*anyopaque, desktop_window: *DesktopWindow) anyerror!?DesktopWindow.Event {
-    const self: *@This() = @ptrCast(@alignCast(userdata));
+    const self: *@This() = @ptrCast(@alignCast(userdata.?));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     _ = self;
@@ -337,7 +337,7 @@ fn windowPoll(userdata: ?*anyopaque, desktop_window: *DesktopWindow) anyerror!?D
     };
 }
 fn windowSetProperty(userdata: ?*anyopaque, desktop_window: *DesktopWindow, property: DesktopWindow.Property) anyerror!void {
-    const self: *@This() = @ptrCast(@alignCast(userdata));
+    const self: *@This() = @ptrCast(@alignCast(userdata.?));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     switch (property) {
@@ -349,37 +349,47 @@ fn windowSetProperty(userdata: ?*anyopaque, desktop_window: *DesktopWindow, prop
         .size => |size| _ = win32.SetWindowPos(@ptrCast(window.hwnd), null, 0, 0, @intCast(size.width), @intCast(size.height), .{ .NOZORDER = 1, .NOMOVE = 1 }),
         .position => |position| _ = win32.SetWindowPos(@ptrCast(window.hwnd), null, position.x, position.y, 0, 0, .{ .NOZORDER = 1, .NOSIZE = 1 }),
         .resize_policy => |resize_policy| window.size_data.resize_policy = resize_policy,
-        .fullscreen => |fullscreen| if (fullscreen) {
-            _ = win32.GetWindowPlacement(@ptrCast(window.hwnd), &window.previous_placement);
+        .mode => |mode| {
+            _ = win32.ShowWindow(@ptrCast(window.hwnd), win32.SW_RESTORE);
+            if (mode != .fullscreen and window.interface.mode == .fullscreen) {
+                _ = win32.SetWindowLongW(@ptrCast(window.hwnd), win32.GWL_STYLE, window.previous_style);
+                _ = win32.SetWindowPlacement(@ptrCast(window.hwnd), &window.previous_placement);
+                _ = win32.SetWindowPos(@ptrCast(window.hwnd), null, 0, 0, 0, 0, .{ .DRAWFRAME = 1, .NOMOVE = 1, .NOSIZE = 1, .NOZORDER = 1, .NOOWNERZORDER = 1 });
+            }
+            switch (mode) {
+                .windowed => {
+                    window.xdg_toplevel.unsetFullscreen();
+                    window.xdg_toplevel.unsetMaximized();
+                },
+                .fullscreen => {
+                    _ = win32.GetWindowPlacement(@ptrCast(window.hwnd), &window.previous_placement);
 
-            const style = win32.GetWindowLongW(@ptrCast(window.hwnd), win32.GWL_STYLE);
-            window.previous_style = style;
-            const new_style = (style & ~@as(i32, @bitCast(win32.WS_OVERLAPPEDWINDOW))) | @as(i32, @bitCast(win32.WS_POPUP));
+                    const style = win32.GetWindowLongW(@ptrCast(window.hwnd), win32.GWL_STYLE);
+                    window.previous_style = style;
+                    const new_style = (style & ~@as(i32, @bitCast(win32.WS_OVERLAPPEDWINDOW))) | @as(i32, @bitCast(win32.WS_POPUP));
 
-            _ = win32.SetWindowLongW(@ptrCast(window.hwnd), win32.GWL_STYLE, new_style);
+                    _ = win32.SetWindowLongW(@ptrCast(window.hwnd), win32.GWL_STYLE, new_style);
 
-            const monitor = win32.MonitorFromWindow(@ptrCast(window.hwnd), win32.MONITOR_DEFAULTTOPRIMARY);
-            var mi: win32.MONITORINFO = std.mem.zeroInit(win32.MONITORINFO, .{
-                .cbSize = @sizeOf(win32.MONITORINFO),
-            });
-            _ = win32.GetMonitorInfoW(monitor, &mi);
+                    const monitor = win32.MonitorFromWindow(@ptrCast(window.hwnd), win32.MONITOR_DEFAULTTOPRIMARY);
+                    var mi: win32.MONITORINFO = std.mem.zeroInit(win32.MONITORINFO, .{
+                        .cbSize = @sizeOf(win32.MONITORINFO),
+                    });
+                    _ = win32.GetMonitorInfoW(monitor, &mi);
 
-            _ = win32.SetWindowPos(
-                @ptrCast(window.hwnd),
-                null,
-                mi.rcMonitor.left,
-                mi.rcMonitor.top,
-                mi.rcMonitor.right - mi.rcMonitor.left,
-                mi.rcMonitor.bottom - mi.rcMonitor.top,
-                .{ .DRAWFRAME = 1, .NOOWNERZORDER = 1 },
-            );
-        } else { // unfullscreen
-            _ = win32.SetWindowLongW(@ptrCast(window.hwnd), win32.GWL_STYLE, window.previous_style);
-            _ = win32.SetWindowPlacement(@ptrCast(window.hwnd), &window.previous_placement);
-            _ = win32.SetWindowPos(@ptrCast(window.hwnd), null, 0, 0, 0, 0, .{ .DRAWFRAME = 1, .NOMOVE = 1, .NOSIZE = 1, .NOZORDER = 1, .NOOWNERZORDER = 1 });
+                    _ = win32.SetWindowPos(
+                        @ptrCast(window.hwnd),
+                        null,
+                        mi.rcMonitor.left,
+                        mi.rcMonitor.top,
+                        mi.rcMonitor.right - mi.rcMonitor.left,
+                        mi.rcMonitor.bottom - mi.rcMonitor.top,
+                        .{ .DRAWFRAME = 1, .NOOWNERZORDER = 1 },
+                    );
+                },
+                .maximized => _ = win32.ShowWindow(@ptrCast(window.hwnd), win32.SW_MAXIMIZE),
+                .minimized => _ = win32.ShowWindow(@ptrCast(window.hwnd), win32.SW_MINIMIZE),
+            }
         },
-        .maximized => |maximized| _ = win32.ShowWindow(@ptrCast(window.hwnd), if (maximized) win32.SW_MAXIMIZE else win32.SW_RESTORE),
-        .minimized => |minimized| _ = win32.ShowWindow(@ptrCast(window.hwnd), if (minimized) win32.SW_MINIMIZE else win32.SW_RESTORE),
         .always_on_top => |always_on_top| _ = win32.SetWindowPos(@ptrCast(window.hwnd), if (always_on_top) win32.HWND_TOPMOST else win32.HWND_NOTOPMOST, 0, 0, 0, 0, .{ .NOMOVE = 1, .NOSIZE = 1 }),
         .floating => {},
         .decorated => |decorated| {
@@ -433,7 +443,7 @@ fn windowSetProperty(userdata: ?*anyopaque, desktop_window: *DesktopWindow, prop
     }
 }
 fn windowNative(userdata: ?*anyopaque, desktop_window: *DesktopWindow) DesktopWindow.Native {
-    const self: *@This() = @ptrCast(@alignCast(userdata));
+    const self: *@This() = @ptrCast(@alignCast(userdata.?));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
     return .{
         .hinstance = self.hinstance,
@@ -441,7 +451,7 @@ fn windowNative(userdata: ?*anyopaque, desktop_window: *DesktopWindow) DesktopWi
     };
 }
 fn windowFramebuffer(userdata: ?*anyopaque, desktop_window: *DesktopWindow) anyerror!DesktopWindow.Framebuffer {
-    const self: *@This() = @ptrCast(@alignCast(userdata));
+    const self: *@This() = @ptrCast(@alignCast(userdata.?));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     _ = self;
@@ -452,7 +462,7 @@ fn windowFramebuffer(userdata: ?*anyopaque, desktop_window: *DesktopWindow) anye
     return undefined;
 }
 fn windowOpenglMakeCurrent(userdata: ?*anyopaque, desktop_window: *DesktopWindow) anyerror!void {
-    const self: *@This() = @ptrCast(@alignCast(userdata));
+    const self: *@This() = @ptrCast(@alignCast(userdata.?));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
     _ = self;
 
@@ -460,7 +470,7 @@ fn windowOpenglMakeCurrent(userdata: ?*anyopaque, desktop_window: *DesktopWindow
     if (!win32.SUCCEEDED(win32.wglMakeCurrent(@ptrCast(gl.device_context), @ptrCast(gl.render_context)))) return reportErr(error.WglMakeCurrent);
 }
 fn windowOpenglSwapBuffers(userdata: ?*anyopaque, desktop_window: *DesktopWindow) anyerror!void {
-    const self: *@This() = @ptrCast(@alignCast(userdata));
+    const self: *@This() = @ptrCast(@alignCast(userdata.?));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
     _ = self;
 
@@ -468,7 +478,7 @@ fn windowOpenglSwapBuffers(userdata: ?*anyopaque, desktop_window: *DesktopWindow
     if (!win32.SUCCEEDED(win32.SwapBuffers(@ptrCast(gl.device_context)))) return reportErr(error.WglSwapBuffers);
 }
 fn windowOpenglSwapInterval(userdata: ?*anyopaque, desktop_window: *DesktopWindow, interval: i32) anyerror!void {
-    const self: *@This() = @ptrCast(@alignCast(userdata));
+    const self: *@This() = @ptrCast(@alignCast(userdata.?));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     std.debug.assert(window.surface == .opengl);
@@ -477,7 +487,7 @@ fn windowOpenglSwapInterval(userdata: ?*anyopaque, desktop_window: *DesktopWindo
     if (!win32.SUCCEEDED(self.wglSwapIntervalEXT.?(interval))) return reportErr(error.WglMakeCurrent);
 }
 fn windowVulkanCreateSurface(userdata: ?*anyopaque, desktop_window: *DesktopWindow, instance: *anyopaque, allocator: ?*const anyopaque, loader: vulkan.PfnGetInstanceProcAddr) anyerror!*anyopaque {
-    const self: *@This() = @ptrCast(@alignCast(userdata));
+    const self: *@This() = @ptrCast(@alignCast(userdata.?));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     const vkCreateWin32SurfaceKHR: vulkan.SurfaceCreateProc = @ptrCast(loader(instance, "vkCreateWin32SurfaceKHR") orelse return error.LoadVkCreateWin32SurfaceKHR);

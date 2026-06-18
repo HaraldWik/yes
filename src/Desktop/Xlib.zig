@@ -98,14 +98,14 @@ pub const CursorTable = struct {
         };
     }
 
-    pub fn deinit(self: AtomTable, display: *xlib.Display) void {
-        inline for (std.meta.fields(AtomTable)) |field| {
+    pub fn deinit(self: CursorTable, display: *xlib.Display) void {
+        inline for (std.meta.fields(CursorTable)) |field| {
             const cursor: xlib.Cursor = @field(self, field.name);
             if (cursor != 0) _ = xlib.XFreeCursor(display, cursor);
         }
     }
 
-    pub fn get(self: AtomTable, cursor: DesktopWindow.Cursor) xlib.Cursor {
+    pub fn get(self: CursorTable, cursor: DesktopWindow.Cursor) xlib.Cursor {
         // XDefineCursor
         return switch (cursor) {
             .arrow => self.left_ptr,
@@ -176,7 +176,7 @@ pub fn desktop(self: *Xlib) Desktop {
 }
 
 fn windowOpen(userdata: ?*anyopaque, desktop_window: *DesktopWindow, options: DesktopWindow.OpenOptions) anyerror!void {
-    const self: *Xlib = @ptrCast(@alignCast(userdata));
+    const self: *Xlib = @ptrCast(@alignCast(userdata.?));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     const screen = xlib.DefaultScreen(self.display);
@@ -261,12 +261,7 @@ fn windowOpen(userdata: ?*anyopaque, desktop_window: *DesktopWindow, options: De
     window.wm_delete_window = xlib.XInternAtom(self.display, "WM_DELETE_WINDOW", @intFromBool(false));
     if (xlib.XSetWMProtocols(self.display, window.handle, &window.wm_delete_window, 1) == xlib.False) return error.SetWMProtocols;
     if (xlib.XMapWindow(self.display, window.handle) == xlib.False) return error.MapWindow;
-    try windowSetProperty(userdata, desktop_window, .{ .always_on_top = options.always_on_top });
-    if (options.fullscreen) try windowSetProperty(userdata, desktop_window, .{ .fullscreen = options.fullscreen });
-    if (options.maximized) try windowSetProperty(userdata, desktop_window, .{ .maximized = options.maximized });
-    if (options.minimized) try windowSetProperty(userdata, desktop_window, .{ .minimized = options.minimized });
     if (!options.decorated) try windowSetProperty(userdata, desktop_window, .{ .decorated = options.decorated });
-    if (options.floating) |floating| try windowSetProperty(userdata, desktop_window, .{ .floating = floating });
     if (xlib.XFlush(self.display) == xlib.False) return error.Flush;
 
     // Create OpenGL context
@@ -317,7 +312,7 @@ fn windowOpen(userdata: ?*anyopaque, desktop_window: *DesktopWindow, options: De
     _ = xlib.XFlush(self.display);
 }
 fn windowClose(userdata: ?*anyopaque, desktop_window: *DesktopWindow) void {
-    const self: *Xlib = @ptrCast(@alignCast(userdata));
+    const self: *Xlib = @ptrCast(@alignCast(userdata.?));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     if (window.glx_context) |glx_context| xlib.glXDestroyContext(self.display, @ptrCast(glx_context));
@@ -325,7 +320,7 @@ fn windowClose(userdata: ?*anyopaque, desktop_window: *DesktopWindow) void {
     window.* = undefined;
 }
 fn windowPoll(userdata: ?*anyopaque, desktop_window: *DesktopWindow) anyerror!?DesktopWindow.Event {
-    const self: *Xlib = @ptrCast(@alignCast(userdata));
+    const self: *Xlib = @ptrCast(@alignCast(userdata.?));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     if (window.move_event) |move_event| {
@@ -445,7 +440,7 @@ fn windowPoll(userdata: ?*anyopaque, desktop_window: *DesktopWindow) anyerror!?D
     return windowPoll(userdata, desktop_window);
 }
 fn windowSetProperty(userdata: ?*anyopaque, desktop_window: *DesktopWindow, property: DesktopWindow.Property) anyerror!void {
-    const self: *Xlib = @ptrCast(@alignCast(userdata));
+    const self: *Xlib = @ptrCast(@alignCast(userdata.?));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     const screen = xlib.XDefaultRootWindow(self.display);
@@ -506,79 +501,67 @@ fn windowSetProperty(userdata: ?*anyopaque, desktop_window: *DesktopWindow, prop
             }
             xlib.XSetWMNormalHints(self.display, window.handle, &hints);
         },
-        .fullscreen => |fullscreen| {
-            var event: xlib.XEvent = .{ .xclient = .{
-                .type = xlib.ClientMessage,
-                .message_type = self.atom_table.net_wm.state,
-                .display = self.display,
-                .window = window.handle,
-                .format = 32,
-                .data = .{ .l = .{ @intFromBool(fullscreen), @intCast(self.atom_table.net_wm.state_fullscreen), 0, 1, 0 } },
-            } };
-            _ = xlib.XSendEvent(self.display, xlib.DefaultRootWindow(self.display), xlib.False, xlib.SubstructureRedirectMask | xlib.SubstructureNotifyMask, &event);
-        },
-        .maximized => |maximized| {
-            var event: xlib.XEvent = .{
-                .xclient = .{
-                    .type = xlib.ClientMessage,
-                    .serial = 0,
-                    .send_event = xlib.True,
-                    .message_type = self.atom_table.net_wm.state,
-                    .window = window.handle,
-                    .format = 32,
-                    .data = .{
-                        .l = .{
-                            @intFromBool(maximized),
-                            @intCast(self.atom_table.net_wm.state_maximized_horz),
-                            @intCast(self.atom_table.net_wm.state_maximized_vert),
-                            1, // normal client source
-                            0,
-                        },
-                    },
-                },
-            };
+        .mode => |mode| switch (mode) {
+            .windowed => {
+                if (window.interface.mode == .fullscreen) self.setWmState(
+                    window.handle,
+                    0, // _NET_WM_STATE_REMOVE
+                    self.atom_table.net_wm.state_fullscreen,
+                    0,
+                );
 
-            _ = xlib.XSendEvent(self.display, screen, xlib.False, xlib.SubstructureRedirectMask | xlib.SubstructureNotifyMask, &event);
-        },
-        .minimized => |minimized| _ = if (minimized)
-            xlib.XIconifyWindow(self.display, window.handle, @intCast(screen))
-        else
-            xlib.XMapWindow(self.display, window.handle),
-        .always_on_top => |always_on_top| {
-            var event: xlib.XEvent = .{
-                .xclient = .{
-                    .type = xlib.ClientMessage,
-                    .serial = 0,
-                    .send_event = xlib.True,
-                    .message_type = self.atom_table.net_wm.state,
-                    .window = window.handle,
-                    .format = 32,
-                    .data = .{
-                        .l = .{
-                            @intFromBool(always_on_top),
-                            @intCast(self.atom_table.net_wm.state_above),
-                            0,
-                            1, // normal client source
-                            0,
-                        },
-                    },
-                },
-            };
+                if (window.interface.mode == .maximized) self.setWmState(
+                    window.handle,
+                    0,
+                    self.atom_table.net_wm.state_maximized_horz,
+                    self.atom_table.net_wm.state_maximized_vert,
+                );
 
-            _ = xlib.XSendEvent(self.display, screen, xlib.False, xlib.SubstructureRedirectMask | xlib.SubstructureNotifyMask, &event);
+                _ = xlib.XMapWindow(self.display, window.handle);
+            },
+            .fullscreen => {
+                if (window.interface.mode == .maximized) self.setWmState(
+                    window.handle,
+                    0,
+                    self.atom_table.net_wm.state_maximized_horz,
+                    self.atom_table.net_wm.state_maximized_vert,
+                );
+
+                self.setWmState(
+                    window.handle,
+                    1, // _NET_WM_STATE_ADD
+                    self.atom_table.net_wm.state_fullscreen,
+                    0,
+                );
+            },
+            .maximized => {
+                if (window.interface.mode == .fullscreen) self.setWmState(
+                    window.handle,
+                    0,
+                    self.atom_table.net_wm.state_fullscreen,
+                    0,
+                );
+
+                self.setWmState(
+                    window.handle,
+                    1,
+                    self.atom_table.net_wm.state_maximized_horz,
+                    self.atom_table.net_wm.state_maximized_vert,
+                );
+            },
+            .minimized => _ = xlib.XIconifyWindow(self.display, window.handle, @intCast(screen)),
         },
-        .floating => |floating| {
-            _ = xlib.XChangeProperty(
-                self.display,
-                window.handle,
-                self.atom_table.net_wm.window_type,
-                xlib.XA_ATOM,
-                32,
-                xlib.PropModeReplace,
-                std.mem.asBytes(&(if (floating) self.atom_table.net_wm.window_type_dialog else self.atom_table.net_wm.window_type_normal)),
-                1,
-            );
-        },
+        .always_on_top => |always_on_top| self.setWmState(window.handle, @intFromBool(always_on_top), self.atom_table.net_wm.state_above, 0),
+        .floating => |floating| _ = xlib.XChangeProperty(
+            self.display,
+            window.handle,
+            self.atom_table.net_wm.window_type,
+            xlib.XA_ATOM,
+            32,
+            xlib.PropModeReplace,
+            std.mem.asBytes(&(if (floating) self.atom_table.net_wm.window_type_dialog else self.atom_table.net_wm.window_type_normal)),
+            1,
+        ),
         .decorated => |decorated| {
             const MotifWmHints = extern struct {
                 flags: c_ulong,
@@ -624,15 +607,12 @@ fn windowSetProperty(userdata: ?*anyopaque, desktop_window: *DesktopWindow, prop
 
             _ = xlib.XSendEvent(self.display, screen, xlib.False, xlib.SubstructureRedirectMask | xlib.SubstructureNotifyMask, &event);
         },
-        .cursor => |cursor| {
-            _ = xlib.XDefineCursor(self.display, window.handle, self.cursor_table.get(cursor));
-        },
+        .cursor => |cursor| _ = xlib.XDefineCursor(self.display, window.handle, self.cursor_table.get(cursor)),
     }
-
     _ = xlib.XFlush(self.display);
 }
 fn windowNative(userdata: ?*anyopaque, desktop_window: *DesktopWindow) DesktopWindow.Native {
-    const self: *Xlib = @ptrCast(@alignCast(userdata));
+    const self: *Xlib = @ptrCast(@alignCast(userdata.?));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     const screen = xlib.DefaultScreen(self.display);
@@ -646,34 +626,34 @@ fn windowNative(userdata: ?*anyopaque, desktop_window: *DesktopWindow) DesktopWi
     };
 }
 fn windowFramebuffer(userdata: ?*anyopaque, desktop_window: *DesktopWindow) anyerror!DesktopWindow.Framebuffer {
-    const self: *Xlib = @ptrCast(@alignCast(userdata));
+    const self: *Xlib = @ptrCast(@alignCast(userdata.?));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     _ = self;
     _ = window;
 
-    std.log.info("no software rendering is currently not supported", .{});
+    std.log.info("software rendering is currently unsupported", .{});
 
     return undefined;
 }
 fn windowOpenglMakeCurrent(userdata: ?*anyopaque, desktop_window: *DesktopWindow) anyerror!void {
-    const self: *Xlib = @ptrCast(@alignCast(userdata));
+    const self: *Xlib = @ptrCast(@alignCast(userdata.?));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
     if (xlib.glXMakeCurrent(self.display, window.handle, @ptrCast(window.glx_context)) == xlib.False) return error.GlxMakeCurrent;
 }
 fn windowOpenglSwapBuffers(userdata: ?*anyopaque, desktop_window: *DesktopWindow) anyerror!void {
-    const self: *Xlib = @ptrCast(@alignCast(userdata));
+    const self: *Xlib = @ptrCast(@alignCast(userdata.?));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
     xlib.glXSwapBuffers(@ptrCast(self.display), window.handle);
 }
 fn windowOpenglSwapInterval(userdata: ?*anyopaque, desktop_window: *DesktopWindow, interval: i32) anyerror!void {
-    const self: *Xlib = @ptrCast(@alignCast(userdata));
+    const self: *Xlib = @ptrCast(@alignCast(userdata.?));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
     const glXSwapIntervalEXT: *const fn (display: *xlib.Display, drawable: xlib.Drawable, interval: i32) callconv(.c) void = @ptrCast(xlib.glXGetProcAddress("glXSwapIntervalEXT") orelse return error.SwapIntervalLoad);
     glXSwapIntervalEXT(self.display, window.handle, interval);
 }
 fn windowVulkanCreateSurface(userdata: ?*anyopaque, desktop_window: *DesktopWindow, instance: *anyopaque, allocator: ?*const anyopaque, loader: vulkan.PfnGetInstanceProcAddr) anyerror!*anyopaque {
-    const self: *Xlib = @ptrCast(@alignCast(userdata));
+    const self: *Xlib = @ptrCast(@alignCast(userdata.?));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     const vkCreateXlibSurfaceKHR: vulkan.SurfaceCreateProc = @ptrCast(loader(instance, "vkCreateXlibSurfaceKHR") orelse return error.LoadVkCreateXlibSurfaceKHR);
@@ -686,4 +666,30 @@ fn windowVulkanCreateSurface(userdata: ?*anyopaque, desktop_window: *DesktopWind
     var surface: ?*anyopaque = null;
     if (vkCreateXlibSurfaceKHR(instance, &create_info, allocator, &surface) != .success) return error.VkCreateXlibSurfaceKHR;
     return surface orelse error.InvalidSurface;
+}
+
+fn setWmState(self: *Xlib, window: xlib.Window, action: u32, state1: xlib.Atom, state2: xlib.Atom) void {
+    const screen = xlib.XDefaultRootWindow(self.display);
+
+    var event: xlib.XEvent = .{
+        .xclient = .{
+            .type = xlib.ClientMessage,
+            .serial = 0,
+            .send_event = xlib.True,
+            .message_type = self.atom_table.net_wm.state,
+            .window = window,
+            .format = 32,
+            .data = .{
+                .l = .{
+                    action,
+                    @intCast(state1),
+                    @intCast(state2),
+                    0,
+                    0,
+                },
+            },
+        },
+    };
+
+    _ = xlib.XSendEvent(self.display, screen, xlib.False, xlib.SubstructureRedirectMask | xlib.SubstructureNotifyMask, &event);
 }

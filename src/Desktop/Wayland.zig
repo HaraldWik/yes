@@ -201,7 +201,7 @@ pub fn desktop(self: *Wayland) Desktop {
 }
 
 fn windowOpen(userdata: ?*anyopaque, desktop_window: *DesktopWindow, options: DesktopWindow.OpenOptions) anyerror!void {
-    const self: *Wayland = @ptrCast(@alignCast(userdata));
+    const self: *Wayland = @ptrCast(@alignCast(userdata.?));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     window.gpa = self.gpa;
@@ -224,12 +224,6 @@ fn windowOpen(userdata: ?*anyopaque, desktop_window: *DesktopWindow, options: De
 
     if (options.position) |position| try windowSetProperty(userdata, desktop_window, .{ .position = position });
     try windowSetProperty(userdata, desktop_window, .{ .resize_policy = options.resize_policy });
-    if (options.fullscreen) try windowSetProperty(userdata, desktop_window, .{ .fullscreen = options.fullscreen });
-    if (options.maximized) try windowSetProperty(userdata, desktop_window, .{ .maximized = options.maximized });
-    if (options.minimized) try windowSetProperty(userdata, desktop_window, .{ .minimized = options.minimized });
-    if (!options.focused) try windowSetProperty(userdata, desktop_window, .{ .focused = options.focused });
-    if (options.always_on_top) try windowSetProperty(userdata, desktop_window, .{ .always_on_top = options.always_on_top });
-    if (options.floating) |floating| try windowSetProperty(userdata, desktop_window, .{ .floating = floating });
     if (options.decorated) try windowSetProperty(userdata, desktop_window, .{ .decorated = options.decorated });
 
     if (self.io_manager.pointer) |pointer| {
@@ -289,7 +283,7 @@ fn windowOpen(userdata: ?*anyopaque, desktop_window: *DesktopWindow, options: De
     try window.events.append(self.gpa, .{ .resize = options.size });
 }
 fn windowClose(userdata: ?*anyopaque, desktop_window: *DesktopWindow) void {
-    const self: *Wayland = @ptrCast(@alignCast(userdata));
+    const self: *Wayland = @ptrCast(@alignCast(userdata.?));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
     _ = self;
 
@@ -316,7 +310,7 @@ fn windowClose(userdata: ?*anyopaque, desktop_window: *DesktopWindow) void {
     window.events.deinit(window.gpa);
 }
 fn windowPoll(userdata: ?*anyopaque, desktop_window: *DesktopWindow) anyerror!?DesktopWindow.Event {
-    const self: *Wayland = @ptrCast(@alignCast(userdata));
+    const self: *Wayland = @ptrCast(@alignCast(userdata.?));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     if (!window.running) return .close;
@@ -362,15 +356,13 @@ fn windowPoll(userdata: ?*anyopaque, desktop_window: *DesktopWindow) anyerror!?D
     return event;
 }
 fn windowSetProperty(userdata: ?*anyopaque, desktop_window: *DesktopWindow, property: DesktopWindow.Property) anyerror!void {
-    const self: *Wayland = @ptrCast(@alignCast(userdata));
+    const self: *Wayland = @ptrCast(@alignCast(userdata.?));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     switch (property) {
         .title => |title| {
-            const title_z = try self.gpa.dupeZ(u8, title);
-            defer self.gpa.free(title_z);
-            window.xdg_toplevel.setTitle(title_z.ptr);
-            window.xdg_toplevel.setAppId(title_z.ptr);
+            window.xdg_toplevel.setTitle(title.ptr);
+            window.xdg_toplevel.setAppId(title.ptr);
         },
         .size => {},
         .position => {},
@@ -387,22 +379,17 @@ fn windowSetProperty(userdata: ?*anyopaque, desktop_window: *DesktopWindow, prop
                 window.xdg_toplevel.setMinSize(@intCast(min_size.width), @intCast(min_size.height));
             },
         },
-        .fullscreen => |fullscreen| {
-            if (fullscreen)
-                window.xdg_toplevel.setFullscreen(null)
-            else
-                window.xdg_toplevel.unsetFullscreen();
-        },
-        .maximized => |maximized| {
-            if (maximized)
-                window.xdg_toplevel.setMaximized()
-            else
-                window.xdg_toplevel.unsetMaximized();
-        },
-        .minimized => |minimized| {
-            if (minimized)
-                window.xdg_toplevel.setMinimized();
-            // TODO: request focus
+        .mode => |mode| {
+            if (mode != .minimized) {
+                if (window.interface.unminimized_mode == .fullscreen) window.xdg_toplevel.unsetFullscreen();
+                if (window.interface.unminimized_mode == .maximized) window.xdg_toplevel.unsetMaximized();
+            }
+            switch (mode) {
+                .windowed => {},
+                .fullscreen => window.xdg_toplevel.setFullscreen(null),
+                .maximized => window.xdg_toplevel.setMaximized(),
+                .minimized => window.xdg_toplevel.setMinimized(),
+            }
         },
         .always_on_top => {},
         .floating => {},
@@ -422,7 +409,7 @@ fn windowSetProperty(userdata: ?*anyopaque, desktop_window: *DesktopWindow, prop
     }
 }
 fn windowNative(userdata: ?*anyopaque, desktop_window: *DesktopWindow) DesktopWindow.Native {
-    const self: *Wayland = @ptrCast(@alignCast(userdata));
+    const self: *Wayland = @ptrCast(@alignCast(userdata.?));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
     return .{
         .wayland = .{
@@ -458,7 +445,7 @@ fn windowOpenglSwapInterval(_: ?*anyopaque, desktop_window: *DesktopWindow, inte
     if (egl.eglSwapInterval(gl.display, interval) != egl.EGL_TRUE) return error.EglSwapInterval;
 }
 fn windowVulkanCreateSurface(userdata: ?*anyopaque, desktop_window: *DesktopWindow, instance: *anyopaque, allocator: ?*const anyopaque, loader: vulkan.PfnGetInstanceProcAddr) anyerror!*anyopaque {
-    const self: *Wayland = @ptrCast(@alignCast(userdata));
+    const self: *Wayland = @ptrCast(@alignCast(userdata.?));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     const vkCreateWaylandSurfaceKHR: vulkan.SurfaceCreateProc = @ptrCast(loader(instance, "vkCreateWaylandSurfaceKHR") orelse return error.LoadVkCreateWaylandSurfaceKHR);

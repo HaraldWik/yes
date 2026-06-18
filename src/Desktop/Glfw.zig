@@ -49,7 +49,7 @@ pub fn platform(self: *@This()) Desktop {
 }
 
 fn windowOpen(userdata: ?*anyopaque, desktop_window: *DesktopWindow, options: DesktopWindow.OpenOptions) anyerror!void {
-    const self: *@This() = @ptrCast(@alignCast(userdata));
+    const self: *@This() = @ptrCast(@alignCast(userdata.?));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     switch (options.surface_type) {
@@ -80,14 +80,14 @@ fn windowOpen(userdata: ?*anyopaque, desktop_window: *DesktopWindow, options: De
     try window.events.append(self.allocator, .{ .resize = options.size });
 }
 fn windowClose(userdata: ?*anyopaque, desktop_window: *DesktopWindow) void {
-    const self: *@This() = @ptrCast(@alignCast(userdata));
+    const self: *@This() = @ptrCast(@alignCast(userdata.?));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     glfw.glfwDestroyWindow(window.handle);
     window.events.deinit(self.allocator);
 }
 fn windowPoll(userdata: ?*anyopaque, desktop_window: *DesktopWindow) anyerror!?DesktopWindow.Event {
-    const self: *@This() = @ptrCast(@alignCast(userdata));
+    const self: *@This() = @ptrCast(@alignCast(userdata.?));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     _ = self;
@@ -105,7 +105,7 @@ fn windowPoll(userdata: ?*anyopaque, desktop_window: *DesktopWindow) anyerror!?D
     return window.events.pop();
 }
 fn windowSetProperty(userdata: ?*anyopaque, desktop_window: *DesktopWindow, property: DesktopWindow.Property) anyerror!void {
-    const self: *@This() = @ptrCast(@alignCast(userdata));
+    const self: *@This() = @ptrCast(@alignCast(userdata.?));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     switch (property) {
@@ -124,9 +124,7 @@ fn windowSetProperty(userdata: ?*anyopaque, desktop_window: *DesktopWindow, prop
                 _ = specified;
             },
         },
-        .fullscreen => {},
-        .maximized => {},
-        .minimized => {},
+        .mode => {},
         .always_on_top => {},
         .floating => {},
         .decorated => {},
@@ -147,7 +145,7 @@ fn windowSetProperty(userdata: ?*anyopaque, desktop_window: *DesktopWindow, prop
     }
 }
 fn windowNative(userdata: ?*anyopaque, desktop_window: *DesktopWindow) DesktopWindow.Native {
-    const self: *@This() = @ptrCast(@alignCast(userdata));
+    const self: *@This() = @ptrCast(@alignCast(userdata.?));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
     _ = self;
 
@@ -175,7 +173,7 @@ fn windowNative(userdata: ?*anyopaque, desktop_window: *DesktopWindow) DesktopWi
     @panic("platform does not expose native");
 }
 fn windowFramebuffer(userdata: ?*anyopaque, desktop_window: *DesktopWindow) anyerror!DesktopWindow.Framebuffer {
-    const self: *@This() = @ptrCast(@alignCast(userdata));
+    const self: *@This() = @ptrCast(@alignCast(userdata.?));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     _ = self;
@@ -184,21 +182,21 @@ fn windowFramebuffer(userdata: ?*anyopaque, desktop_window: *DesktopWindow) anye
     return .{ .pixels = undefined };
 }
 fn windowOpenglMakeCurrent(userdata: ?*anyopaque, desktop_window: *DesktopWindow) anyerror!void {
-    const self: *@This() = @ptrCast(@alignCast(userdata));
+    const self: *@This() = @ptrCast(@alignCast(userdata.?));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     _ = self;
     glfw.glfwMakeContextCurrent(window.handle);
 }
 fn windowOpenglSwapBuffers(userdata: ?*anyopaque, desktop_window: *DesktopWindow) anyerror!void {
-    const self: *@This() = @ptrCast(@alignCast(userdata));
+    const self: *@This() = @ptrCast(@alignCast(userdata.?));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     _ = self;
     glfw.glfwSwapBuffers(window.handle);
 }
 fn windowOpenglSwapInterval(userdata: ?*anyopaque, desktop_window: *DesktopWindow, interval: i32) anyerror!void {
-    const self: *@This() = @ptrCast(@alignCast(userdata));
+    const self: *@This() = @ptrCast(@alignCast(userdata.?));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     _ = self;
@@ -206,7 +204,7 @@ fn windowOpenglSwapInterval(userdata: ?*anyopaque, desktop_window: *DesktopWindo
     glfw.glfwSwapInterval(@intCast(interval));
 }
 fn windowVulkanCreateSurface(userdata: ?*anyopaque, desktop_window: *DesktopWindow, instance: *anyopaque, allocator: ?*const anyopaque, getProcAddress: vulkan.PfnGetInstanceProcAddr) anyerror!*anyopaque {
-    const self: *@This() = @ptrCast(@alignCast(userdata));
+    const self: *@This() = @ptrCast(@alignCast(userdata.?));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
     _ = self;
 

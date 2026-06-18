@@ -7,6 +7,8 @@ const Window = @This();
 
 size: Size = .{},
 position: Position = .{},
+mode: Property.Mode = .windowed,
+unminimized_mode: Property.Mode = .windowed,
 focused: bool = false,
 surface_type: SurfaceType = .empty,
 keyboard: Keyboard = .empty,
@@ -174,31 +176,30 @@ pub const Cursor = enum(u32) {
 };
 
 pub const Property = union(enum) {
-    title: []const u8,
+    title: [:0]const u8,
     size: Window.Size,
     position: Window.Position,
     resize_policy: ResizePolicy,
-    fullscreen: bool,
-    maximized: bool,
-    minimized: bool,
+    mode: Mode,
     focused: bool,
     always_on_top: bool,
     floating: bool,
     decorated: bool,
     cursor: Cursor,
+
+    pub const Mode = enum {
+        windowed,
+        fullscreen,
+        maximized,
+        minimized,
+    };
 };
 
 pub const OpenOptions = struct {
-    title: []const u8,
+    title: [:0]const u8,
     size: Size,
     position: ?Position = null,
     resize_policy: ResizePolicy = .{ .resizable = true },
-    fullscreen: bool = false,
-    maximized: bool = false,
-    minimized: bool = false,
-    focused: bool = true,
-    always_on_top: bool = false,
-    floating: ?bool = null,
     decorated: bool = true,
     surface_type: SurfaceType = .empty,
 };
@@ -211,7 +212,6 @@ pub fn open(window: *Window, desktop: Desktop, options: OpenOptions) anyerror!vo
     window.size = options.size;
     window.position = options.position orelse .{};
     window.surface_type = options.surface_type;
-    window.focused = options.focused;
     try desktop.vtable.windowOpen(desktop.userdata, window, options);
 }
 pub fn close(window: *Window, desktop: Desktop) void {
@@ -244,7 +244,7 @@ pub fn native(window: *Window, desktop: Desktop) Native {
     return desktop.vtable.windowNative(desktop.userdata, window);
 }
 
-pub fn setTitle(window: *Window, desktop: Desktop, title: []const u8) anyerror!void {
+pub fn setTitle(window: *Window, desktop: Desktop, title: [:0]const u8) anyerror!void {
     try desktop.vtable.windowSetProperty(desktop.userdata, window, .{ .title = title });
 }
 pub fn setSize(window: *Window, desktop: Desktop, size: Size) anyerror!void {
@@ -256,14 +256,11 @@ pub fn setPosition(window: *Window, desktop: Desktop, position: Position) anyerr
 pub fn setResizePolicy(window: *Window, desktop: Desktop, resize_policy: ResizePolicy) anyerror!void {
     try desktop.vtable.windowSetProperty(desktop.userdata, window, .{ .resize_policy = resize_policy });
 }
-pub fn setFullscreen(window: *Window, desktop: Desktop, fullscreen: bool) anyerror!void {
-    try desktop.vtable.windowSetProperty(desktop.userdata, window, .{ .fullscreen = fullscreen });
-}
-pub fn setMaximized(window: *Window, desktop: Desktop, maximize: bool) anyerror!void {
-    try desktop.vtable.windowSetProperty(desktop.userdata, window, .{ .maximized = maximize });
-}
-pub fn setMinimized(window: *Window, desktop: Desktop, minimize: bool) anyerror!void {
-    try desktop.vtable.windowSetProperty(desktop.userdata, window, .{ .minimized = minimize });
+pub fn setMode(window: *Window, desktop: Desktop, mode: Window.Property.Mode) anyerror!void {
+    if (mode == window.unminimized_mode) return;
+    try desktop.vtable.windowSetProperty(desktop.userdata, window, .{ .mode = mode });
+    window.mode = mode;
+    if (mode != .minimized) window.unminimized_mode = mode;
 }
 pub fn setFocused(window: *Window, desktop: Desktop, focused: bool) anyerror!void {
     try desktop.vtable.windowSetProperty(desktop.userdata, window, .{ .focused = focused });

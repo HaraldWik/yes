@@ -23,6 +23,7 @@ pub const AtomTable = struct {
     utf8_string: xcb.xcb_atom_t,
     wm: struct {
         protocols: xcb.xcb_atom_t,
+        change_state: xcb.xcb_atom_t,
     },
     net_wm: struct {
         name: xcb.xcb_atom_t,
@@ -38,6 +39,7 @@ pub const AtomTable = struct {
     pub fn load(connection: *xcb.xcb_connection_t) AtomTable {
         const utf8_string_cookie = cookie(connection, "UTF8_STRING");
         const wm_protocols_cookie = cookie(connection, "WM_PROTOCOLS");
+        const wm_change_state = cookie(connection, "WM_CHANGE_STATE");
         const net_wm_name_cookie = cookie(connection, "_NET_WM_NAME");
         const net_wm_state_cookie = cookie(connection, "_NET_WM_STATE");
         const net_wm_state_fullscreen_cookie = cookie(connection, "_NET_WM_STATE_FULLSCREEN");
@@ -51,6 +53,7 @@ pub const AtomTable = struct {
             .utf8_string = atom(connection, utf8_string_cookie),
             .wm = .{
                 .protocols = atom(connection, wm_protocols_cookie),
+                .change_state = atom(connection, wm_change_state),
             },
             .net_wm = .{
                 .name = atom(connection, net_wm_name_cookie),
@@ -75,7 +78,7 @@ pub const AtomTable = struct {
 };
 
 pub const Keyboard = struct {
-    context: *xkb.xkb_userdata,
+    context: *xkb.xkb_context,
     keymap: *xkb.xkb_keymap,
     state: *xkb.xkb_state,
 
@@ -182,7 +185,7 @@ fn xiSetMask(mask: []u8, event: u16) void {
 }
 
 fn windowOpen(userdata: ?*anyopaque, desktop_window: *DesktopWindow, options: DesktopWindow.OpenOptions) anyerror!void {
-    const self: *Xcb = @ptrCast(@alignCast(userdata));
+    const self: *Xcb = @ptrCast(@alignCast(userdata.?));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     for (self.windows.items, 0..) |other_window, index| {
@@ -335,14 +338,7 @@ fn windowOpen(userdata: ?*anyopaque, desktop_window: *DesktopWindow, options: De
     );
 
     try windowSetProperty(userdata, desktop_window, .{ .title = options.title });
-
     try windowSetProperty(userdata, desktop_window, .{ .resize_policy = options.resize_policy });
-    if (options.fullscreen) try windowSetProperty(userdata, desktop_window, .{ .fullscreen = options.fullscreen });
-    if (options.maximized) try windowSetProperty(userdata, desktop_window, .{ .maximized = options.maximized });
-    if (options.minimized) try windowSetProperty(userdata, desktop_window, .{ .minimized = options.minimized });
-    if (!options.focused) try windowSetProperty(userdata, desktop_window, .{ .focused = options.focused });
-    if (options.always_on_top) try windowSetProperty(userdata, desktop_window, .{ .always_on_top = options.always_on_top });
-    if (options.floating) |floating| try windowSetProperty(userdata, desktop_window, .{ .floating = floating });
     if (!options.decorated) try windowSetProperty(userdata, desktop_window, .{ .decorated = options.decorated });
 
     switch (options.surface_type) {
@@ -372,7 +368,7 @@ fn windowOpen(userdata: ?*anyopaque, desktop_window: *DesktopWindow, options: De
     try window.event_queue.append(self.gpa, .{ .resize = options.size });
 }
 fn windowClose(userdata: ?*anyopaque, desktop_window: *DesktopWindow) void {
-    const self: *Xcb = @ptrCast(@alignCast(userdata));
+    const self: *Xcb = @ptrCast(@alignCast(userdata.?));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     _, const window_index = self.windowFromId(window.id).?;
@@ -382,7 +378,7 @@ fn windowClose(userdata: ?*anyopaque, desktop_window: *DesktopWindow) void {
     _ = xcb.xcb_destroy_window(self.connection, window.id);
 }
 fn windowPoll(userdata: ?*anyopaque, desktop_window: *DesktopWindow) anyerror!?DesktopWindow.Event {
-    const self: *Xcb = @ptrCast(@alignCast(userdata));
+    const self: *Xcb = @ptrCast(@alignCast(userdata.?));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     if (window.event_queue.pop()) |event| return event;
@@ -547,7 +543,7 @@ fn windowPoll(userdata: ?*anyopaque, desktop_window: *DesktopWindow) anyerror!?D
     return windowPoll(userdata, desktop_window);
 }
 fn windowSetProperty(userdata: ?*anyopaque, desktop_window: *DesktopWindow, property: DesktopWindow.Property) anyerror!void {
-    const self: *Xcb = @ptrCast(@alignCast(userdata));
+    const self: *Xcb = @ptrCast(@alignCast(userdata.?));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     switch (property) {
@@ -592,63 +588,82 @@ fn windowSetProperty(userdata: ?*anyopaque, desktop_window: *DesktopWindow, prop
 
             _ = xcb.xcb_icccm_set_wm_normal_hints(self.connection, window.id, &hints);
         },
-        .fullscreen => |fullscreen| {
-            var event: xcb.xcb_client_message_event_t = .{
-                .response_type = xcb.XCB_CLIENT_MESSAGE,
-                .format = 32,
-                .window = window.id,
-                .type = self.atom_table.net_wm.state,
-                .data = .{ .data32 = .{
-                    @intFromBool(fullscreen),
+        .mode => |mode| switch (mode) {
+            .windowed => {
+                if (window.interface.mode == .fullscreen) self.setWmState(
+                    window.id,
+                    0, // _NET_WM_STATE_REMOVE
                     self.atom_table.net_wm.state_fullscreen,
                     0,
-                    0,
-                    0,
-                } },
-            };
+                );
 
-            _ = xcb.xcb_send_event(self.connection, 0, self.screen.root, xcb.XCB_EVENT_MASK_SUBSTRUCTURE_REDIRECT | xcb.XCB_EVENT_MASK_SUBSTRUCTURE_NOTIFY, @ptrCast(&event));
-        },
-        .maximized => |maximized| {
-            var event: xcb.xcb_client_message_event_t = .{
-                .response_type = xcb.XCB_CLIENT_MESSAGE,
-                .format = 32,
-                .window = window.id,
-                .type = self.atom_table.net_wm.state,
-                .data = .{ .data32 = .{
-                    @intFromBool(maximized),
+                if (window.interface.mode == .maximized) self.setWmState(
+                    window.id,
+                    0,
                     self.atom_table.net_wm.state_maximized_horz,
                     self.atom_table.net_wm.state_maximized_vert,
-                    0,
-                    0,
-                } },
-            };
+                );
 
-            _ = xcb.xcb_send_event(self.connection, 0, self.screen.root, xcb.XCB_EVENT_MASK_SUBSTRUCTURE_REDIRECT | xcb.XCB_EVENT_MASK_SUBSTRUCTURE_NOTIFY, @ptrCast(&event));
-        },
-        .minimized => |minimized| {
-            _ = if (minimized)
-                xcb.xcb_unmap_window(self.connection, window.id)
-            else
-                xcb.xcb_map_window(self.connection, window.id);
-        },
-        .always_on_top => |always_on_top| {
-            var event: xcb.xcb_client_message_event_t = .{
-                .response_type = xcb.XCB_CLIENT_MESSAGE,
-                .format = 32,
-                .window = window.id,
-                .type = self.atom_table.net_wm.state,
-                .data = .{ .data32 = .{
-                    @intFromBool(always_on_top),
-                    self.atom_table.net_wm.state_above,
+                _ = xcb.xcb_map_window(self.connection, window.id);
+            },
+            .fullscreen => {
+                if (window.interface.mode == .maximized) self.setWmState(
+                    window.id,
                     0,
-                    0,
-                    0,
-                } },
-            };
+                    self.atom_table.net_wm.state_maximized_horz,
+                    self.atom_table.net_wm.state_maximized_vert,
+                );
 
-            _ = xcb.xcb_send_event(self.connection, 0, self.screen.root, xcb.XCB_EVENT_MASK_SUBSTRUCTURE_REDIRECT | xcb.XCB_EVENT_MASK_SUBSTRUCTURE_NOTIFY, @ptrCast(&event));
+                self.setWmState(
+                    window.id,
+                    1, // _NET_WM_STATE_ADD
+                    self.atom_table.net_wm.state_fullscreen,
+                    0,
+                );
+            },
+            .maximized => {
+                if (window.interface.mode == .fullscreen) self.setWmState(
+                    window.id,
+                    0,
+                    self.atom_table.net_wm.state_fullscreen,
+                    0,
+                );
+
+                self.setWmState(
+                    window.id,
+                    1,
+                    self.atom_table.net_wm.state_maximized_horz,
+                    self.atom_table.net_wm.state_maximized_vert,
+                );
+            },
+            .minimized => {
+                const iconic_state = 3;
+
+                var event: xcb.xcb_client_message_event_t = .{
+                    .response_type = xcb.XCB_CLIENT_MESSAGE,
+                    .format = 32,
+                    .window = window.id,
+                    .type = self.atom_table.wm.change_state,
+                    .data = .{ .data32 = .{
+                        iconic_state,
+                        0,
+                        0,
+                        0,
+                        0,
+                    } },
+                };
+
+                _ = xcb.xcb_send_event(
+                    self.connection,
+                    0,
+                    self.screen.root,
+                    xcb.XCB_EVENT_MASK_SUBSTRUCTURE_REDIRECT |
+                        xcb.XCB_EVENT_MASK_SUBSTRUCTURE_NOTIFY,
+                    @ptrCast(&event),
+                );
+            },
         },
+        .always_on_top => |always_on_top| self.setWmState(window.id, @intFromBool(always_on_top), self.atom_table.net_wm.state_above, 0),
         .floating => {},
         .decorated => |decorated| {
             const MotifHints = extern struct {
@@ -727,7 +742,7 @@ fn windowSetProperty(userdata: ?*anyopaque, desktop_window: *DesktopWindow, prop
     _ = xcb.xcb_flush(self.connection);
 }
 fn windowNative(userdata: ?*anyopaque, desktop_window: *DesktopWindow) DesktopWindow.Native {
-    const self: *Xcb = @ptrCast(@alignCast(userdata));
+    const self: *Xcb = @ptrCast(@alignCast(userdata.?));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     return .{ .x11 = .{
@@ -737,7 +752,7 @@ fn windowNative(userdata: ?*anyopaque, desktop_window: *DesktopWindow) DesktopWi
     } };
 }
 fn windowFramebuffer(userdata: ?*anyopaque, desktop_window: *DesktopWindow) anyerror!DesktopWindow.Framebuffer {
-    const self: *Xcb = @ptrCast(@alignCast(userdata));
+    const self: *Xcb = @ptrCast(@alignCast(userdata.?));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     // const cookie = xcb.xcb_get_image(self.connection, xcb.XCB_IMAGE_FORMAT_Z_PIXMAP, // format
@@ -759,19 +774,19 @@ fn windowFramebuffer(userdata: ?*anyopaque, desktop_window: *DesktopWindow) anye
     return undefined;
 }
 fn windowOpenglMakeCurrent(userdata: ?*anyopaque, desktop_window: *DesktopWindow) anyerror!void {
-    const self: *Xcb = @ptrCast(@alignCast(userdata));
+    const self: *Xcb = @ptrCast(@alignCast(userdata.?));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
-    _ = xcb.xcb_glx_make_current(self.connection, window.id, window.surface.glx.userdata, 0);
+    _ = xcb.xcb_glx_make_current(self.connection, window.id, window.surface.glx.context, 0);
 }
 fn windowOpenglSwapBuffers(userdata: ?*anyopaque, desktop_window: *DesktopWindow) anyerror!void {
-    const self: *Xcb = @ptrCast(@alignCast(userdata));
+    const self: *Xcb = @ptrCast(@alignCast(userdata.?));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     _ = xcb.xcb_glx_swap_buffers(self.connection, 0, window.id);
 }
 fn windowOpenglSwapInterval(userdata: ?*anyopaque, desktop_window: *DesktopWindow, interval: i32) anyerror!void {
-    const self: *Xcb = @ptrCast(@alignCast(userdata));
+    const self: *Xcb = @ptrCast(@alignCast(userdata.?));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     _ = self;
@@ -779,7 +794,7 @@ fn windowOpenglSwapInterval(userdata: ?*anyopaque, desktop_window: *DesktopWindo
     _ = interval;
 }
 fn windowVulkanCreateSurface(userdata: ?*anyopaque, desktop_window: *DesktopWindow, instance: *anyopaque, allocator: ?*const anyopaque, loader: vulkan.PfnGetInstanceProcAddr) anyerror!*anyopaque {
-    const self: *Xcb = @ptrCast(@alignCast(userdata));
+    const self: *Xcb = @ptrCast(@alignCast(userdata.?));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
     _ = self;
 
@@ -813,6 +828,33 @@ fn windowVulkanCreateSurface(userdata: ?*anyopaque, desktop_window: *DesktopWind
     var surface: ?*anyopaque = null;
     if (vkCreateXcbSurfaceKHR(instance, &create_info, allocator, &surface) != .success) return error.VkCreateXlibSurfaceKHR;
     return surface orelse error.InvalidSurface;
+}
+
+fn setWmState(self: *Xcb, window: xcb.xcb_window_t, action: u32, state1: xcb.xcb_atom_t, state2: xcb.xcb_atom_t) void {
+    var event: xcb.xcb_client_message_event_t = .{
+        .response_type = xcb.XCB_CLIENT_MESSAGE,
+        .format = 32,
+        .window = window,
+        .type = self.atom_table.net_wm.state,
+        .data = .{
+            .data32 = .{
+                action,
+                state1,
+                state2,
+                0,
+                0,
+            },
+        },
+    };
+
+    _ = xcb.xcb_send_event(
+        self.connection,
+        0,
+        self.screen.root,
+        xcb.XCB_EVENT_MASK_SUBSTRUCTURE_REDIRECT |
+            xcb.XCB_EVENT_MASK_SUBSTRUCTURE_NOTIFY,
+        @ptrCast(&event),
+    );
 }
 
 pub const Framebuffer = struct {

@@ -20,13 +20,13 @@ pub fn main(init: std.process.Init) !void {
     const allocator = init.gpa;
     const io = init.io;
 
-    var cross_platform: yes.Platform.Cross = try .init(allocator, io, init.minimal);
-    defer cross_platform.deinit();
-    const platform = cross_platform.platform();
+    var cross_desktop: yes.Desktop.Cross = try .init(allocator, io, init.minimal);
+    defer cross_desktop.deinit();
+    const desktop = cross_desktop.desktop();
 
-    var cross_window: yes.Platform.Cross.Window = .empty(platform);
-    const window = cross_window.interface(platform);
-    try window.open(platform, .{
+    var cross_window: yes.Desktop.Cross.Window = .empty(desktop);
+    const window = cross_window.interface(desktop);
+    try window.open(desktop, .{
         .title = "OpenGL Triangle",
         .size = .{ .width = 600, .height = 400 },
         .resize_policy = .{ .specified = .{
@@ -35,14 +35,14 @@ pub fn main(init: std.process.Init) !void {
         .surface_type = .{ .opengl = .{ .major = 3, .minor = 3 } },
         .decorated = false,
     });
-    defer window.close(platform);
-    try window.setAlwaysOnTop(platform, true);
-    try window.setDecorated(platform, true);
+    defer window.close(desktop);
+    try window.setAlwaysOnTop(desktop, true);
+    try window.setDecorated(desktop, true);
 
-    try yes.opengl.makeCurrent(platform, window);
-    try yes.opengl.swapInterval(platform, window, 1);
+    try yes.opengl.makeCurrent(desktop, window);
+    try yes.opengl.swapInterval(desktop, window, 1);
 
-    gl.load(yes.opengl.getProcAddressProc(platform), false);
+    gl.load(yes.opengl.getProcAddressProc(desktop), false);
     gl.debug.set(null);
 
     if (gl.String.get(.version, null)) |version| std.log.info("OpenGL version: {s}", .{version});
@@ -106,7 +106,7 @@ pub fn main(init: std.process.Init) !void {
     main_loop: while (true) {
         const delta_time = getDeltaTime(io);
 
-        while (try window.poll(platform)) |event| switch (event) {
+        while (try window.poll(desktop)) |event| switch (event) {
             .close => break :main_loop,
             .resize => |size| {
                 std.log.info("resize: {d}x{d}", .{ size.width, size.height });
@@ -118,6 +118,10 @@ pub fn main(init: std.process.Init) !void {
                 gl.c.glUniformMatrix4fv(projection_loc, 1, 0, projection_matrix.d[0..].ptr);
             },
             .key => |key| {
+                if (key.sym == .f1) try window.setMode(desktop, .windowed);
+                if (key.sym == .f2) try window.setMode(desktop, .fullscreen);
+                if (key.sym == .f3) try window.setMode(desktop, .maximized);
+                if (key.sym == .f4) try window.setMode(desktop, .minimized);
                 if (key.state == .pressed) switch (key.sym) {
                     .w => view_transform.position[2] += 0.5,
                     .s => view_transform.position[2] -= 0.5,
@@ -143,7 +147,7 @@ pub fn main(init: std.process.Init) !void {
         gl.c.glBindVertexArray(vao);
         gl.draw.elements(.triangles, indices.len, u32, null);
 
-        try yes.opengl.swapBuffers(platform, window);
+        try yes.opengl.swapBuffers(desktop, window);
     }
 }
 

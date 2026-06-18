@@ -113,7 +113,11 @@ pub fn deinit(self: *@This()) void {
             self.inner.deinit()
         else switch (self.inner) {
             .wayland => if (build_options.wayland_backend != .none) self.inner.wayland.disconnect(),
-            .x => if (build_options.x_backend != .none) self.inner.x.disconnect(),
+            .x => switch (build_options.x_backend) {
+                .none => {},
+                .xlib => self.inner.x.close(),
+                .xcb, .xpz => self.inner.x.disconnect(),
+            },
         },
     }
 }
