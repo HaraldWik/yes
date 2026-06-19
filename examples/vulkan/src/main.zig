@@ -4,10 +4,10 @@ const yes = @import("yes");
 const vk = @import("vulkan");
 
 pub fn main(init: std.process.Init) !void {
-    const allocator = init.gpa;
+    const gpa = init.gpa;
     const io = init.io;
 
-    var cross_platform: yes.Desktop.Cross = try .init(allocator, io, init.minimal);
+    var cross_platform: yes.Desktop.Cross = try .init(gpa, io, init.minimal);
     defer cross_platform.deinit();
     const desktop = cross_platform.desktop();
 
@@ -23,7 +23,7 @@ pub fn main(init: std.process.Init) !void {
 
     // Instance
     const instance: vk.Instance = try .init(
-        allocator,
+        gpa,
         yes.vulkan.getRequiredInstanceExtensions([*:0]const u8, desktop, window),
         &.{"VK_LAYER_KHRONOS_validation"},
     );
@@ -40,20 +40,20 @@ pub fn main(init: std.process.Init) !void {
     defer surface.deinit(instance);
 
     // Physical device
-    const physical_device: vk.PhysicalDevice = try .pick(instance, allocator);
-    const queue_family_index = try physical_device.getGraphicsQueueFamily(allocator, surface);
+    const physical_device: vk.PhysicalDevice = try .pick(instance, gpa);
+    const queue_family_index = try physical_device.getGraphicsQueueFamily(gpa, surface);
     const device: vk.Device = try .init(physical_device, &.{"VK_KHR_swapchain"}, queue_family_index);
     defer device.deinit();
     const graphics_queue = device.getQueue(queue_family_index);
 
-    const surface_info = try surface.getInfo(allocator, physical_device);
+    const surface_info = try surface.getInfo(gpa, physical_device);
 
     var swapchain: vk.Swapchain = std.mem.zeroes(vk.Swapchain);
-    try swapchain.init(allocator, device, physical_device, surface, surface_info, .{});
-    defer swapchain.deinit(allocator, device);
+    try swapchain.init(gpa, device, physical_device, surface, surface_info, .{});
+    defer swapchain.deinit(gpa, device);
 
-    const vertex_shader_module: vk.ShaderModule = try .initFromPath(allocator, io, device, "shaders/tri.vert.spv");
-    const fragment_shader_module: vk.ShaderModule = try .initFromPath(allocator, io, device, "shaders/tri.frag.spv");
+    const vertex_shader_module: vk.ShaderModule = try .initFromPath(gpa, io, device, "shaders/tri.vert.spv");
+    const fragment_shader_module: vk.ShaderModule = try .initFromPath(gpa, io, device, "shaders/tri.frag.spv");
 
     const pipeline: vk.Pipeline = try .init(device, surface_info, vertex_shader_module, fragment_shader_module);
     defer pipeline.deinit(device);
@@ -64,15 +64,15 @@ pub fn main(init: std.process.Init) !void {
     const command_pool: vk.CommandPool = try .init(device, queue_family_index);
     defer command_pool.deinit(device);
 
-    var frame_data: vk.FrameData = try .init(allocator, device, swapchain);
-    defer frame_data.deinit(allocator, device);
+    var frame_data: vk.FrameData = try .init(gpa, device, swapchain);
+    defer frame_data.deinit(gpa, device);
 
     main_loop: while (true) {
         while (try window.poll(desktop)) |event| switch (event) {
             .close => break :main_loop,
             .resize => |size| {
                 std.log.info("resize: {d}x{d}", .{ size.width, size.height });
-                try swapchain.resize(allocator, device, physical_device, surface, surface_info, size);
+                try swapchain.resize(gpa, device, physical_device, surface, surface_info, size);
             },
             else => std.log.info("{any}", .{event}),
         };

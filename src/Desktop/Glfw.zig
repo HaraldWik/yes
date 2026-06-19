@@ -1,9 +1,9 @@
 const Glfw = @This();
 
 const builtin = @import("builtin");
+const build_options = @import("build_options");
 
 const std = @import("std");
-const build_options = @import("build_options");
 const glfw = @import("glfw");
 const vulkan = @import("../root.zig").vulkan;
 const Desktop = @import("../Desktop.zig");
@@ -13,26 +13,26 @@ comptime {
     if (!build_options.glfw) @compileError("glfw unavailable, build option not true");
 }
 
-allocator: std.mem.Allocator,
+gpa: std.mem.Allocator,
 
 pub const Window = struct {
     interface: DesktopWindow = .{},
     handle: *glfw.GLFWwindow = undefined,
-    allocator: std.mem.Allocator = undefined,
+    gpa: std.mem.Allocator = undefined,
     events: std.ArrayList(DesktopWindow.Event) = .empty,
     err: ?anyerror = null,
 };
 
-pub fn init(allocator: std.mem.Allocator) !Glfw {
+pub fn init(goa: std.mem.Allocator) !Glfw {
     _ = glfw.glfwInit();
-    return .{ .allocator = allocator };
+    return .{ .gpa = goa };
 }
 
 pub fn deinit(_: Glfw) void {
     glfw.glfwTerminate();
 }
 
-pub fn platform(self: *Glfw) Desktop {
+pub fn desktop(self: *Glfw) Desktop {
     return .{
         .userdata = @ptrCast(@alignCast(self)),
         .vtable = &.{
@@ -66,9 +66,9 @@ fn windowOpen(userdata: ?*anyopaque, desktop_window: *DesktopWindow, options: De
         },
     }
 
-    const title = try self.allocator.dupeSentinel(u8, options.title, 0);
-    defer self.allocator.free(title);
-    window.allocator = self.allocator;
+    const title = try self.gpa.dupeSentinel(u8, options.title, 0);
+    defer self.gpa.free(title);
+    window.gpa = self.gpa;
     window.handle = glfw.glfwCreateWindow(@intCast(options.size.width), @intCast(options.size.height), title, null, null) orelse return error.CreateWindow;
     glfw.glfwSetWindowUserPointer(window.handle, window);
 
@@ -80,14 +80,14 @@ fn windowOpen(userdata: ?*anyopaque, desktop_window: *DesktopWindow, options: De
     _ = glfw.glfwSetScrollCallback(window.handle, @ptrCast(&mouseScrollCallback));
     _ = glfw.glfwSetMouseButtonCallback(window.handle, @ptrCast(&mouseButtonCallback));
 
-    try window.events.append(self.allocator, .{ .resize = options.size });
+    try window.events.append(self.gpa, .{ .resize = options.size });
 }
 fn windowClose(userdata: ?*anyopaque, desktop_window: *DesktopWindow) void {
     const self: *Glfw = @ptrCast(@alignCast(userdata.?));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
     glfw.glfwDestroyWindow(window.handle);
-    window.events.deinit(self.allocator);
+    window.events.deinit(self.gpa);
 }
 fn windowPoll(userdata: ?*anyopaque, desktop_window: *DesktopWindow) anyerror!?DesktopWindow.Event {
     const self: *Glfw = @ptrCast(@alignCast(userdata.?));
@@ -113,8 +113,8 @@ fn windowSetProperty(userdata: ?*anyopaque, desktop_window: *DesktopWindow, prop
 
     switch (property) {
         .title => |title| {
-            const title_dupe = try self.allocator.dupeSentinel(u8, title, 0);
-            defer self.allocator.free(title_dupe);
+            const title_dupe = try self.gpa.dupeSentinel(u8, title, 0);
+            defer self.gpa.free(title_dupe);
             glfw.glfwSetWindowTitle(window.handle, title_dupe);
         },
         .size => |size| glfw.glfwSetWindowSize(window.handle, @intCast(size.width), @intCast(size.height)),
@@ -244,7 +244,7 @@ fn windowVulkanCreateSurface(userdata: ?*anyopaque, desktop_window: *DesktopWind
 
 fn sizeCallback(glfw_window: *glfw.GLFWwindow, width: c_int, height: c_int) callconv(.c) void {
     const window: *Window = @ptrCast(@alignCast(glfw.glfwGetWindowUserPointer(glfw_window)));
-    window.events.append(window.allocator, .{
+    window.events.append(window.gpa, .{
         .resize = .{ .width = @intCast(width), .height = @intCast(height) },
     }) catch |err| {
         window.err = err;
@@ -253,7 +253,7 @@ fn sizeCallback(glfw_window: *glfw.GLFWwindow, width: c_int, height: c_int) call
 
 fn positionCallback(glfw_window: *glfw.GLFWwindow, x: c_int, y: c_int) callconv(.c) void {
     const window: *Window = @ptrCast(@alignCast(glfw.glfwGetWindowUserPointer(glfw_window)));
-    window.events.append(window.allocator, .{
+    window.events.append(window.gpa, .{
         .move = .{ .x = @intCast(x), .y = @intCast(y) },
     }) catch |err| {
         window.err = err;
@@ -262,7 +262,7 @@ fn positionCallback(glfw_window: *glfw.GLFWwindow, x: c_int, y: c_int) callconv(
 
 fn focusCallback(glfw_window: *glfw.GLFWwindow, focused: c_int) callconv(.c) void {
     const window: *Window = @ptrCast(@alignCast(glfw.glfwGetWindowUserPointer(glfw_window)));
-    window.events.append(window.allocator, .{
+    window.events.append(window.gpa, .{
         .focus = focused == 1,
     }) catch |err| {
         window.err = err;
@@ -272,7 +272,7 @@ fn focusCallback(glfw_window: *glfw.GLFWwindow, focused: c_int) callconv(.c) voi
 fn keyCallback(glfw_window: *glfw.GLFWwindow, key: c_int, scancode: c_int, action: c_int, _: c_int) callconv(.c) void {
     const window: *Window = @ptrCast(@alignCast(glfw.glfwGetWindowUserPointer(glfw_window)));
     _ = key;
-    window.events.append(window.allocator, .{ .key = .{
+    window.events.append(window.gpa, .{ .key = .{
         .state = if (action == glfw.GLFW_PRESS) .pressed else .released,
         .code = @intCast(scancode),
         .sym = .@"0",
@@ -283,7 +283,7 @@ fn keyCallback(glfw_window: *glfw.GLFWwindow, key: c_int, scancode: c_int, actio
 
 fn mouseMotionCallback(glfw_window: *glfw.GLFWwindow, x: f64, y: f64) callconv(.c) void {
     const window: *Window = @ptrCast(@alignCast(glfw.glfwGetWindowUserPointer(glfw_window)));
-    window.events.append(window.allocator, .{
+    window.events.append(window.gpa, .{
         .mouse_motion = .{ .x = x, .y = y },
     }) catch |err| {
         window.err = err;
@@ -292,7 +292,7 @@ fn mouseMotionCallback(glfw_window: *glfw.GLFWwindow, x: f64, y: f64) callconv(.
 
 fn mouseScrollCallback(glfw_window: *glfw.GLFWwindow, x: f64, y: f64) callconv(.c) void {
     const window: *Window = @ptrCast(@alignCast(glfw.glfwGetWindowUserPointer(glfw_window)));
-    window.events.append(window.allocator, .{
+    window.events.append(window.gpa, .{
         .mouse_scroll = if (x > 0) .{ .horizontal = x - 1 } else .{ .vertical = y },
     }) catch |err| {
         window.err = err;
@@ -301,7 +301,7 @@ fn mouseScrollCallback(glfw_window: *glfw.GLFWwindow, x: f64, y: f64) callconv(.
 
 fn mouseButtonCallback(glfw_window: *glfw.GLFWwindow, button: c_int, action: c_int, _: c_int) callconv(.c) void {
     const window: *Window = @ptrCast(@alignCast(glfw.glfwGetWindowUserPointer(glfw_window)));
-    window.events.append(window.allocator, .{ .mouse_button = .{
+    window.events.append(window.gpa, .{ .mouse_button = .{
         .state = if (action == glfw.GLFW_PRESS) .pressed else .released,
         .button = switch (button) {
             glfw.GLFW_MOUSE_BUTTON_LEFT => .left,

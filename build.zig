@@ -49,10 +49,7 @@ pub fn build(b: *std.Build) void {
 
         mod.addImport("glfw", glfw.createModule());
         mod.linkLibrary(glfw_lib);
-        return;
-    }
-
-    switch (target.result.os.tag) {
+    } else switch (target.result.os.tag) {
         .windows => {},
         .macos => {},
         else => {

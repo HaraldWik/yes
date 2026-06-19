@@ -9,7 +9,7 @@ const win32 = @import("win32").everything;
 
 // zig build -Dtarget=x86_64-windows && wine zig-out/bin/example.exe
 
-allocator: std.mem.Allocator,
+gpa: std.mem.Allocator,
 hinstance: std.os.windows.HINSTANCE,
 wglSwapIntervalEXT: ?*const fn (i32) callconv(.winapi) win32.BOOL = null,
 cursors: struct {
@@ -57,10 +57,10 @@ pub const Window = struct {
 };
 
 /// Alternativly you can use winMain to get the HINSTANCE
-pub fn init(allocator: std.mem.Allocator) !Win32 {
+pub fn init(gpa: std.mem.Allocator) !Win32 {
     const instance: std.os.windows.HINSTANCE = @ptrCast(win32.GetModuleHandleW(null) orelse return error.GetInstanceHandle);
     return .{
-        .allocator = allocator,
+        .gpa = gpa,
         .hinstance = instance,
     };
 }
@@ -110,7 +110,7 @@ fn windowOpen(userdata: ?*anyopaque, desktop_window: *DesktopWindow, options: De
         },
     });
     if (!win32.SUCCEEDED(win32.RegisterClassExW(@ptrCast(&window.class)))) return error.RegisterClass;
-    const title = try std.unicode.utf8ToUtf16LeAllocZ(self.allocator, options.title);
+    const title = try std.unicode.utf8ToUtf16LeAllocZ(self.gpa, options.title);
 
     window.hwnd = @ptrCast(win32.CreateWindowExW(
         .{ .TRANSPARENT = 1 },
@@ -127,7 +127,7 @@ fn windowOpen(userdata: ?*anyopaque, desktop_window: *DesktopWindow, options: De
         null,
     ) orelse return reportErr(error.CreateWindowFailed));
 
-    self.allocator.free(title);
+    self.gpa.free(title);
 
     switch (options.surface_type) {
         .empty => {},
@@ -337,8 +337,8 @@ fn windowSetProperty(userdata: ?*anyopaque, desktop_window: *DesktopWindow, prop
 
     switch (property) {
         .title => |title| {
-            const title_utf16 = try std.unicode.utf8ToUtf16LeAllocZ(self.allocator, title);
-            defer self.allocator.free(title_utf16);
+            const title_utf16 = try std.unicode.utf8ToUtf16LeAllocZ(self.gpa, title);
+            defer self.gpa.free(title_utf16);
             _ = win32.SetWindowTextW(@ptrCast(window.hwnd), @ptrCast(title_utf16));
         },
         .size => |size| _ = win32.SetWindowPos(@ptrCast(window.hwnd), null, 0, 0, @intCast(size.width), @intCast(size.height), .{ .NOZORDER = 1, .NOMOVE = 1 }),

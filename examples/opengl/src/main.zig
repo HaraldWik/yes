@@ -17,10 +17,10 @@ const vertices = [_]f32{
 const indices = [_]u32{ 0, 1, 2 };
 
 pub fn main(init: std.process.Init) !void {
-    const allocator = init.gpa;
+    const gpa = init.gpa;
     const io = init.io;
 
-    var cross_desktop: yes.Desktop.Cross = try .init(allocator, io, init.minimal);
+    var cross_desktop: yes.Desktop.Cross = try .init(gpa, io, init.minimal);
     defer cross_desktop.deinit();
     const desktop = cross_desktop.desktop();
 

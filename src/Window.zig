@@ -29,7 +29,7 @@ pub const Size = packed struct(u64) {
         return @as(f32, @floatFromInt(self.width)) / @as(f32, @floatFromInt(self.height));
     }
 
-    /// Can be constructed into @Vector or [2]u32
+    /// Coercible into @Vector(2, u32) or [2]u32
     pub fn toTuple(self: Size) struct { u32, u32 } {
         return .{ self.width, self.height };
     }
@@ -43,7 +43,7 @@ pub const Position = packed struct(i64) {
         return a.x == b.x and a.y == b.y;
     }
 
-    /// Can be constructed into @Vector or [2]i32
+    /// Coercible into @Vector(2, i32) or [2]i32
     pub fn toTuple(self: Position) struct { i32, i32 } {
         return .{ self.x, self.y };
     }
