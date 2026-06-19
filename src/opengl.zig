@@ -42,7 +42,7 @@ pub fn swapInterval(desktop: Desktop, window: *Window, interval: i32) !void {
 
 fn invalid() callconv(.c) noreturn {
     switch (builtin.mode) {
-        .Debug, .ReleaseSafe => std.debug.panic("attempted to call native GLX or EGL function while OpenGL build option is set to false", .{}),
+        .Debug, .ReleaseSafe => std.debug.panic("attempted to call native GLX or EGL function while OpenGL is disabled", .{}),
         else => unreachable,
     }
 }

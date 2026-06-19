@@ -11,11 +11,6 @@ const wl = wayland.client.wl;
 const xdg = wayland.client.xdg;
 const zxdg = wayland.client.zxdg;
 const wp = wayland.client.wp;
-// const egl = @cImport({ // TODO: replace
-//     @cInclude("EGL/egl.h");
-//     @cInclude("wayland-egl.h");
-//     @cInclude("wayland-egl-core.h");
-// });
 const egl = @import("egl");
 const xkb = @import("xkbcommon");
 

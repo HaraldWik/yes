@@ -193,7 +193,6 @@ pub fn addXkbcommon(b: *std.Build, mod: *std.Build.Module, target: std.Build.Res
         .target = target,
         .optimize = optimize,
         .@"xkb-config-root" = "/usr/share/X11/xkb",
-
         .@"x-locale-root" = "/usr/share/X11/locale",
     });
     const upstream = xkbcommon_dep.builder.dependency("libxkbcommon", .{});

@@ -7,24 +7,24 @@ pub fn main(init: std.process.Init) !void {
     const allocator = init.gpa;
     const io = init.io;
 
-    var cross_platform: yes.Platform.Cross = try .init(allocator, io, init.minimal);
+    var cross_platform: yes.Desktop.Cross = try .init(allocator, io, init.minimal);
     defer cross_platform.deinit();
-    const platform = cross_platform.platform();
+    const desktop = cross_platform.desktop();
 
-    var cross_window: yes.Platform.Cross.Window = .empty(platform);
-    const window = cross_window.interface(platform);
-    try window.open(platform, .{
+    var cross_window: yes.Desktop.Cross.Window = .empty(desktop);
+    const window = cross_window.interface(desktop);
+    try window.open(desktop, .{
         .title = "vulkan triangle",
         .size = .{ .width = 600, .height = 400 },
         .resize_policy = .{ .resizable = false },
         .surface_type = .vulkan,
     });
-    defer window.close(platform);
+    defer window.close(desktop);
 
     // Instance
     const instance: vk.Instance = try .init(
         allocator,
-        yes.vulkan.getRequiredInstanceExtensions([*:0]const u8, platform, window),
+        yes.vulkan.getRequiredInstanceExtensions([*:0]const u8, desktop, window),
         &.{"VK_LAYER_KHRONOS_validation"},
     );
     defer instance.deinit();
@@ -36,7 +36,7 @@ pub fn main(init: std.process.Init) !void {
         vkDestroyDebugUtilsMessengerEXT(instance.handle, messenger, null);
 
     // Surface
-    const surface: vk.Surface = .{ .handle = @ptrCast(try yes.vulkan.createSurface(platform, window, instance.handle.?, null, @ptrCast(&vk.c.vkGetInstanceProcAddr))) };
+    const surface: vk.Surface = .{ .handle = @ptrCast(try yes.vulkan.createSurface(desktop, window, instance.handle.?, null, @ptrCast(&vk.c.vkGetInstanceProcAddr))) };
     defer surface.deinit(instance);
 
     // Physical device
@@ -68,7 +68,7 @@ pub fn main(init: std.process.Init) !void {
     defer frame_data.deinit(allocator, device);
 
     main_loop: while (true) {
-        while (try window.poll(platform)) |event| switch (event) {
+        while (try window.poll(desktop)) |event| switch (event) {
             .close => break :main_loop,
             .resize => |size| {
                 std.log.info("resize: {d}x{d}", .{ size.width, size.height });

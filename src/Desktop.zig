@@ -9,9 +9,9 @@ const Clipboard = @import("root.zig").Clipboard;
 userdata: ?*anyopaque,
 vtable: *const VTable,
 
-/// Does not open any windows nor does it execute any 'real' desktop interaction
+/// Does not open any windows nor does it execute any 'real' desktop interactions
 pub const Dummy = @import("Desktop/Dummy.zig");
-/// Cross desktop, only uses standard implementation
+/// Cross platform desktop, only uses standard implementations
 pub const Cross = @import("Desktop/Cross.zig");
 /// Default win32 api interactions
 pub const Win32 = @import("Desktop/Win32.zig");
@@ -25,8 +25,6 @@ pub const Xlib = if (build_options.x_backend != .none) @import("Desktop/Xlib.zig
 pub const Xpz = if (build_options.x_backend != .none) @import("Desktop/Xpz.zig") else @compileError("xpz backend is unavailable unless build options x_backend is set to .xpz");
 /// Currently just a dummy desktop
 pub const Cocoa = @import("Desktop/Cocoa.zig");
-
-pub const Web = @import("Desktop/Web.zig");
 
 pub const Glfw = @import("Desktop/Glfw.zig");
 

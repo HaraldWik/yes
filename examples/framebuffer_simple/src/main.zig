@@ -6,13 +6,13 @@ pub fn main(init: std.process.Init) !void {
     const allocator = init.gpa;
     const io = init.io;
 
-    var cross_platform: yes.Platform.Cross = try .init(allocator, io, init.minimal);
-    defer cross_platform.deinit();
-    const platform = cross_platform.platform();
+    var cross_desktop: yes.Desktop.Cross = try .init(allocator, io, init.minimal);
+    defer cross_desktop.deinit();
+    const desktop = cross_desktop.desktop();
 
-    var cross_window: yes.Platform.Cross.Window = .empty(platform);
-    const window = cross_window.interface(platform);
-    try window.open(platform, .{
+    var cross_window: yes.Desktop.Cross.Window = .empty(desktop);
+    const window = cross_window.interface(desktop);
+    try window.open(desktop, .{
         .title = "Window!",
         .size = .{ .width = 600, .height = 400 },
         .resize_policy = .{ .specified = .{
@@ -20,14 +20,14 @@ pub fn main(init: std.process.Init) !void {
         } },
         .surface_type = .framebuffer,
     });
-    defer window.close(platform);
+    defer window.close(desktop);
 
     main: while (true) {
-        while (try window.poll(platform)) |event| switch (event) {
+        while (try window.poll(desktop)) |event| switch (event) {
             .close => break :main,
             .resize => |size| {
                 std.log.info("resize: {d}x{d}", .{ size.width, size.height });
-                const framebuffer = try window.framebuffer(platform);
+                const framebuffer = try window.framebuffer(desktop);
                 const format = yes.Window.Framebuffer.format;
 
                 for (0..size.width * size.height) |i| {
