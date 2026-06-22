@@ -43,5 +43,7 @@ pub fn main(init: std.process.Init) !void {
             .mouse_motion => {},
             else => std.log.info("{any}", .{event}),
         };
+
+        try window.framebufferPresent(desktop);
     }
 }

@@ -64,7 +64,7 @@ pub fn check(result: vk.VkResult) !void {
 pub const Instance = struct {
     handle: vk.VkInstance,
 
-    pub fn init(allocator: std.mem.Allocator, required_extensions: []const [*:0]const u8, layers: []const [*:0]const u8) !@This() {
+    pub fn init(gpa: std.mem.Allocator, required_extensions: []const [*:0]const u8, layers: []const [*:0]const u8) !@This() {
         var version: u32 = undefined;
         try check(vk.vkEnumerateInstanceVersion(&version));
         if (vk.VK_API_VERSION_MAJOR(version) < 1 or vk.VK_API_VERSION_MINOR(version) < 3) return error.DynamicRenderingUnsupported;
@@ -72,8 +72,8 @@ pub const Instance = struct {
         var count: u32 = undefined;
         try check(vk.vkEnumerateInstanceExtensionProperties(null, &count, null));
 
-        const enum_extensions: []vk.VkExtensionProperties = try allocator.alloc(vk.VkExtensionProperties, count);
-        defer allocator.free(enum_extensions);
+        const enum_extensions: []vk.VkExtensionProperties = try gpa.alloc(vk.VkExtensionProperties, count);
+        defer gpa.free(enum_extensions);
 
         try check(vk.vkEnumerateInstanceExtensionProperties(null, &count, enum_extensions.ptr));
 
@@ -205,15 +205,15 @@ pub const Surface = struct {
         vk.vkDestroySurfaceKHR(instance.handle, self.handle, null);
     }
 
-    pub fn getInfo(self: @This(), allocator: std.mem.Allocator, physical_device: PhysicalDevice) !Info {
+    pub fn getInfo(self: @This(), gpa: std.mem.Allocator, physical_device: PhysicalDevice) !Info {
         var capabilities: vk.VkSurfaceCapabilitiesKHR = undefined;
         try check(vk.vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_device.handle, self.handle, &capabilities));
 
         var format_count: u32 = undefined;
         try check(vk.vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device.handle, self.handle, &format_count, null));
 
-        const formats: []vk.VkSurfaceFormatKHR = try allocator.alloc(vk.VkSurfaceFormatKHR, format_count);
-        defer allocator.free(formats);
+        const formats: []vk.VkSurfaceFormatKHR = try gpa.alloc(vk.VkSurfaceFormatKHR, format_count);
+        defer gpa.free(formats);
         try check(vk.vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device.handle, self.handle, &format_count, formats.ptr));
 
         const format = for (formats) |format| {
@@ -244,11 +244,11 @@ pub const PhysicalDevice = struct {
         return is_suitable;
     }
 
-    pub fn pick(instance: Instance, allocator: std.mem.Allocator) !@This() {
+    pub fn pick(instance: Instance, gpa: std.mem.Allocator) !@This() {
         var physical_device_count: u32 = undefined;
         try check(vk.vkEnumeratePhysicalDevices(instance.handle, &physical_device_count, null));
-        const physical_devices: []vk.VkPhysicalDevice = try allocator.alloc(vk.VkPhysicalDevice, physical_device_count);
-        defer allocator.free(physical_devices);
+        const physical_devices: []vk.VkPhysicalDevice = try gpa.alloc(vk.VkPhysicalDevice, physical_device_count);
+        defer gpa.free(physical_devices);
         try check(vk.vkEnumeratePhysicalDevices(instance.handle, &physical_device_count, physical_devices.ptr));
 
         for (physical_devices) |physical_device| {
@@ -257,12 +257,12 @@ pub const PhysicalDevice = struct {
         return error.NoSuitablePhysicalDevice;
     }
 
-    pub fn getGraphicsQueueFamily(self: @This(), allocator: std.mem.Allocator, surface: Surface) !u32 {
+    pub fn getGraphicsQueueFamily(self: @This(), gpa: std.mem.Allocator, surface: Surface) !u32 {
         var queue_family_count: u32 = 0;
         vk.vkGetPhysicalDeviceQueueFamilyProperties(self.handle, &queue_family_count, null);
 
-        const queue_families: []vk.VkQueueFamilyProperties = try allocator.alloc(vk.VkQueueFamilyProperties, queue_family_count);
-        defer allocator.free(queue_families);
+        const queue_families: []vk.VkQueueFamilyProperties = try gpa.alloc(vk.VkQueueFamilyProperties, queue_family_count);
+        defer gpa.free(queue_families);
         vk.vkGetPhysicalDeviceQueueFamilyProperties(self.handle, &queue_family_count, queue_families.ptr);
 
         var graphics_queue_family: u32 = std.math.maxInt(u32);
@@ -349,9 +349,9 @@ pub const ShaderModule = struct {
         return .{ .handle = shader_module };
     }
 
-    pub fn initFromPath(allocator: std.mem.Allocator, io: std.Io, device: Device, sub_path: []const u8) !@This() {
-        const source: []align(4) u8 = try std.Io.Dir.cwd().readFileAllocOptions(io, sub_path, allocator, .unlimited, .@"4", null);
-        defer allocator.free(source);
+    pub fn initFromPath(gpa: std.mem.Allocator, io: std.Io, device: Device, sub_path: []const u8) !@This() {
+        const source: []align(4) u8 = try std.Io.Dir.cwd().readFileAllocOptions(io, sub_path, gpa, .unlimited, .@"4", null);
+        defer gpa.free(source);
         return .initFromSlice(device, source);
     }
 
@@ -367,7 +367,7 @@ pub const Swapchain = struct {
     image_views: []vk.VkImageView,
     present_mode: ?vk.VkPresentModeKHR = null,
 
-    pub fn init(self: *@This(), allocator: std.mem.Allocator, device: Device, physical_device: PhysicalDevice, surface: Surface, surface_info: Surface.Info, size: yes.Window.Size) !void {
+    pub fn init(self: *@This(), gpa: std.mem.Allocator, device: Device, physical_device: PhysicalDevice, surface: Surface, surface_info: Surface.Info, size: yes.Window.Size) !void {
         self.extent.width = @intCast(size.width);
         self.extent.height = @intCast(size.height);
 
@@ -386,8 +386,8 @@ pub const Swapchain = struct {
         if (self.present_mode == null) {
             var present_modes_count: u32 = undefined;
             try check(vk.vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device.handle, surface.handle, &present_modes_count, null));
-            const present_modes: []vk.VkPresentModeKHR = try allocator.alloc(vk.VkPresentModeKHR, present_modes_count);
-            defer allocator.free(present_modes);
+            const present_modes: []vk.VkPresentModeKHR = try gpa.alloc(vk.VkPresentModeKHR, present_modes_count);
+            defer gpa.free(present_modes);
             try check(vk.vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device.handle, surface.handle, &present_modes_count, present_modes.ptr));
 
             var found_present_mode: u32 = vk.VK_PRESENT_MODE_FIFO_KHR;
@@ -435,11 +435,11 @@ pub const Swapchain = struct {
 
         var image_count: u32 = undefined;
         try check(vk.vkGetSwapchainImagesKHR(device.handle, self.handle, &image_count, null));
-        self.images = try allocator.alloc(vk.VkImage, image_count);
-        // defer allocator.free(self.images);
+        self.images = try gpa.alloc(vk.VkImage, image_count);
+        // defer gpa.free(self.images);
         try check(vk.vkGetSwapchainImagesKHR(device.handle, self.handle, &image_count, self.images.ptr));
 
-        self.image_views = try allocator.alloc(vk.VkImageView, image_count);
+        self.image_views = try gpa.alloc(vk.VkImageView, image_count);
 
         for (self.images, self.image_views) |image, *image_view| {
             var image_view_create_info: vk.VkImageViewCreateInfo = .{
@@ -466,19 +466,19 @@ pub const Swapchain = struct {
         }
     }
 
-    pub fn deinit(self: @This(), allocator: std.mem.Allocator, device: Device) void {
+    pub fn deinit(self: @This(), gpa: std.mem.Allocator, device: Device) void {
         for (self.image_views) |image_view| vk.vkDestroyImageView(device.handle, image_view, null);
 
-        allocator.free(self.image_views);
-        allocator.free(self.images);
+        gpa.free(self.image_views);
+        gpa.free(self.images);
 
         vk.vkDestroySwapchainKHR(device.handle, self.handle, null);
     }
 
-    pub fn resize(self: *@This(), allocator: std.mem.Allocator, device: Device, physical_device: PhysicalDevice, surface: Surface, surface_info: Surface.Info, size: yes.Window.Size) !void {
+    pub fn resize(self: *@This(), gpa: std.mem.Allocator, device: Device, physical_device: PhysicalDevice, surface: Surface, surface_info: Surface.Info, size: yes.Window.Size) !void {
         try device.waitIdle();
-        self.deinit(allocator, device);
-        try self.init(allocator, device, physical_device, surface, surface_info, size);
+        self.deinit(gpa, device);
+        try self.init(gpa, device, physical_device, surface, surface_info, size);
     }
 };
 
@@ -641,7 +641,7 @@ pub const FrameData = struct {
         flight_fences: [max_frames_in_flight]vk.VkFence,
         render_finished_semaphore: []vk.VkSemaphore,
 
-        pub fn init(allocator: std.mem.Allocator, device: Device, swapchain: Swapchain) !@This() {
+        pub fn init(gpa: std.mem.Allocator, device: Device, swapchain: Swapchain) !@This() {
             var semaphore_create_info: vk.VkSemaphoreCreateInfo = .{
                 .sType = vk.VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
             };
@@ -659,7 +659,7 @@ pub const FrameData = struct {
                 try check(vk.vkCreateFence(device.handle, &fence_create_info, null, flight_fence));
             }
 
-            const render_finished_semaphore: []vk.VkSemaphore = try allocator.alloc(vk.VkSemaphore, swapchain.images.len);
+            const render_finished_semaphore: []vk.VkSemaphore = try gpa.alloc(vk.VkSemaphore, swapchain.images.len);
             for (render_finished_semaphore) |*semaphore| try check(vk.vkCreateSemaphore(device.handle, &semaphore_create_info, null, semaphore));
 
             return .{
@@ -669,21 +669,21 @@ pub const FrameData = struct {
             };
         }
 
-        pub fn deinit(self: @This(), allocator: std.mem.Allocator, device: Device) void {
+        pub fn deinit(self: @This(), gpa: std.mem.Allocator, device: Device) void {
             for (self.image_available_semaphores) |semaphore| vk.vkDestroySemaphore(device.handle, semaphore, null);
             for (self.flight_fences) |fence| vk.vkDestroyFence(device.handle, fence, null);
             for (self.render_finished_semaphore) |semaphore| vk.vkDestroySemaphore(device.handle, semaphore, null);
-            allocator.free(self.render_finished_semaphore);
+            gpa.free(self.render_finished_semaphore);
         }
     };
 
-    pub fn init(allocator: std.mem.Allocator, device: Device, swapchain: Swapchain) !@This() {
-        const sync: Sync = try .init(allocator, device, swapchain);
+    pub fn init(gpa: std.mem.Allocator, device: Device, swapchain: Swapchain) !@This() {
+        const sync: Sync = try .init(gpa, device, swapchain);
         return .{ .sync = sync };
     }
 
-    pub fn deinit(self: @This(), allocator: std.mem.Allocator, device: Device) void {
-        self.sync.deinit(allocator, device);
+    pub fn deinit(self: @This(), gpa: std.mem.Allocator, device: Device) void {
+        self.sync.deinit(gpa, device);
     }
 
     pub fn aquire(self: *@This(), device: Device, swapchain: Swapchain, command_pool: CommandPool) !vk.VkCommandBuffer {

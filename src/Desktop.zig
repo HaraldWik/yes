@@ -38,6 +38,7 @@ pub const VTable = struct {
     windowNative: *const fn (userdata: ?*anyopaque, window: *Window) Window.Native,
 
     windowFramebuffer: *const fn (userdata: ?*anyopaque, window: *Window) anyerror!Window.Framebuffer,
+    windowFramebufferPresent: *const fn (userdata: ?*anyopaque, window: *Window) anyerror!void,
 
     windowOpenglMakeCurrent: *const fn (userdata: ?*anyopaque, window: *Window) anyerror!void,
     windowOpenglSwapBuffers: *const fn (userdata: ?*anyopaque, window: *Window) anyerror!void,
@@ -59,6 +60,7 @@ pub const failing: Desktop = .{
         .windowSetProperty = noWindowSetProperty,
         .windowNative = unreachableWindowNative,
         .windowFramebuffer = failingWindowFramebuffer,
+        .windowFramebufferPresent = noWindowFramebufferPresent,
         .windowOpenglMakeCurrent = noWindowOpenglMakeCurrent,
         .windowOpenglSwapBuffers = failingWindowOpenglSwapBuffers,
         .windowOpenglSwapInterval = failingWindowOpenglSwapInterval,
@@ -96,6 +98,10 @@ pub fn failingWindowFramebuffer(userdata: ?*anyopaque, window: *Window) anyerror
     _ = userdata;
     _ = window;
     return error.Failing;
+}
+pub fn noWindowFramebufferPresent(userdata: ?*anyopaque, window: *Window) anyerror!void {
+    _ = userdata;
+    _ = window;
 }
 pub fn noWindowOpenglMakeCurrent(userdata: ?*anyopaque, window: *Window) anyerror!void {
     _ = userdata;

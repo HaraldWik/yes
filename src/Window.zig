@@ -75,7 +75,7 @@ pub const Native = switch (builtin.os.tag) {
             surface: *anyopaque,
             compositor: *anyopaque,
         },
-        x11: struct {
+        x: struct {
             display: *anyopaque,
             window: u64,
             screen: i32,
@@ -100,29 +100,6 @@ pub const Native = switch (builtin.os.tag) {
     else => struct {},
 };
 
-pub const Framebuffer = struct {
-    pixels: switch (builtin.os.tag) {
-        .windows => [*]align(std.heap.page_size_min) u8,
-        .macos, .ios => [*]u8,
-        else => [*]align(std.heap.page_size_min) u8,
-    },
-
-    const Format = struct {
-        r: usize,
-        g: usize,
-        b: usize,
-        a: usize,
-
-        pub const rgba: Format = .{ .r = 0, .g = 1, .b = 2, .a = 3 };
-        pub const argb: Format = .{ .r = 1, .g = 2, .b = 3, .a = 0 };
-        pub const bgra: Format = .{ .r = 2, .g = 1, .b = 0, .a = 3 };
-    };
-
-    pub const format: Format = switch (builtin.os.tag) {
-        .windows, .macos, .ios => .bgra, // little-endian BGRA
-        else => if (builtin.cpu.arch.endian() == .big) .argb else .bgra,
-    };
-};
 pub const SurfaceType = switch (builtin.os.tag) {
     .windows => union(enum) {
         empty,
@@ -278,10 +255,39 @@ pub fn setCursor(window: *Window, desktop: Desktop, cursor: Cursor) anyerror!voi
     try desktop.vtable.windowSetProperty(desktop.userdata, window, .{ .cursor = cursor });
 }
 
+pub const Framebuffer = struct {
+    pixels: switch (builtin.os.tag) {
+        .windows => [*]align(std.heap.page_size_min) u8,
+        .macos, .ios => [*]u8,
+        else => [*]align(std.heap.page_size_min) u8,
+    },
+
+    const Format = struct {
+        r: usize,
+        g: usize,
+        b: usize,
+        a: usize,
+
+        pub const rgba: Format = .{ .r = 0, .g = 1, .b = 2, .a = 3 };
+        pub const argb: Format = .{ .r = 1, .g = 2, .b = 3, .a = 0 };
+        pub const bgra: Format = .{ .r = 2, .g = 1, .b = 0, .a = 3 };
+    };
+
+    pub const format: Format = switch (builtin.os.tag) {
+        .windows, .macos, .ios => .bgra, // little-endian BGRA
+        else => if (builtin.cpu.arch.endian() == .big) .argb else .bgra,
+    };
+};
+
 /// Returns a pointer to the current framebuffer for the given window.
 /// Note: The framebuffer pointer may change after a resize event,
 /// so it’s best to retrieve it either each time it’s needed or on each resize event.
 pub fn framebuffer(window: *Window, desktop: Desktop) anyerror!Framebuffer {
     if (window.surface_type != .framebuffer) return error.WrongSurfaceType;
     return desktop.vtable.windowFramebuffer(desktop.userdata, window);
+}
+
+pub fn framebufferPresent(window: *Window, desktop: Desktop) anyerror!void {
+    if (window.surface_type != .framebuffer) return error.WrongSurfaceType;
+    try desktop.vtable.windowFramebufferPresent(desktop.userdata, window);
 }

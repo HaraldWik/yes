@@ -25,6 +25,7 @@ pub fn desktop(self: *Dummy) Desktop {
             .windowSetProperty = windowSetProperty,
             .windowNative = windowNative,
             .windowFramebuffer = windowFramebuffer,
+            .windowFramebufferPresent = windowFramebufferPresent,
             .windowOpenglMakeCurrent = windowOpenglMakeCurrent,
             .windowOpenglSwapBuffers = windowOpenglSwapBuffers,
             .windowOpenglSwapInterval = windowOpenglSwapInterval,
@@ -101,6 +102,13 @@ fn windowFramebuffer(userdata: ?*anyopaque, desktop_window: *DesktopWindow) anye
     _ = self;
     _ = window;
     return .{ .pixels = undefined };
+}
+fn windowFramebufferPresent(userdata: ?*anyopaque, desktop_window: *DesktopWindow) anyerror!void {
+    const self: *Dummy = @ptrCast(@alignCast(userdata.?));
+    const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
+
+    _ = self;
+    _ = window;
 }
 fn windowOpenglMakeCurrent(userdata: ?*anyopaque, desktop_window: *DesktopWindow) anyerror!void {
     const self: *Dummy = @ptrCast(@alignCast(userdata.?));

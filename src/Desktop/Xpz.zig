@@ -83,6 +83,7 @@ pub fn desktop(self: *Xpz) Desktop {
             .windowSetProperty = windowSetProperty,
             .windowNative = windowNative,
             .windowFramebuffer = windowFramebuffer,
+            .windowFramebufferPresent = Desktop.noWindowFramebufferPresent,
             .windowOpenglMakeCurrent = windowOpenglMakeCurrent,
             .windowOpenglSwapBuffers = windowOpenglSwapBuffers,
             .windowOpenglSwapInterval = windowOpenglSwapInterval,
@@ -220,7 +221,7 @@ fn windowNative(userdata: ?*anyopaque, desktop_window: *DesktopWindow) DesktopWi
     const self: *Xpz = @ptrCast(@alignCast(userdata.?));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
-    return .{ .x11 = .{
+    return .{ .x = .{
         .display = &self.connection,
         .window = @intCast(@intFromEnum(window.handle)),
         .screen = @intCast(@intFromEnum(self.root_screen.window)),

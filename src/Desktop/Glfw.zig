@@ -42,6 +42,7 @@ pub fn desktop(self: *Glfw) Desktop {
             .windowSetProperty = windowSetProperty,
             .windowNative = windowNative,
             .windowFramebuffer = windowFramebuffer,
+            .windowFramebufferPresent = Desktop.noWindowFramebufferPresent,
             .windowOpenglMakeCurrent = windowOpenglMakeCurrent,
             .windowOpenglSwapBuffers = windowOpenglSwapBuffers,
             .windowOpenglSwapInterval = windowOpenglSwapInterval,
@@ -165,7 +166,7 @@ fn windowNative(userdata: ?*anyopaque, desktop_window: *DesktopWindow) DesktopWi
             }
 
             if (glfw.glfwGetX11Display()) |display| {
-                return .{ .x11 = .{
+                return .{ .x = .{
                     .display = display,
                     .window = glfw.glfwGetX11Window(window.handle),
                     .screen = 0,

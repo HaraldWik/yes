@@ -108,6 +108,7 @@ pub const Keyboard = struct {
 pub const Window = struct {
     interface: DesktopWindow = .{},
     id: xcb.xcb_window_t = 0,
+    visual: xcb.xcb_visualid_t = 0,
     event_queue: std.ArrayList(DesktopWindow.Event) = .empty,
     wm_delete_atom: xcb.xcb_atom_t = 0,
     surface: union {
@@ -164,6 +165,7 @@ pub fn desktop(self: *Xcb) Desktop {
             .windowSetProperty = windowSetProperty,
             .windowNative = windowNative,
             .windowFramebuffer = windowFramebuffer,
+            .windowFramebufferPresent = windowFramebufferPresent,
             .windowOpenglMakeCurrent = windowOpenglMakeCurrent,
             .windowOpenglSwapBuffers = windowOpenglSwapBuffers,
             .windowOpenglSwapInterval = windowOpenglSwapInterval,
@@ -197,7 +199,7 @@ fn windowOpen(userdata: ?*anyopaque, desktop_window: *DesktopWindow, options: De
 
     var fb_config: xcb.xcb_glx_fbconfig_t = 0;
 
-    const visual: xcb.xcb_visualid_t = switch (options.surface_type) {
+    window.visual = switch (options.surface_type) {
         .empty => self.screen.root_visual,
         .framebuffer => visual: {
             var depth_iter = xcb.xcb_screen_allowed_depths_iterator(self.screen);
@@ -286,7 +288,7 @@ fn windowOpen(userdata: ?*anyopaque, desktop_window: *DesktopWindow, options: De
         @intCast(options.size.height),
         0,
         xcb.XCB_WINDOW_CLASS_INPUT_OUTPUT,
-        visual,
+        window.visual,
         mask,
         &values,
     );
@@ -344,7 +346,7 @@ fn windowOpen(userdata: ?*anyopaque, desktop_window: *DesktopWindow, options: De
     switch (options.surface_type) {
         .empty => {},
         .framebuffer => {
-            window.surface = .{ .framebuffer = try .init(self.connection) };
+            window.surface = .{ .framebuffer = try .init(self.connection, window.id, options.size) };
         },
         .opengl => {
             const context_id: xcb.xcb_glx_context_t = xcb.xcb_generate_id(self.connection);
@@ -438,7 +440,6 @@ fn windowPoll(userdata: ?*anyopaque, desktop_window: *DesktopWindow) anyerror!?D
             if (target.interface.surface_type == .vulkan or target.interface.surface_type == .opengl) out_event = .{ .resize = size };
 
             if (target.interface.surface_type == .framebuffer) {
-                _ = xcb.xcb_render_composite(self.connection, xcb.XCB_RENDER_PICT_OP_OVER, target.surface.framebuffer.picture, 0, target.surface.framebuffer.picture, 0, 0, 0, 0, 0, 0, @intCast(size.width), @intCast(size.height));
                 _ = xcb.xcb_flush(self.connection);
             }
         },
@@ -745,7 +746,7 @@ fn windowNative(userdata: ?*anyopaque, desktop_window: *DesktopWindow) DesktopWi
     const self: *Xcb = @ptrCast(@alignCast(userdata.?));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
-    return .{ .x11 = .{
+    return .{ .x = .{
         .display = self.connection,
         .window = @intCast(window.id),
         .screen = @intCast(self.screen.root),
@@ -754,24 +755,35 @@ fn windowNative(userdata: ?*anyopaque, desktop_window: *DesktopWindow) DesktopWi
 fn windowFramebuffer(userdata: ?*anyopaque, desktop_window: *DesktopWindow) anyerror!DesktopWindow.Framebuffer {
     const self: *Xcb = @ptrCast(@alignCast(userdata.?));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
-
-    // const cookie = xcb.xcb_get_image(self.connection, xcb.XCB_IMAGE_FORMAT_Z_PIXMAP, // format
-    //     window.surface.framebuffer.pixmap, // your framebuffer pixmap
-    //     0, 0, // x, y
-    //     @intCast(window.interface.size.width), @intCast(window.interface.size.height), // size
-    //     0xFFFFFFFF // plane mask (all planes)
-    // );
-
-    // const reply = xcb.xcb_get_image_reply(self.connection, cookie, null);
-    // if (reply == null) return error.ImageReadFailed;
-
-    // const pixels: [*]u8 = @ptrCast(reply + 1);
-
-    // return .{ .pixels = pixels };
-
     _ = self;
-    _ = window;
-    return undefined;
+
+    return .{ .pixels = window.surface.framebuffer.pixels.ptr };
+}
+fn windowFramebufferPresent(userdata: ?*anyopaque, desktop_window: *DesktopWindow) anyerror!void {
+    const self: *Xcb = @ptrCast(@alignCast(userdata.?));
+    const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
+    const size = window.interface.size;
+
+    _ = xcb.xcb_shm_put_image(
+        self.connection,
+        window.id,
+        window.surface.framebuffer.gc,
+        @intCast(size.width),
+        @intCast(size.height),
+        0,
+        0,
+        @intCast(size.width),
+        @intCast(size.height),
+        0,
+        0,
+        24,
+        0, // format (XCB_IMAGE_FORMAT_Z_PIXMAP)
+        0,
+        window.surface.framebuffer.segment,
+        0,
+    );
+
+    _ = xcb.xcb_flush(self.connection);
 }
 fn windowOpenglMakeCurrent(userdata: ?*anyopaque, desktop_window: *DesktopWindow) anyerror!void {
     const self: *Xcb = @ptrCast(@alignCast(userdata.?));
@@ -858,40 +870,66 @@ fn setWmState(self: *Xcb, window: xcb.xcb_window_t, action: u32, state1: xcb.xcb
 }
 
 pub const Framebuffer = struct {
-    shm: struct {
-        seg: xcb.xcb_shm_seg_t,
-        id: u32,
-    },
-    picture: xcb.xcb_render_picture_t,
-    format_id: xcb.xcb_render_pictformat_t,
-    pixels: [*]align(std.heap.page_size_min) u8,
-    pub fn init(connection: *xcb.xcb_connection_t) !Framebuffer {
-        _ = connection;
-        // // Query XRender formats
-        // const formats_cookie = xcb.xcb_render.xcb_render_query_pict_formats(connection);
-        // const formats = xcb.xcb_render.xcb_render_query_pict_formats_reply(connection, formats_cookie, null) orelse return error.RenderQueryFailed;
+    fd: std.posix.fd_t,
+    segment: xcb.xcb_shm_seg_t,
+    pixels: []align(std.heap.page_size_min) u8,
+    gc: xcb.xcb_gcontext_t,
 
-        // // Find a 32-bit format
-        // var format_info_it = xcb_render.xcb_render_query_pict_formats_formats_iterator(formats);
-        // var format_id: xcb.xcb_render_pictformat_t = 0;
-        // while (format_info_it.rem > 0) : (xcb_render.xcb_render_pictforminfo_next(&format_info_it)) {
-        //     const format_info = format_info_it.data.?;
-        //     if (format_info.depth != 32) continue;
-        //     format_id = format_info.id;
-        //     break;
-        // }
-        // if (format_id == 0) return error.NoValidFormatId;
+    const IPC_PRIVATE: c_int = 0;
+    const IPC_CREAT: c_int = 0o1000;
 
-        // return Framebuffer{
-        //     .shm = .{ .seg = 0, .id = 0 },
-        //     .picture = 0,
-        //     .format_id = format_id,
-        //     .pixels = null,
-        //     .width = 0,
-        //     .height = 0,
-        //     .shmid = 0,
-        // };
-        return undefined;
+    extern "c" fn shmget(key: c_int, size: usize, shmflg: c_int) c_int;
+
+    pub fn init(connection: *xcb.xcb_connection_t, window: xcb.xcb_window_t, size: DesktopWindow.Size) !Framebuffer {
+        const channels = 4;
+        const len = size.width * size.height * channels;
+
+        var fd_name_buf: [64]u8 = undefined;
+        const fd_name = try std.fmt.bufPrintSentinel(&fd_name_buf, "{d}window_shm_{d}_{d}", .{ window, size.width, size.height }, 0);
+        const fd: std.posix.fd_t = std.posix.system.shm_open(
+            fd_name[0..].ptr,
+            @bitCast(std.posix.O{
+                .ACCMODE = .RDWR,
+                .CREAT = true,
+            }),
+            std.posix.S.IWUSR | std.posix.S.IRUSR | std.posix.S.IWOTH | std.posix.S.IROTH,
+        );
+
+        _ = std.posix.system.ftruncate(fd, @intCast(len));
+
+        const pixels = try std.posix.mmap(
+            null,
+            len,
+            .{ .READ = true, .WRITE = true },
+            .{ .TYPE = .SHARED },
+            fd,
+            0,
+        );
+
+        const segment = xcb.xcb_generate_id(connection);
+
+        _ = xcb.xcb_shm_attach_fd(
+            connection,
+            segment,
+            fd,
+            0,
+        );
+
+        _ = xcb.xcb_flush(connection);
+
+        const gc = xcb.xcb_generate_id(connection);
+        _ = xcb.xcb_create_gc(connection, gc, window, 0, null);
+
+        return .{
+            .fd = fd,
+            .segment = segment,
+            .pixels = pixels,
+            .gc = gc,
+        };
+    }
+
+    pub fn deinit(self: *Framebuffer) void {
+        _ = std.posix.system.close(self.fd);
     }
 
     pub fn resize(self: *Framebuffer, connection: *xcb.xcb_connection_t, window: xcb.xcb_window_t, size: DesktopWindow.Size) !void {
@@ -899,6 +937,7 @@ pub const Framebuffer = struct {
         _ = connection;
         _ = window;
         _ = size;
+
         // if (self.picture != 0) xcb.xcb_render_free_picture(connection, self.picture);
 
         // if (self.shm.seg != 0) {
@@ -919,17 +958,11 @@ pub const Framebuffer = struct {
 
         // self.picture = xcb.xcb_generate_id(connection);
         // xcb_render.xcb_render_create_picture(connection, self.picture, shm_pixmap, self.format_id, 0, null);
-    }
 
-    pub fn present(self: Framebuffer, connection: *xcb.xcb_connection_t, size: DesktopWindow.Size) void {
-        _ = xcb.xcb_render_composite(connection, xcb.XCB_RENDER_PICT_OP_OVER, // operation
-            self.picture, // source picture (your framebuffer)
-            0, // mask picture (XCB_RENDER_PICTURE_NONE)
-            self.picture, // destination picture
-            0, 0, // src_x, src_y
-            0, 0, // mask_x, mask_y
-            0, 0, // dst_x, dst_y
-            @intCast(size.width), @intCast(size.height) // area to composite
-        );
+        // 2
+
+        // const shmid = shmget(IPC_PRIVATE, IPC_CREAT | 0o600);
+        // if (shmid < 0) return 1;
+
     }
 };

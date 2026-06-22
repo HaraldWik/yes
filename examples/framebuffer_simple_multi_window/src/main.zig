@@ -65,6 +65,9 @@ pub fn main(init: std.process.Init) !void {
             },
             else => std.log.info("b: {any}", .{event}),
         };
+
+        try window_a.framebufferPresent(desktop);
+        try window_b.framebufferPresent(desktop);
     }
 }
 

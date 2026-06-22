@@ -166,6 +166,7 @@ pub fn desktop(self: *Xlib) Desktop {
             .windowSetProperty = windowSetProperty,
             .windowNative = windowNative,
             .windowFramebuffer = windowFramebuffer,
+            .windowFramebufferPresent = Desktop.noWindowFramebufferPresent,
             .windowOpenglMakeCurrent = windowOpenglMakeCurrent,
             .windowOpenglSwapBuffers = windowOpenglSwapBuffers,
             .windowOpenglSwapInterval = windowOpenglSwapInterval,
@@ -618,7 +619,7 @@ fn windowNative(userdata: ?*anyopaque, desktop_window: *DesktopWindow) DesktopWi
     const screen = xlib.DefaultScreen(self.display);
 
     return .{
-        .x11 = .{
+        .x = .{
             .display = self.display,
             .window = @intCast(window.handle),
             .screen = @intCast(screen),

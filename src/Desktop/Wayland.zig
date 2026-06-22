@@ -187,6 +187,7 @@ pub fn desktop(self: *Wayland) Desktop {
             .windowSetProperty = windowSetProperty,
             .windowNative = windowNative,
             .windowFramebuffer = windowFramebuffer,
+            .windowFramebufferPresent = Desktop.noWindowFramebufferPresent,
             .windowOpenglMakeCurrent = windowOpenglMakeCurrent,
             .windowOpenglSwapBuffers = windowOpenglSwapBuffers,
             .windowOpenglSwapInterval = windowOpenglSwapInterval,
@@ -460,7 +461,7 @@ fn registryListener(registry: *wl.Registry, event: wl.Registry.Event, globals: *
     switch (event) {
         .global => |global| {
             if (std.mem.orderZ(u8, global.interface, wl.Output.interface.name) == .eq) {
-                std.debug.print("monitor!, {s}\n", .{global.interface});
+                // std.debug.print("monitor!, {s}\n", .{global.interface});
                 return;
             }
             inline for (std.meta.fields(Globals)) |field| {
@@ -692,9 +693,9 @@ fn dataDeviceListener(_: *wl.DataDevice, event: wl.DataDevice.Event, io_manager:
         },
         .enter => |enter| {
             const window: *Window = @ptrCast(@alignCast(enter.surface.?.getUserData()));
-            std.log.scoped(.data_device).info("{t} ({t} window)", .{ event, window.surface });
+            // std.log.scoped(.data_device).info("{t} ({t} window)", .{ event, window.surface });
             if (enter.id) |offer| {
-                std.debug.print("accept\n", .{});
+                // std.debug.print("accept\n", .{});
                 offer.accept(enter.serial, "text/uri-list");
 
                 io_manager.dnd.offer = offer;
@@ -738,7 +739,7 @@ fn dataDeviceListener(_: *wl.DataDevice, event: wl.DataDevice.Event, io_manager:
             };
         },
         .selection => |selection| {
-            std.log.scoped(.data_device).info("{t}", .{event});
+            // std.log.scoped(.data_device).info("{t}", .{event});
 
             const offer = selection.id orelse {
                 io_manager.clipboard.offer = null;
@@ -764,12 +765,12 @@ fn dataSourceListener(source: *wl.DataSource, event: wl.DataSource.Event, io_man
 
             if (!std.mem.eql(u8, std.mem.span(send.mime_type), "text/uri-list")) {
                 _ = std.posix.system.close(send.fd);
-                std.log.info("send wrong mime: {s}", .{send.mime_type});
+                // std.log.info("send wrong mime: {s}", .{send.mime_type});
 
                 return;
             }
 
-            std.log.info("send found: {s}", .{send.mime_type});
+            // std.log.info("send found: {s}", .{send.mime_type});
 
             const bytes =
                 "file:///home/user/Pictures/Screenshots/Screenshot%20From%202026-04-17%2017-47-33.png\n" ++
@@ -794,25 +795,27 @@ fn dataSourceListener(source: *wl.DataSource, event: wl.DataSource.Event, io_man
 
 fn dataOfferListener(_: *wl.DataOffer, event: wl.DataOffer.Event, io_manager: *IoManager) void {
     _ = io_manager;
-    switch (event) {
-        .offer => |offer| {
-            std.log.scoped(.data_offer).info("offer: {s}", .{offer.mime_type});
-        },
-        .source_actions => |action| {
-            std.log.scoped(.data_offer).info("source_actions: {s}{s}{s}", .{
-                if (action.source_actions.ask) "ask;" else "",
-                if (action.source_actions.copy) "copy;" else "",
-                if (action.source_actions.move) "move;" else "",
-            });
-        },
-        .action => |action| {
-            std.log.scoped(.data_offer).info("action: {s}{s}{s}", .{
-                if (action.dnd_action.ask) "ask;" else "",
-                if (action.dnd_action.copy) "copy;" else "",
-                if (action.dnd_action.move) "move;" else "",
-            });
-        },
-    }
+    _ = event;
+    _ = io_manager;
+    // switch (event) {
+    //     .offer => |offer| {
+    //         std.log.scoped(.data_offer).info("offer: {s}", .{offer.mime_type});
+    //     },
+    //     .source_actions => |action| {
+    //         std.log.scoped(.data_offer).info("source_actions: {s}{s}{s}", .{
+    //             if (action.source_actions.ask) "ask;" else "",
+    //             if (action.source_actions.copy) "copy;" else "",
+    //             if (action.source_actions.move) "move;" else "",
+    //         });
+    //     },
+    //     .action => |action| {
+    //         std.log.scoped(.data_offer).info("action: {s}{s}{s}", .{
+    //             if (action.dnd_action.ask) "ask;" else "",
+    //             if (action.dnd_action.copy) "copy;" else "",
+    //             if (action.dnd_action.move) "move;" else "",
+    //         });
+    //     },
+    // }
 }
 
 fn surfaceListener(_: *wl.Surface, event: wl.Surface.Event, window: *Window) void {
@@ -871,7 +874,7 @@ fn windowAllocShm(window: *Window, shm: *wl.Shm) !void {
     const length = size.width * size.height * channels;
 
     var fd_name_buf: [64]u8 = undefined;
-    const fd_name = try std.fmt.bufPrintSentinel(&fd_name_buf, "{d}yes_window_shm_{d}_{d}", .{ @intFromPtr(window.xdg_toplevel), size.width, size.height }, 0);
+    const fd_name = try std.fmt.bufPrintSentinel(&fd_name_buf, "{d}window_shm_{d}_{d}", .{ @intFromPtr(window.xdg_toplevel), size.width, size.height }, 0);
     const fd: std.posix.fd_t = std.posix.system.shm_open(
         fd_name[0..].ptr,
         @bitCast(std.posix.O{
