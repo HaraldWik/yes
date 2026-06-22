@@ -53,7 +53,7 @@ pub const VTable = struct {
 
 pub const failing: Desktop = .{
     .userdata = null,
-    .vtable = &VTable{
+    .vtable = &.{
         .windowOpen = noWindowOpen,
         .windowClose = noWindowClose,
         .windowPoll = noWindowPoll,

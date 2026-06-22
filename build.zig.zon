@@ -21,12 +21,10 @@
         .xcb = .{
             .url = "git+https://github.com/HaraldWik/zig-xcb#a0652f9e2112553661269f8d461d20d41d109748",
             .hash = "xcb-0.0.0-x0nviCYsUwBUpTv-cyYOrp-DY99NdS-66f7l-FYRiiOx",
-            .lazy = true,
         },
         .xlib = .{
             .url = "git+https://github.com/mirror/libX11/#ff8706a5eae25b8bafce300527079f68a201d27f",
             .hash = "N-V-__8AACyQxwDUvMZdHuuzwuP1mlGU6uroadqmQvBwevJX",
-            .lazy = true,
         },
         .xpz = .{
             .url = "git+https://github.com/HaraldWik/xpz#eb34851ec1e6a8c303326e7bf813ba647a8f871d",

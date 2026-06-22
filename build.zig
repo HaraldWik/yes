@@ -108,8 +108,7 @@ pub fn build(b: *std.Build) void {
 }
 
 pub fn addXcb(b: *std.Build, mod: *std.Build.Module, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) void {
-    const xcb_dep = b.lazyDependency("xcb", .{ .target = target, .optimize = optimize }) orelse
-        return std.log.err("lazy dependency xcb returned null, xcb platform will be disabled", .{});
+    const xcb_dep = b.dependency("xcb", .{ .target = target, .optimize = optimize });
 
     const xcb_translate_c = b.addTranslateC(.{
         .root_source_file = b.addWriteFiles().add("xcb.h",
@@ -129,8 +128,7 @@ pub fn addXcb(b: *std.Build, mod: *std.Build.Module, target: std.Build.ResolvedT
 }
 
 pub fn addXlib(b: *std.Build, mod: *std.Build.Module, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) void {
-    const xlib_dep = b.lazyDependency("xlib", .{}) orelse
-        return std.log.err("lazy dependency xlib returned null, xlib platform will be disabled", .{});
+    const xlib_dep = b.dependency("xlib", .{});
 
     const xlib = b.addTranslateC(.{
         .root_source_file = b.addWriteFiles().add("c.h",
@@ -227,7 +225,7 @@ pub fn addXkbcommon(b: *std.Build, mod: *std.Build.Module, target: std.Build.Res
         .files = libxkbcommon_x11_sources,
     });
 
-    const xcb_dep = b.lazyDependency("xcb", .{ .target = target, .optimize = optimize }).?;
+    const xcb_dep = b.dependency("xcb", .{ .target = target, .optimize = optimize });
 
     libxkbcommon.root_module.linkLibrary(xcb_dep.artifact("xcb"));
     libxkbcommon.root_module.addIncludePath(xcb_dep.path("include/"));
