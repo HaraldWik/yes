@@ -376,6 +376,13 @@ fn windowClose(userdata: ?*anyopaque, desktop_window: *DesktopWindow) void {
     _, const window_index = self.windowFromId(window.id).?;
     self.windows.items[window_index] = null;
 
+    switch (window.interface.surface_type) {
+        .empty => {},
+        .framebuffer => window.surface.framebuffer.deinit(self.connection),
+        .opengl => {},
+        .vulkan => {},
+    }
+
     window.event_queue.deinit(self.gpa);
     _ = xcb.xcb_destroy_window(self.connection, window.id);
 }
@@ -440,7 +447,7 @@ fn windowPoll(userdata: ?*anyopaque, desktop_window: *DesktopWindow) anyerror!?D
             if (target.interface.surface_type == .vulkan or target.interface.surface_type == .opengl) out_event = .{ .resize = size };
 
             if (target.interface.surface_type == .framebuffer) {
-                _ = xcb.xcb_flush(self.connection);
+                try target.surface.framebuffer.resize(self.connection, target.id, size);
             }
         },
 
@@ -881,12 +888,33 @@ pub const Framebuffer = struct {
     extern "c" fn shmget(key: c_int, size: usize, shmflg: c_int) c_int;
 
     pub fn init(connection: *xcb.xcb_connection_t, window: xcb.xcb_window_t, size: DesktopWindow.Size) !Framebuffer {
+        var self: Framebuffer = undefined;
+        try self.alloc(connection, window, size);
+
+        self.gc = xcb.xcb_generate_id(connection);
+        _ = xcb.xcb_create_gc(connection, self.gc, window, 0, null);
+        _ = xcb.xcb_flush(connection);
+        return self;
+    }
+
+    pub fn deinit(self: *Framebuffer, connection: *xcb.xcb_connection_t) void {
+        _ = xcb.xcb_shm_detach(connection, self.segment);
+        std.posix.munmap(self.pixels);
+        _ = std.posix.system.close(self.fd);
+    }
+
+    pub fn resize(self: *Framebuffer, connection: *xcb.xcb_connection_t, window: xcb.xcb_window_t, size: DesktopWindow.Size) !void {
+        self.deinit(connection);
+        try self.alloc(connection, window, size);
+    }
+
+    fn alloc(self: *Framebuffer, connection: *xcb.xcb_connection_t, window: xcb.xcb_window_t, size: DesktopWindow.Size) !void {
         const channels = 4;
         const len = size.width * size.height * channels;
 
         var fd_name_buf: [64]u8 = undefined;
         const fd_name = try std.fmt.bufPrintSentinel(&fd_name_buf, "{d}window_shm_{d}_{d}", .{ window, size.width, size.height }, 0);
-        const fd: std.posix.fd_t = std.posix.system.shm_open(
+        self.fd = std.posix.system.shm_open(
             fd_name[0..].ptr,
             @bitCast(std.posix.O{
                 .ACCMODE = .RDWR,
@@ -895,74 +923,26 @@ pub const Framebuffer = struct {
             std.posix.S.IWUSR | std.posix.S.IRUSR | std.posix.S.IWOTH | std.posix.S.IROTH,
         );
 
-        _ = std.posix.system.ftruncate(fd, @intCast(len));
+        _ = std.posix.system.ftruncate(self.fd, @intCast(len));
 
-        const pixels = try std.posix.mmap(
+        self.pixels = try std.posix.mmap(
             null,
             len,
             .{ .READ = true, .WRITE = true },
             .{ .TYPE = .SHARED },
-            fd,
+            self.fd,
             0,
         );
 
-        const segment = xcb.xcb_generate_id(connection);
+        self.segment = xcb.xcb_generate_id(connection);
 
         _ = xcb.xcb_shm_attach_fd(
             connection,
-            segment,
-            fd,
+            self.segment,
+            self.fd,
             0,
         );
 
         _ = xcb.xcb_flush(connection);
-
-        const gc = xcb.xcb_generate_id(connection);
-        _ = xcb.xcb_create_gc(connection, gc, window, 0, null);
-
-        return .{
-            .fd = fd,
-            .segment = segment,
-            .pixels = pixels,
-            .gc = gc,
-        };
-    }
-
-    pub fn deinit(self: *Framebuffer) void {
-        _ = std.posix.system.close(self.fd);
-    }
-
-    pub fn resize(self: *Framebuffer, connection: *xcb.xcb_connection_t, window: xcb.xcb_window_t, size: DesktopWindow.Size) !void {
-        _ = self;
-        _ = connection;
-        _ = window;
-        _ = size;
-
-        // if (self.picture != 0) xcb.xcb_render_free_picture(connection, self.picture);
-
-        // if (self.shm.seg != 0) {
-        //     _ = xcb.xcb_shm_detach(connection, self.shm.seg);
-        // }
-
-        // const channels = 4;
-        // const bytes: u32 = size.width * size.height * channels;
-
-        // // Create SHM segment
-        // self.shmid = std.posix.system.mmap(0, bytes, xcb.IPC_CREAT | 0o666) orelse return error.FailedToCreateSHM;
-        // self.shm.seg = xcb.xcb_generate_id(connection);
-        // xcb.xcb_shm_attach(connection, self.shm.seg, self.shmid, 0);
-
-        // // Create XRender picture using the SHM pixmap
-        // const shm_pixmap = xcb.xcb_generate_id(connection);
-        // xcb.xcb_shm_pixmap_create(connection, shm_pixmap, window, width, height, 32, self.shm.seg);
-
-        // self.picture = xcb.xcb_generate_id(connection);
-        // xcb_render.xcb_render_create_picture(connection, self.picture, shm_pixmap, self.format_id, 0, null);
-
-        // 2
-
-        // const shmid = shmget(IPC_PRIVATE, IPC_CREAT | 0o600);
-        // if (shmid < 0) return 1;
-
     }
 };

@@ -7,7 +7,6 @@ pub fn build(b: *std.Build) void {
     const yes = b.dependency("yes", .{
         .target = target,
         .optimize = optimize,
-        .x_backend = .none,
     }).module("yes");
 
     const exe = b.addExecutable(.{
