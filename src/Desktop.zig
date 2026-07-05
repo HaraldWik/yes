@@ -48,7 +48,7 @@ pub const VTable = struct {
 
     openglGetProcAddress: *const fn (procname: [*:0]const u8) callconv(opengl.APIENTRY) ?opengl.Proc,
 
-    setClipboard: *const fn (userdata: ?*anyopaque, serial: u32, clipboard: Clipboard) anyerror!void = undefined,
+    // setClipboard: *const fn (userdata: ?*anyopaque, serial: u32, clipboard: Clipboard) anyerror!void = undefined,
 };
 
 pub const failing: Desktop = .{
