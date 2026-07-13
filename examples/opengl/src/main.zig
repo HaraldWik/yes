@@ -38,6 +38,7 @@ pub fn main(init: std.process.Init) !void {
     defer window.close(desktop);
     try window.setAlwaysOnTop(desktop, true);
     try window.setDecorated(desktop, true);
+    try window.setCursorMode(desktop, .captured);
 
     try yes.opengl.makeCurrent(desktop, window);
     try yes.opengl.swapInterval(desktop, window, 1);

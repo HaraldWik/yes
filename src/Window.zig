@@ -7,9 +7,10 @@ const opengl = @import("opengl.zig");
 
 size: Size = .{},
 position: Position = .{},
-mode: Property.Mode = .windowed,
-unminimized_mode: Property.Mode = .windowed,
+mode: Mode = .windowed,
+unminimized_mode: Mode = .windowed,
 focused: bool = false,
+cursor_mode: Property.CursorMode = .normal,
 surface_type: SurfaceType = .empty,
 keyboard: Keyboard = .empty,
 mouse_position: Event.MouseMotion = .{},
@@ -152,6 +153,13 @@ pub const Cursor = enum(u32) {
     pub const default: Cursor = .arrow;
 };
 
+pub const Mode = enum {
+    windowed,
+    fullscreen,
+    maximized,
+    minimized,
+};
+
 pub const Property = union(enum) {
     title: [:0]const u8,
     size: Window.Size,
@@ -163,12 +171,14 @@ pub const Property = union(enum) {
     floating: bool,
     decorated: bool,
     cursor: Cursor,
+    cursor_mode: CursorMode,
 
-    pub const Mode = enum {
-        windowed,
-        fullscreen,
-        maximized,
-        minimized,
+    pub const CursorMode = enum {
+        normal, // visible, free cursor
+        confined, // visible, confined to window
+        hidden, // invisible, free cursor
+        captured, // invisible, confined to window
+        locked, // invisible, locked + relative motion
     };
 };
 
@@ -233,7 +243,7 @@ pub fn setPosition(window: *Window, desktop: Desktop, position: Position) anyerr
 pub fn setResizePolicy(window: *Window, desktop: Desktop, resize_policy: ResizePolicy) anyerror!void {
     try desktop.vtable.windowSetProperty(desktop.userdata, window, .{ .resize_policy = resize_policy });
 }
-pub fn setMode(window: *Window, desktop: Desktop, mode: Window.Property.Mode) anyerror!void {
+pub fn setMode(window: *Window, desktop: Desktop, mode: Window.Mode) anyerror!void {
     if (mode == window.unminimized_mode) return;
     try desktop.vtable.windowSetProperty(desktop.userdata, window, .{ .mode = mode });
     window.mode = mode;
@@ -253,6 +263,10 @@ pub fn setDecorated(window: *Window, desktop: Desktop, decorated: bool) anyerror
 }
 pub fn setCursor(window: *Window, desktop: Desktop, cursor: Cursor) anyerror!void {
     try desktop.vtable.windowSetProperty(desktop.userdata, window, .{ .cursor = cursor });
+}
+pub fn setCursorMode(window: *Window, desktop: Desktop, mode: Property.CursorMode) anyerror!void {
+    window.cursor_mode = mode;
+    try desktop.vtable.windowSetProperty(desktop.userdata, window, .{ .cursor_mode = mode });
 }
 
 pub const Framebuffer = struct {

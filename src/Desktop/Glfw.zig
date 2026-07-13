@@ -146,6 +146,7 @@ fn windowSetProperty(userdata: ?*anyopaque, desktop_window: *DesktopWindow, prop
             };
             glfw.glfwSetInputMode(window.handle, glfw.GLFW_CURSOR, cursor_mode);
         },
+        .cursor_mode => {},
     }
 }
 fn windowNative(userdata: ?*anyopaque, desktop_window: *DesktopWindow) DesktopWindow.Native {

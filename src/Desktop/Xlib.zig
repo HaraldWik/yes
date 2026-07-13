@@ -609,6 +609,7 @@ fn windowSetProperty(userdata: ?*anyopaque, desktop_window: *DesktopWindow, prop
             _ = xlib.XSendEvent(self.display, screen, xlib.False, xlib.SubstructureRedirectMask | xlib.SubstructureNotifyMask, &event);
         },
         .cursor => |cursor| _ = xlib.XDefineCursor(self.display, window.handle, self.cursor_table.get(cursor)),
+        .cursor_mode => {}, // TODO: add confine_pointer to xlib
     }
     _ = xlib.XFlush(self.display);
 }

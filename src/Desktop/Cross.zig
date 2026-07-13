@@ -19,7 +19,7 @@ pub const Inner = if (build_options.glfw) Desktop.Glfw else switch (builtin.os.t
         union(enum) {
             wayland: switch (build_options.wayland_backend) {
                 .none => void,
-                .libwayland => Desktop.Wayland,
+                .libwaylandclient => Desktop.Wayland,
             },
             x: switch (build_options.x_backend) {
                 .none => void,
@@ -34,7 +34,7 @@ pub const Window = struct {
     inner: if (@hasDecl(Inner, "Window")) Inner.Window else union {
         wayland: switch (build_options.wayland_backend) {
             .none => void,
-            .libwayland => Desktop.Wayland.Window,
+            .libwaylandclient => Desktop.Wayland.Window,
         },
         x: switch (build_options.x_backend) {
             .none => void,
@@ -93,7 +93,7 @@ fn initUnix(gpa: std.mem.Allocator, io: std.Io, minimal: std.process.Init.Minima
     return switch (session_type) {
         .wayland => .{ .inner = .{ .wayland = try switch (build_options.wayland_backend) {
             .none => return error.WaylandUnsupported,
-            .libwayland => Desktop.Wayland.connect(gpa),
+            .libwaylandclient => Desktop.Wayland.connect(gpa),
         } } },
         .x11 => .{ .inner = .{ .x = try switch (build_options.x_backend) {
             .none => return error.XUnsupported,

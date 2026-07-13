@@ -746,6 +746,7 @@ fn windowSetProperty(userdata: ?*anyopaque, desktop_window: *DesktopWindow, prop
             _ = xcb.xcb_send_event(self.connection, 0, self.screen.root, xcb.XCB_EVENT_MASK_SUBSTRUCTURE_REDIRECT | xcb.XCB_EVENT_MASK_SUBSTRUCTURE_NOTIFY, @ptrCast(&event));
         },
         .cursor => {},
+        .cursor_mode => {},
     }
     _ = xcb.xcb_flush(self.connection);
 }

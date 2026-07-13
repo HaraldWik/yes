@@ -8,9 +8,10 @@ const Desktop = @import("../Desktop.zig");
 const DesktopWindow = @import("../Window.zig");
 const wayland = @import("wayland");
 const wl = wayland.client.wl;
-const xdg = wayland.client.xdg;
-const zxdg = wayland.client.zxdg;
 const wp = wayland.client.wp;
+const xdg = wayland.client.xdg;
+const zwp = wayland.client.zwp;
+const zxdg = wayland.client.zxdg;
 const egl = @import("egl");
 const xkb = @import("xkbcommon");
 
@@ -24,6 +25,8 @@ seat: *wl.Seat,
 shm: *wl.Shm,
 zxdg_decoration_manager: ?*zxdg.DecorationManagerV1 = null,
 wp_cursor_shape_manager: ?*wp.CursorShapeManagerV1 = null,
+zwp_pointer_constraints: ?*zwp.PointerConstraintsV1 = null,
+zwp_relative_pointer_manager: ?*zwp.RelativePointerManagerV1 = null,
 
 io_manager: *IoManager,
 
@@ -35,6 +38,8 @@ const Globals = struct {
     data_device_manager: ?*wl.DataDeviceManager = null,
     zxdg_decoration_manager: ?*zxdg.DecorationManagerV1 = null,
     wp_cursor_shape_manager: ?*wp.CursorShapeManagerV1 = null,
+    zwp_pointer_constraints: ?*zwp.PointerConstraintsV1 = null,
+    zwp_relative_pointer_manager: ?*zwp.RelativePointerManagerV1 = null,
 };
 
 const IoManager = struct {
@@ -79,6 +84,10 @@ pub const Window = struct {
     zxdg_toplevel_decoration: ?*zxdg.ToplevelDecorationV1 = null,
     zxdg_toplevel_decoration_mode: ?zxdg.ToplevelDecorationV1.Mode = null,
     wp_cursor_shape_device: ?*wp.CursorShapeDeviceV1 = null,
+    confined_pointer: ?*zwp.ConfinedPointerV1 = null,
+    locked_pointer: ?*zwp.LockedPointerV1 = null,
+    relative_pointer: ?*zwp.RelativePointerV1 = null,
+
     // event_queue: *wl.EventQueue = undefined,
     events: std.ArrayList(DesktopWindow.Event) = .empty,
     running: bool = true,
@@ -153,6 +162,8 @@ pub fn connect(gpa: std.mem.Allocator) !Wayland {
         .shm = shm,
         .zxdg_decoration_manager = globals.zxdg_decoration_manager,
         .wp_cursor_shape_manager = globals.wp_cursor_shape_manager,
+        .zwp_pointer_constraints = globals.zwp_pointer_constraints,
+        .zwp_relative_pointer_manager = globals.zwp_relative_pointer_manager,
 
         .io_manager = io_manager,
     };
@@ -298,6 +309,9 @@ fn windowClose(userdata: ?*anyopaque, desktop_window: *DesktopWindow) void {
         else => {},
     }
 
+    if (window.confined_pointer) |confined_pointer| confined_pointer.destroy();
+    if (window.locked_pointer) |locked_pointer| locked_pointer.destroy();
+    if (window.relative_pointer) |relative_pointer| relative_pointer.destroy();
     if (window.zxdg_toplevel_decoration) |zxdg_toplevel_decoration| zxdg_toplevel_decoration.destroy();
     if (window.wp_cursor_shape_device) |wp_cursor_shape_device| wp_cursor_shape_device.destroy();
     window.xdg_toplevel.destroy();
@@ -402,6 +416,49 @@ fn windowSetProperty(userdata: ?*anyopaque, desktop_window: *DesktopWindow, prop
             window.cursor = cursor;
             const shape: wp.CursorShapeDeviceV1.Shape = @enumFromInt(@intFromEnum(cursor));
             wp_cursor_shape_device.setShape(0, shape);
+        },
+        .cursor_mode => |mode| if (self.io_manager.pointer) |pointer| if (self.zwp_pointer_constraints) |zwp_pointer_constraints| {
+            if (mode != .captured) if (window.relative_pointer) |relative_pointer| relative_pointer.destroy();
+
+            switch (mode) {
+                .normal, .hidden => {
+                    if (window.confined_pointer) |confined_pointer| {
+                        confined_pointer.destroy();
+                        window.confined_pointer = null;
+                    }
+                    if (window.locked_pointer) |locked_pointer| {
+                        locked_pointer.destroy();
+                        window.locked_pointer = null;
+                    }
+                },
+                .confined => if (window.confined_pointer == null) {
+                    if (window.locked_pointer) |locked_pointer| {
+                        locked_pointer.destroy();
+                        window.locked_pointer = null;
+                    }
+
+                    window.confined_pointer = try zwp_pointer_constraints.confinePointer(window.wl_surface, pointer, null, .persistent);
+                },
+                .captured => if (window.locked_pointer == null) if (self.zwp_relative_pointer_manager) |zwp_relative_pointer_manager| {
+                    if (window.confined_pointer) |confined_pointer| {
+                        confined_pointer.destroy();
+                        window.confined_pointer = null;
+                    }
+
+                    window.locked_pointer = try zwp_pointer_constraints.lockPointer(window.wl_surface, pointer, null, .persistent);
+
+                    window.relative_pointer = try zwp_relative_pointer_manager.getRelativePointer(pointer);
+                    window.relative_pointer.?.setListener(*Window, relativePointerListener, window);
+                },
+                .locked => if (window.locked_pointer == null) {
+                    if (window.confined_pointer) |confined_pointer| {
+                        confined_pointer.destroy();
+                        window.confined_pointer = null;
+                    }
+
+                    window.locked_pointer = try zwp_pointer_constraints.lockPointer(window.wl_surface, pointer, null, .persistent);
+                },
+            }
         },
     }
 }
@@ -596,12 +653,15 @@ fn keyboardListener(_: *wl.Keyboard, event: wl.Keyboard.Event, io_manager: *IoMa
     }
 }
 
-fn pointerListener(_: *wl.Pointer, event: wl.Pointer.Event, io_manager: *IoManager) void {
+fn pointerListener(pointer: *wl.Pointer, event: wl.Pointer.Event, io_manager: *IoManager) void {
     const window = io_manager.current_window.load(.seq_cst) orelse return;
     switch (event) {
-        .enter => if (window.wp_cursor_shape_device) |wp_cursor_shape_device| {
-            const shape: wp.CursorShapeDeviceV1.Shape = @enumFromInt(@intFromEnum(window.cursor));
-            wp_cursor_shape_device.setShape(0, shape);
+        .enter => |enter| switch (window.interface.cursor_mode) {
+            .normal, .confined => if (window.wp_cursor_shape_device) |wp_cursor_shape_device| {
+                const shape: wp.CursorShapeDeviceV1.Shape = @enumFromInt(@intFromEnum(window.cursor));
+                wp_cursor_shape_device.setShape(0, shape);
+            },
+            .hidden, .captured, .locked => pointer.setCursor(enter.serial, null, 0, 0),
         },
         .leave => {},
         .motion => |motion| {
@@ -626,6 +686,30 @@ fn pointerListener(_: *wl.Pointer, event: wl.Pointer.Event, io_manager: *IoManag
                 _ => unreachable,
             };
             window.events.append(window.gpa, .{ .mouse_scroll = mouse_scroll }) catch |err| {
+                window.err = err;
+            };
+        },
+    }
+}
+
+fn relativePointerListener(_: *zwp.RelativePointerV1, event: zwp.RelativePointerV1.Event, window: *Window) void {
+    switch (event) {
+        .relative_motion => |motion| {
+            const width = @as(f64, @floatFromInt(window.interface.size.width));
+            const height = @as(f64, @floatFromInt(window.interface.size.height));
+            const dx = motion.dx.toDouble();
+            const dy = motion.dy.toDouble();
+
+            const mouse_motion: DesktopWindow.Event.MouseMotion = .{
+                .x = std.math.clamp(width / 2 + dx, 0, width),
+                .y = std.math.clamp(height / 2 + dy, 0, height),
+            };
+            const relative_mouse_motion: DesktopWindow.Event.RelativeMouseMotion = .{ .dx = dx, .dy = dy };
+
+            window.events.appendSlice(window.gpa, &.{
+                .{ .mouse_motion = mouse_motion },
+                .{ .relative_mouse_motion = relative_mouse_motion },
+            }) catch |err| {
                 window.err = err;
             };
         },

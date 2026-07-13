@@ -215,6 +215,7 @@ fn windowSetProperty(userdata: ?*anyopaque, desktop_window: *DesktopWindow, prop
         .decorated => {},
         .focused => {},
         .cursor => {},
+        .cursor_mode => {},
     }
 }
 fn windowNative(userdata: ?*anyopaque, desktop_window: *DesktopWindow) DesktopWindow.Native {

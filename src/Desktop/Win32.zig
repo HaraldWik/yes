@@ -433,6 +433,7 @@ fn windowSetProperty(userdata: ?*anyopaque, desktop_window: *DesktopWindow, prop
             //.move = @ptrCast(win32.LoadCursorW(instance, win32.IDC_SIZEALL)),
             //.grabbing = @ptrCast(win32.LoadCursorW(instance, win32.IDC_HAND)), // fallback
         },
+        .cursor_mode => {},
     }
 }
 fn windowNative(userdata: ?*anyopaque, desktop_window: *DesktopWindow) DesktopWindow.Native {

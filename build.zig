@@ -2,7 +2,7 @@ const std = @import("std");
 
 pub const WaylandBackend = enum {
     none,
-    libwayland,
+    libwaylandclient,
 };
 
 pub const XBackend = enum {
@@ -28,7 +28,7 @@ pub fn build(b: *std.Build) void {
     });
 
     const opengl_option = b.option(bool, "opengl", "Link with native OpenGL libs") orelse false;
-    const wayland_backend_option = b.option(WaylandBackend, "wayland_backend", "Which Wayland backend to use by default") orelse .libwayland; // Linux
+    const wayland_backend_option = b.option(WaylandBackend, "wayland_backend", "Which Wayland backend to use by default") orelse .libwaylandclient; // Linux
     const x_backend_option = b.option(XBackend, "x_backend", "Which X backend to use by default") orelse @as(XBackend, if (opengl_option) .xlib else .xcb); // Linux
     const glfw_option = b.option(bool, "glfw", "Allow usage of glfw backend") orelse false;
 
@@ -55,7 +55,7 @@ pub fn build(b: *std.Build) void {
         else => {
             switch (wayland_backend_option) {
                 .none => {},
-                .libwayland => addWayland(b, mod, target, optimize),
+                .libwaylandclient => addWayland(b, mod, target, optimize),
             }
 
             switch (x_backend_option) {
@@ -169,6 +169,8 @@ pub fn addWayland(b: *std.Build, mod: *std.Build.Module, target: std.Build.Resol
     scanner.addCustomProtocol(wayland_protocols.path("unstable/xdg-decoration/xdg-decoration-unstable-v1.xml"));
     scanner.addCustomProtocol(wayland_protocols.path("staging/cursor-shape/cursor-shape-v1.xml"));
     scanner.addCustomProtocol(wayland_protocols.path("unstable/tablet/tablet-unstable-v2.xml"));
+    scanner.addCustomProtocol(wayland_protocols.path("unstable/pointer-constraints/pointer-constraints-unstable-v1.xml"));
+    scanner.addCustomProtocol(wayland_protocols.path("unstable/relative-pointer/relative-pointer-unstable-v1.xml"));
 
     scanner.generate("wl_compositor", 1);
     scanner.generate("wl_output", 4);
@@ -179,6 +181,8 @@ pub fn addWayland(b: *std.Build, mod: *std.Build.Module, target: std.Build.Resol
     scanner.generate("zxdg_decoration_manager_v1", 1);
     scanner.generate("wp_cursor_shape_manager_v1", 2);
     scanner.generate("zwp_tablet_manager_v2", 1);
+    scanner.generate("zwp_pointer_constraints_v1", 1);
+    scanner.generate("zwp_relative_pointer_manager_v1", 1);
 
     mod.addImport("wayland", wayland);
 }
