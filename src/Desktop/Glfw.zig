@@ -285,8 +285,14 @@ fn keyCallback(glfw_window: *glfw.GLFWwindow, key: c_int, scancode: c_int, actio
 
 fn mouseMotionCallback(glfw_window: *glfw.GLFWwindow, x: f64, y: f64) callconv(.c) void {
     const window: *Window = @ptrCast(@alignCast(glfw.glfwGetWindowUserPointer(glfw_window)));
+    const previous = window.interface.mouse_position;
     window.events.append(window.gpa, .{
-        .mouse_motion = .{ .x = x, .y = y },
+        .mouse_motion = .{
+            .x = x,
+            .y = y,
+            .dx = x - previous.x,
+            .dy = y - previous.y,
+        },
     }) catch |err| {
         window.err = err;
     };

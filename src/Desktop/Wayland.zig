@@ -665,7 +665,14 @@ fn pointerListener(pointer: *wl.Pointer, event: wl.Pointer.Event, io_manager: *I
         },
         .leave => {},
         .motion => |motion| {
-            const mouse_motion: DesktopWindow.Event.MouseMotion = .{ .x = motion.surface_x.toDouble(), .y = motion.surface_y.toDouble() };
+            const previous = window.interface.mouse_position;
+
+            const mouse_motion: DesktopWindow.Event.MouseMotion = .{
+                .x = motion.surface_x.toDouble(),
+                .y = motion.surface_y.toDouble(),
+                .dx = motion.surface_x.toDouble() - previous.x,
+                .dy = motion.surface_y.toDouble() - previous.y,
+            };
             window.events.append(window.gpa, .{ .mouse_motion = mouse_motion }) catch |err| {
                 window.err = err;
             };
@@ -703,13 +710,11 @@ fn relativePointerListener(_: *zwp.RelativePointerV1, event: zwp.RelativePointer
             const mouse_motion: DesktopWindow.Event.MouseMotion = .{
                 .x = std.math.clamp(width / 2 + dx, 0, width),
                 .y = std.math.clamp(height / 2 + dy, 0, height),
+                .dx = dx,
+                .dy = dy,
             };
-            const relative_mouse_motion: DesktopWindow.Event.RelativeMouseMotion = .{ .dx = dx, .dy = dy };
 
-            window.events.appendSlice(window.gpa, &.{
-                .{ .mouse_motion = mouse_motion },
-                .{ .relative_mouse_motion = relative_mouse_motion },
-            }) catch |err| {
+            window.events.append(window.gpa, .{ .mouse_motion = mouse_motion }) catch |err| {
                 window.err = err;
             };
         },
@@ -797,9 +802,17 @@ fn dataDeviceListener(_: *wl.DataDevice, event: wl.DataDevice.Event, io_manager:
             };
         },
         .motion => |motion| {
-            const drag_motion: DesktopWindow.Event.MouseMotion = .{ .x = motion.x.toDouble(), .y = motion.y.toDouble() };
-
             const window = io_manager.current_window.load(.seq_cst) orelse return;
+
+            const previous = window.interface.mouse_position;
+
+            const drag_motion: DesktopWindow.Event.MouseMotion = .{
+                .x = motion.x.toDouble(),
+                .y = motion.y.toDouble(),
+                .dx = motion.x.toDouble() - previous.x,
+                .dy = motion.y.toDouble() - previous.y,
+            };
+
             window.events.append(window.gpa, .{ .drag_motion = drag_motion }) catch |err| {
                 window.err = err;
             };

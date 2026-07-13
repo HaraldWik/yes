@@ -358,6 +358,9 @@ fn windowPoll(userdata: ?*anyopaque, desktop_window: *DesktopWindow) anyerror!?D
             }
             return if (window.interface.surface_type != .opengl and window.interface.surface_type != .vulkan) .{ .resize = size } else null;
         },
+        xlib.MapNotify => {
+            try windowSetProperty(userdata, desktop_window, .{ .cursor_mode = window.interface.cursor_mode });
+        },
         xlib.Expose => if (window.interface.surface_type == .vulkan or window.interface.surface_type == .opengl)
             return .{ .resize = .{ .width = @intCast(event.xexpose.width), .height = @intCast(event.xexpose.height) } },
         xlib.ButtonPress, xlib.ButtonRelease => return switch (event.xbutton.button) {
@@ -378,9 +381,16 @@ fn windowPoll(userdata: ?*anyopaque, desktop_window: *DesktopWindow) anyerror!?D
             } },
         },
         xlib.MotionNotify => if (!self.extensions_info.xi_supported) {
+            const x: f64 = @floatFromInt(event.xmotion.x);
+            const y: f64 = @floatFromInt(event.xmotion.y);
+
+            const previous = window.interface.mouse_position;
+
             const mouse_motion: DesktopWindow.Event.MouseMotion = .{
-                .x = @floatFromInt(event.xmotion.x),
-                .y = @floatFromInt(event.xmotion.y),
+                .x = x,
+                .y = y,
+                .dx = x - previous.x,
+                .dy = y - previous.y,
             };
             if (mouse_motion.x != window.interface.mouse_position.x or mouse_motion.y != window.interface.mouse_position.y)
                 return .{ .mouse_motion = mouse_motion };
@@ -404,9 +414,13 @@ fn windowPoll(userdata: ?*anyopaque, desktop_window: *DesktopWindow) anyerror!?D
             // Xinput
             if (self.extensions_info.xi_supported and gevent.extension == @as(c_int, @intCast(self.extensions_info.xi_opcode))) switch (gevent.evtype) {
                 xlib.XI_Motion => {
+                    const previous = window.interface.mouse_position;
+
                     const mouse_motion: DesktopWindow.Event.MouseMotion = .{
                         .x = xiev.event_x,
                         .y = xiev.event_y,
+                        .dx = xiev.event_x - previous.x,
+                        .dy = xiev.event_y - previous.y,
                     };
                     if (mouse_motion.x != window.interface.mouse_position.x or mouse_motion.y != window.interface.mouse_position.y)
                         return .{ .mouse_motion = mouse_motion };
@@ -652,6 +666,20 @@ fn windowSetProperty(userdata: ?*anyopaque, desktop_window: *DesktopWindow, prop
                     window.handle,
                     xlib.None,
                     xlib.CurrentTime,
+                );
+
+                const size = window.interface.size;
+
+                _ = xlib.XWarpPointer(
+                    display,
+                    xlib.None,
+                    window.handle,
+                    0,
+                    0,
+                    0,
+                    0,
+                    @divTrunc(@as(c_int, @intCast(size.width)), 2),
+                    @divTrunc(@as(c_int, @intCast(size.height)), 2),
                 );
             },
             .locked => {

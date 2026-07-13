@@ -281,10 +281,21 @@ fn windowPoll(userdata: ?*anyopaque, desktop_window: *DesktopWindow) anyerror!?D
                 std.debug.panic("WM_WINDOWPOSCHANGED", .{});
             },
             // Mouse
-            win32.WM_MOUSEMOVE => event = .{ .mouse_motion = .{
-                .x = @floatFromInt(@as(u16, @truncate(@as(usize, @intCast(msg.lParam))))),
-                .y = @floatFromInt(@as(u16, @truncate(@as(usize, @intCast(msg.lParam >> 16))))),
-            } },
+            win32.WM_MOUSEMOVE => {
+                const x: f64 = @floatFromInt(@as(u16, @truncate(@as(usize, @intCast(msg.lParam)))));
+                const y: f64 = @floatFromInt(@as(u16, @truncate(@as(usize, @intCast(msg.lParam >> 16)))));
+
+                const previous = window.interface.mouse_position;
+
+                const mouse_motion: DesktopWindow.Event.MouseMotion = .{
+                    .x = x,
+                    .y = y,
+                    .dx = x - previous.x,
+                    .dy = y - previous.y,
+                };
+
+                event = .{ .mouse_motion = mouse_motion };
+            },
             win32.WM_MOUSEWHEEL, win32.WM_MOUSEHWHEEL => {
                 const delta: isize = @as(i16, @bitCast(@as(u16, @truncate(msg.wParam >> 16)))); // signed high word: up/right > 0, down/left < 0
                 const lines: isize = @divTrunc(delta, @as(isize, @intCast(win32.WHEEL_DELTA)));

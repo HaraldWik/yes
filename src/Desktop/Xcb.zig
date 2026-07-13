@@ -497,9 +497,19 @@ fn windowPoll(userdata: ?*anyopaque, desktop_window: *DesktopWindow) anyerror!?D
         xcb.XCB_MOTION_NOTIFY => {
             const event: *xcb.xcb_motion_notify_event_t = @ptrCast(generic_event);
             target_id = event.event;
-            const motion: DesktopWindow.Event.MouseMotion = .{ .x = @floatFromInt(event.event_x), .y = @floatFromInt(event.event_y) };
+            const x: f64 = @floatFromInt(event.event_x);
+            const y: f64 = @floatFromInt(event.event_y);
 
-            out_event = .{ .mouse_motion = motion };
+            const previous = window.interface.mouse_position;
+
+            const mouse_motion: DesktopWindow.Event.MouseMotion = .{
+                .x = x,
+                .y = y,
+                .dx = x - previous.x,
+                .dy = y - previous.y,
+            };
+
+            out_event = .{ .mouse_motion = mouse_motion };
         },
         xcb.XCB_BUTTON_PRESS, xcb.XCB_BUTTON_RELEASE => {
             const event: *xcb.xcb_button_press_event_t = @ptrCast(generic_event);

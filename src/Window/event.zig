@@ -15,8 +15,6 @@ pub const Event = union(enum) {
     mouse_scroll: MouseScroll,
     mouse_button: MouseButton,
 
-    relative_mouse_motion: RelativeMouseMotion,
-
     touch_down: Touch,
     touch_up: Touch,
     touch_motion: Touch,
@@ -344,8 +342,10 @@ pub const Event = union(enum) {
     };
 
     pub const MouseMotion = struct {
-        x: f64 = 0.0,
-        y: f64 = 0.0,
+        x: f64,
+        y: f64,
+        dx: f64,
+        dy: f64,
     };
 
     pub const MouseScroll = union(enum) {
@@ -402,11 +402,6 @@ pub const Event = union(enum) {
                 };
             }
         };
-    };
-
-    pub const RelativeMouseMotion = struct {
-        dx: f64 = 0.0,
-        dy: f64 = 0.0,
     };
 
     pub const Touch = struct {

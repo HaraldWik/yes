@@ -13,7 +13,7 @@ focused: bool = false,
 cursor_mode: Property.CursorMode = .normal,
 surface_type: SurfaceType = .empty,
 keyboard: Keyboard = .empty,
-mouse_position: Event.MouseMotion = .{},
+mouse_position: Event.MouseMotion = std.mem.zeroes(Event.MouseMotion),
 
 pub const Event = @import("Window/event.zig").Event;
 pub const Keyboard = @import("Window/Keyboard.zig");
