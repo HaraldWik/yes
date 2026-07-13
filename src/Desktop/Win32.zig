@@ -531,7 +531,7 @@ fn windowFramebuffer(userdata: ?*anyopaque, desktop_window: *DesktopWindow) anye
 
     std.log.info("no software rendering is currently not supported", .{});
 
-    return undefined;
+    unreachable;
 }
 fn windowOpenglMakeCurrent(userdata: ?*anyopaque, desktop_window: *DesktopWindow) anyerror!void {
     const self: *Win32 = @ptrCast(@alignCast(userdata.?));

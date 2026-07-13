@@ -63,6 +63,7 @@ pub const ExtensionsInfo = struct {
 };
 
 pub const CursorTable = struct {
+    invisible_cursor: xlib.Cursor,
     left_ptr: xlib.Cursor,
     xterm: xlib.Cursor,
     hand2: xlib.Cursor,
@@ -83,6 +84,7 @@ pub const CursorTable = struct {
 
     pub fn load(display: *xlib.Display) CursorTable {
         return .{
+            .invisible_cursor = createInvisibleCursor(display),
             .left_ptr = xlib.XCreateFontCursor(display, xlib.XC_left_ptr),
             .xterm = xlib.XCreateFontCursor(display, xlib.XC_xterm),
             .hand2 = xlib.XCreateFontCursor(display, xlib.XC_hand2),
@@ -444,13 +446,14 @@ fn windowSetProperty(userdata: ?*anyopaque, desktop_window: *DesktopWindow, prop
     const self: *Xlib = @ptrCast(@alignCast(userdata.?));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
 
-    const screen = xlib.XDefaultRootWindow(self.display);
+    const display = self.display;
+    const screen = xlib.XDefaultRootWindow(display);
 
     switch (property) {
         .title => |title| {
             // Set legacy WM_NAME for older clients
             _ = xlib.XChangeProperty(
-                self.display,
+                display,
                 window.handle,
                 xlib.XA_WM_NAME,
                 xlib.XA_STRING,
@@ -461,7 +464,7 @@ fn windowSetProperty(userdata: ?*anyopaque, desktop_window: *DesktopWindow, prop
             );
 
             _ = xlib.XChangeProperty(
-                self.display,
+                display,
                 window.handle,
                 self.atom_table.net_wm.name,
                 self.atom_table.utf8_string,
@@ -471,8 +474,8 @@ fn windowSetProperty(userdata: ?*anyopaque, desktop_window: *DesktopWindow, prop
                 @intCast(title.len),
             );
         },
-        .size => |size| _ = xlib.XResizeWindow(self.display, window.handle, size.width, size.height),
-        .position => |position| _ = xlib.XMoveWindow(self.display, window.handle, @intCast(position.x), @intCast(position.y)),
+        .size => |size| _ = xlib.XResizeWindow(display, window.handle, size.width, size.height),
+        .position => |position| _ = xlib.XMoveWindow(display, window.handle, @intCast(position.x), @intCast(position.y)),
         .resize_policy => |resize_policy| {
             var hints: xlib.XSizeHints = .{};
 
@@ -500,7 +503,7 @@ fn windowSetProperty(userdata: ?*anyopaque, desktop_window: *DesktopWindow, prop
                     }
                 },
             }
-            xlib.XSetWMNormalHints(self.display, window.handle, &hints);
+            xlib.XSetWMNormalHints(display, window.handle, &hints);
         },
         .mode => |mode| switch (mode) {
             .windowed => {
@@ -518,7 +521,7 @@ fn windowSetProperty(userdata: ?*anyopaque, desktop_window: *DesktopWindow, prop
                     self.atom_table.net_wm.state_maximized_vert,
                 );
 
-                _ = xlib.XMapWindow(self.display, window.handle);
+                _ = xlib.XMapWindow(display, window.handle);
             },
             .fullscreen => {
                 if (window.interface.mode == .maximized) self.setWmState(
@@ -550,11 +553,11 @@ fn windowSetProperty(userdata: ?*anyopaque, desktop_window: *DesktopWindow, prop
                     self.atom_table.net_wm.state_maximized_vert,
                 );
             },
-            .minimized => _ = xlib.XIconifyWindow(self.display, window.handle, @intCast(screen)),
+            .minimized => _ = xlib.XIconifyWindow(display, window.handle, @intCast(screen)),
         },
         .always_on_top => |always_on_top| self.setWmState(window.handle, @intFromBool(always_on_top), self.atom_table.net_wm.state_above, 0),
         .floating => |floating| _ = xlib.XChangeProperty(
-            self.display,
+            display,
             window.handle,
             self.atom_table.net_wm.window_type,
             xlib.XA_ATOM,
@@ -580,18 +583,18 @@ fn windowSetProperty(userdata: ?*anyopaque, desktop_window: *DesktopWindow, prop
                 .status = 0,
             };
 
-            _ = xlib.XChangeProperty(self.display, window.handle, self.atom_table.motif_wm.hints, self.atom_table.motif_wm.hints, 32, xlib.PropModeReplace, @ptrCast(&motif_hints), 5);
+            _ = xlib.XChangeProperty(display, window.handle, self.atom_table.motif_wm.hints, self.atom_table.motif_wm.hints, 32, xlib.PropModeReplace, @ptrCast(&motif_hints), 5);
         },
         .focused => |focus| {
             // Fallback (sometimes works)
-            _ = xlib.XSetInputFocus(self.display, window.handle, xlib.RevertToParent, xlib.CurrentTime);
+            _ = xlib.XSetInputFocus(display, window.handle, xlib.RevertToParent, xlib.CurrentTime);
 
             var event: xlib.XEvent = undefined;
             event.xclient = .{
                 .type = xlib.ClientMessage,
                 .serial = 0,
                 .send_event = xlib.True,
-                .display = self.display,
+                .display = display,
                 .window = window.handle,
                 .message_type = self.atom_table.net.active_window,
                 .format = 32,
@@ -606,10 +609,73 @@ fn windowSetProperty(userdata: ?*anyopaque, desktop_window: *DesktopWindow, prop
                 },
             };
 
-            _ = xlib.XSendEvent(self.display, screen, xlib.False, xlib.SubstructureRedirectMask | xlib.SubstructureNotifyMask, &event);
+            _ = xlib.XSendEvent(display, screen, xlib.False, xlib.SubstructureRedirectMask | xlib.SubstructureNotifyMask, &event);
         },
-        .cursor => |cursor| _ = xlib.XDefineCursor(self.display, window.handle, self.cursor_table.get(cursor)),
-        .cursor_mode => {}, // TODO: add confine_pointer to xlib
+        .cursor => |cursor| _ = xlib.XDefineCursor(display, window.handle, self.cursor_table.get(cursor)),
+        .cursor_mode => |mode| switch (mode) {
+            .normal => {
+                _ = xlib.XUngrabPointer(display, xlib.CurrentTime);
+                _ = xlib.XUndefineCursor(display, window.handle);
+            },
+            .hidden => {
+                _ = xlib.XDefineCursor(display, window.handle, self.cursor_table.invisible_cursor);
+            },
+            .confined => {
+                _ = xlib.XGrabPointer(
+                    display,
+                    window.handle,
+                    xlib.True,
+                    xlib.PointerMotionMask |
+                        xlib.ButtonPressMask |
+                        xlib.ButtonReleaseMask,
+                    xlib.GrabModeAsync,
+                    xlib.GrabModeAsync,
+                    window.handle,
+                    xlib.None,
+                    xlib.CurrentTime,
+                );
+
+                _ = xlib.XUndefineCursor(display, window.handle);
+            },
+            .captured => {
+                _ = xlib.XDefineCursor(display, window.handle, self.cursor_table.invisible_cursor);
+
+                _ = xlib.XGrabPointer(
+                    display,
+                    window.handle,
+                    xlib.True,
+                    xlib.PointerMotionMask |
+                        xlib.ButtonPressMask |
+                        xlib.ButtonReleaseMask,
+                    xlib.GrabModeAsync,
+                    xlib.GrabModeAsync,
+                    window.handle,
+                    xlib.None,
+                    xlib.CurrentTime,
+                );
+            },
+            .locked => {
+                _ = xlib.XDefineCursor(display, window.handle, self.cursor_table.invisible_cursor);
+
+                _ = xlib.XGrabPointer(
+                    display,
+                    window.handle,
+                    xlib.True,
+                    xlib.PointerMotionMask |
+                        xlib.ButtonPressMask |
+                        xlib.ButtonReleaseMask,
+                    xlib.GrabModeAsync,
+                    xlib.GrabModeAsync,
+                    window.handle,
+                    xlib.None,
+                    xlib.CurrentTime,
+                );
+
+                // XI2 raw motion should already be registered.
+                // Do not call XISelectEvents here every time.
+
+            },
+        },
     }
     _ = xlib.XFlush(self.display);
 }
@@ -694,4 +760,39 @@ fn setWmState(self: *Xlib, window: xlib.Window, action: u32, state1: xlib.Atom, 
     };
 
     _ = xlib.XSendEvent(self.display, screen, xlib.False, xlib.SubstructureRedirectMask | xlib.SubstructureNotifyMask, &event);
+}
+
+fn createInvisibleCursor(display: *xlib.Display) xlib.Cursor {
+    var color = xlib.XColor{
+        .pixel = 0,
+        .red = 0,
+        .green = 0,
+        .blue = 0,
+        .flags = 0,
+        .pad = 0,
+    };
+
+    const root: xlib.Drawable = @intCast(xlib.XDefaultRootWindow(display));
+
+    const data = [_]u8{0};
+
+    const bitmap = xlib.XCreateBitmapFromData(
+        display,
+        root,
+        @ptrCast(&data),
+        1,
+        1,
+    );
+
+    defer _ = xlib.XFreePixmap(display, bitmap);
+
+    return xlib.XCreatePixmapCursor(
+        display,
+        bitmap,
+        bitmap,
+        &color,
+        &color,
+        0,
+        0,
+    );
 }
