@@ -144,6 +144,9 @@ fn windowSetProperty(context: *anyopaque, platform_window: *PlatformWindow, prop
             };
             glfw.glfwSetInputMode(window.handle, glfw.GLFW_CURSOR, cursor_mode);
         },
+        .cursor_capture => |cursor_capture| {
+            glfw.glfwSetInputMode(window.handle, glfw.GLFW_CURSOR, if (cursor_capture) glfw.GLFW_CURSOR_DISABLED else glfw.GLFW_CURSOR_NORMAL);
+        },
     }
 }
 fn windowNative(context: *anyopaque, platform_window: *PlatformWindow) PlatformWindow.Native {

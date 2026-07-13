@@ -398,6 +398,7 @@ fn windowSetProperty(context: *anyopaque, platform_window: *PlatformWindow, prop
             const shape: wp.CursorShapeDeviceV1.Shape = @enumFromInt(@intFromEnum(cursor));
             wp_cursor_shape_device.setShape(0, shape);
         },
+        .cursor_capture => {},
     }
 }
 fn windowNative(context: *anyopaque, platform_window: *PlatformWindow) PlatformWindow.Native {

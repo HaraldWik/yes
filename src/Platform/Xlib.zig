@@ -318,6 +318,7 @@ fn windowClose(context: *anyopaque, platform_window: *PlatformWindow) void {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
 
+    if (window.interface.cursor_capture) setCursorCapture(self, window, false) catch {};
     if (window.glx_context) |glx_context| xlib.glXDestroyContext(self.display, @ptrCast(glx_context));
     _ = xlib.XDestroyWindow(self.display, window.handle);
     window.* = undefined;
@@ -625,10 +626,33 @@ fn windowSetProperty(context: *anyopaque, platform_window: *PlatformWindow, prop
         .cursor => |cursor| {
             _ = xlib.XDefineCursor(self.display, window.handle, self.cursor_table.get(cursor));
         },
+        .cursor_capture => |cursor_capture| try setCursorCapture(self, window, cursor_capture),
     }
 
     _ = xlib.XFlush(self.display);
 }
+
+fn setCursorCapture(self: *@This(), window: *Window, cursor_capture: bool) !void {
+    if (cursor_capture) {
+        const event_mask = xlib.ButtonPressMask | xlib.ButtonReleaseMask | xlib.PointerMotionMask;
+        const status = xlib.XGrabPointer(
+            self.display,
+            window.handle,
+            xlib.True,
+            event_mask,
+            xlib.GrabModeAsync,
+            xlib.GrabModeAsync,
+            window.handle,
+            xlib.None,
+            xlib.CurrentTime,
+        );
+        if (status != xlib.GrabSuccess) return error.GrabPointer;
+        return;
+    }
+
+    _ = xlib.XUngrabPointer(self.display, xlib.CurrentTime);
+}
+
 fn windowNative(context: *anyopaque, platform_window: *PlatformWindow) PlatformWindow.Native {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));

@@ -37,6 +37,8 @@ pub const Window = struct {
     size_data: SizeData = undefined,
 
     cursor: std.os.windows.HCURSOR = undefined,
+    cursor_capture: bool = false,
+    cursor_hidden: bool = false,
 
     pub const Surface = union(enum) {
         empty: void,
@@ -216,6 +218,8 @@ fn windowClose(context: *anyopaque, platform_window: *PlatformWindow) void {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));
 
+    if (window.cursor_capture) setCursorCapture(window, false) catch {};
+
     if (window.surface == .opengl) {
         _ = win32.wglDeleteContext(@ptrCast(window.surface.opengl.render_context));
         _ = win32.ReleaseDC(@ptrCast(window.hwnd), @ptrCast(window.surface.opengl.device_context));
@@ -313,6 +317,10 @@ fn windowPoll(context: *anyopaque, platform_window: *PlatformWindow) anyerror!?P
             } };
         },
         win32.WM_SETCURSOR => {
+            if (window.interface.cursor_capture) {
+                _ = win32.SetCursor(null);
+                return windowPoll(context, platform_window);
+            }
             _ = win32.SetCursor(@ptrCast(window.cursor));
             return windowPoll(context, platform_window);
         },
@@ -430,8 +438,57 @@ fn windowSetProperty(context: *anyopaque, platform_window: *PlatformWindow, prop
             //.move = @ptrCast(win32.LoadCursorW(instance, win32.IDC_SIZEALL)),
             //.grabbing = @ptrCast(win32.LoadCursorW(instance, win32.IDC_HAND)), // fallback
         },
+        .cursor_capture => |cursor_capture| try setCursorCapture(window, cursor_capture),
     }
 }
+
+fn setCursorCapture(window: *Window, cursor_capture: bool) !void {
+    if (cursor_capture) {
+        try clipCursorToWindow(window);
+        if (!window.cursor_capture) _ = win32.SetCapture(@ptrCast(window.hwnd));
+        window.cursor_capture = true;
+        setCursorVisible(window, false);
+        return;
+    }
+
+    if (window.cursor_capture) {
+        _ = win32.ReleaseCapture();
+        _ = win32.ClipCursor(null);
+        window.cursor_capture = false;
+    }
+    setCursorVisible(window, true);
+}
+
+fn clipCursorToWindow(window: *Window) !void {
+    const hwnd: win32.HWND = @ptrCast(window.hwnd);
+    var client_rect: win32.RECT = undefined;
+    if (win32.GetClientRect(hwnd, &client_rect) == 0) return error.GetClientRect;
+
+    var top_left: win32.POINT = .{ .x = client_rect.left, .y = client_rect.top };
+    var bottom_right: win32.POINT = .{ .x = client_rect.right, .y = client_rect.bottom };
+    if (win32.ClientToScreen(hwnd, &top_left) == 0) return error.ClientToScreen;
+    if (win32.ClientToScreen(hwnd, &bottom_right) == 0) return error.ClientToScreen;
+
+    const clip_rect: win32.RECT = .{
+        .left = top_left.x,
+        .top = top_left.y,
+        .right = bottom_right.x,
+        .bottom = bottom_right.y,
+    };
+    if (win32.ClipCursor(&clip_rect) == 0) return error.ClipCursor;
+}
+
+fn setCursorVisible(window: *Window, visible: bool) void {
+    if (window.cursor_hidden == !visible) return;
+    if (visible) {
+        while (win32.ShowCursor(1) < 0) {}
+        window.cursor_hidden = false;
+    } else {
+        while (win32.ShowCursor(0) >= 0) {}
+        window.cursor_hidden = true;
+    }
+}
+
 fn windowNative(context: *anyopaque, platform_window: *PlatformWindow) PlatformWindow.Native {
     const self: *@This() = @ptrCast(@alignCast(context));
     const window: *Window = @alignCast(@fieldParentPtr("interface", platform_window));

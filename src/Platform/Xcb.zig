@@ -721,6 +721,7 @@ fn windowSetProperty(context: *anyopaque, platform_window: *PlatformWindow, prop
             _ = xcb.xcb_send_event(self.connection, 0, self.screen.root, xcb.XCB_EVENT_MASK_SUBSTRUCTURE_REDIRECT | xcb.XCB_EVENT_MASK_SUBSTRUCTURE_NOTIFY, @ptrCast(&event));
         },
         .cursor => {},
+        .cursor_capture => {},
     }
     _ = xcb.xcb_flush(self.connection);
 }

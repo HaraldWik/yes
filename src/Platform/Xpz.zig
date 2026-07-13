@@ -214,6 +214,7 @@ fn windowSetProperty(context: *anyopaque, platform_window: *PlatformWindow, prop
         .decorated => {},
         .focused => {},
         .cursor => {},
+        .cursor_capture => {},
     }
 }
 fn windowNative(context: *anyopaque, platform_window: *PlatformWindow) PlatformWindow.Native {

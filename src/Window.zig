@@ -8,6 +8,7 @@ const Window = @This();
 size: Size = .{},
 position: Position = .{},
 focused: bool = false,
+cursor_capture: bool = false,
 surface_type: SurfaceType = .empty,
 keyboard: Keyboard = .empty,
 mouse_position: Event.MouseMotion = .{},
@@ -186,6 +187,7 @@ pub const Property = union(enum) {
     floating: bool,
     decorated: bool,
     cursor: Cursor,
+    cursor_capture: bool,
 };
 
 pub const OpenOptions = struct {
@@ -200,6 +202,7 @@ pub const OpenOptions = struct {
     always_on_top: bool = false,
     floating: ?bool = null,
     decorated: bool = true,
+    cursor_capture: bool = false,
     surface_type: SurfaceType = .empty,
 };
 
@@ -212,7 +215,9 @@ pub fn open(window: *Window, platform: Platform, options: OpenOptions) anyerror!
     window.position = options.position orelse .{};
     window.surface_type = options.surface_type;
     window.focused = options.focused;
+    window.cursor_capture = false;
     try platform.vtable.windowOpen(platform.ptr, window, options);
+    if (options.cursor_capture) try window.setCursorCapture(platform, true);
 }
 pub fn close(window: *Window, platform: Platform) void {
     platform.vtable.windowClose(platform.ptr, window);
@@ -237,7 +242,13 @@ pub fn poll(window: *Window, platform: Platform) anyerror!?Event {
 }
 
 pub fn setProperties(window: *Window, platform: Platform, properties: []const Property) anyerror!void {
-    for (properties) |property| try platform.vtable.windowSetProperty(platform.ptr, window, property);
+    for (properties) |property| {
+        try platform.vtable.windowSetProperty(platform.ptr, window, property);
+        switch (property) {
+            .cursor_capture => |cursor_capture| window.cursor_capture = cursor_capture,
+            else => {},
+        }
+    }
 }
 
 pub fn native(window: *Window, platform: Platform) Native {
@@ -279,6 +290,9 @@ pub fn setDecorated(window: *Window, platform: Platform, decorated: bool) anyerr
 }
 pub fn setCursor(window: *Window, platform: Platform, cursor: Cursor) anyerror!void {
     try platform.vtable.windowSetProperty(platform.ptr, window, .{ .cursor = cursor });
+}
+pub fn setCursorCapture(window: *Window, platform: Platform, cursor_capture: bool) anyerror!void {
+    try window.setProperties(platform, &.{.{ .cursor_capture = cursor_capture }});
 }
 
 /// Returns a pointer to the current framebuffer for the given window.
