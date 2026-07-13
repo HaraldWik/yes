@@ -130,6 +130,15 @@ fn windowOpen(userdata: ?*anyopaque, desktop_window: *DesktopWindow, options: De
 
     self.gpa.free(title);
 
+    var device = win32.RAWINPUTDEVICE{
+        .usUsagePage = 0x01,
+        .usUsage = 0x02,
+        .dwFlags = .{},
+        .hwndTarget = @ptrCast(window.hwnd),
+    };
+
+    _ = win32.RegisterRawInputDevices(@ptrCast(&device), 1, @sizeOf(win32.RAWINPUTDEVICE));
+
     switch (options.surface_type) {
         .empty => {},
         .framebuffer => {},
@@ -226,111 +235,153 @@ fn windowPoll(userdata: ?*anyopaque, desktop_window: *DesktopWindow) anyerror!?D
 
     _ = self;
 
-    var msg: win32.MSG = undefined;
-    if (win32.PeekMessageW(&msg, @ptrCast(window.hwnd), 0, 0, .{ .REMOVE = 1 }) == 0) return null;
-    _ = win32.TranslateMessage(&msg);
-    _ = win32.DispatchMessageW(&msg);
+    var event: ?DesktopWindow.Event = null;
 
-    return switch (msg.message) {
-        win32.WM_USER + win32.WM_GETMINMAXINFO => {
-            var mmi: *win32.MINMAXINFO = @ptrFromInt(@as(usize, @intCast(msg.lParam)));
+    while (event == null) {
+        var msg: win32.MSG = undefined;
+        if (win32.PeekMessageW(&msg, @ptrCast(window.hwnd), 0, 0, .{ .REMOVE = 1 }) == 0) return null;
+        _ = win32.TranslateMessage(&msg);
+        _ = win32.DispatchMessageW(&msg);
 
-            const max_size: ?DesktopWindow.Size, const min_size: ?DesktopWindow.Size = switch (window.size_data.resize_policy) {
-                .resizable => |resizable| if (resizable) return null else .{ window.interface.size, window.interface.size },
-                .specified => |specified| .{ specified.max_size, specified.min_size },
-            };
+        switch (msg.message) {
+            win32.WM_USER + win32.WM_GETMINMAXINFO => {
+                var mmi: *win32.MINMAXINFO = @ptrFromInt(@as(usize, @intCast(msg.lParam)));
 
-            if (max_size) |size| {
-                mmi.ptMaxTrackSize.x = @intCast(size.width); // maximum width
-                mmi.ptMaxTrackSize.y = @intCast(size.height); // maximum height
-            }
-            if (min_size) |size| {
-                mmi.ptMinTrackSize.x = @intCast(size.width); // minimum width
-                mmi.ptMinTrackSize.y = @intCast(size.height); // minimum height
-            }
+                const max_size: ?DesktopWindow.Size, const min_size: ?DesktopWindow.Size = switch (window.size_data.resize_policy) {
+                    .resizable => |resizable| if (resizable) continue else .{ window.interface.size, window.interface.size },
+                    .specified => |specified| .{ specified.max_size, specified.min_size },
+                };
 
-            _ = win32.DefWindowProcW(@ptrCast(window.hwnd), win32.WM_GETMINMAXINFO, msg.wParam, msg.lParam);
-
-            return null;
-        },
-        win32.WM_USER + win32.WM_CLOSE => .close,
-        win32.WM_USER + win32.WM_SETFOCUS => .{ .focus = true },
-        win32.WM_USER + win32.WM_KILLFOCUS => .{ .focus = false },
-        win32.WM_USER + win32.WM_SIZE => .{ .resize = .{
-            .width = @intCast(@as(u16, @truncate(@as(u32, @intCast(msg.lParam))))),
-            .height = @intCast(@as(u16, @truncate(@as(u32, @intCast(msg.lParam >> 16))))),
-        } },
-        win32.WM_USER + win32.WM_MOVE => .{ .move = .{
-            .x = @intCast(@as(u16, @truncate(std.math.cast(u32, msg.lParam) orelse return null))),
-            .y = @intCast(@as(u16, @truncate(std.math.cast(u32, msg.lParam >> 16) orelse return null))),
-        } },
-        win32.WM_WINDOWPOSCHANGED => {
-            std.debug.panic("WM_WINDOWPOSCHANGED", .{});
-            return null;
-        },
-        // Mouse
-        win32.WM_MOUSEMOVE => .{ .mouse_motion = .{
-            .x = @floatFromInt(@as(u16, @truncate(@as(usize, @intCast(msg.lParam))))),
-            .y = @floatFromInt(@as(u16, @truncate(@as(usize, @intCast(msg.lParam >> 16))))),
-        } },
-        win32.WM_MOUSEWHEEL, win32.WM_MOUSEHWHEEL => {
-            const delta: isize = @as(i16, @bitCast(@as(u16, @truncate(msg.wParam >> 16)))); // signed high word: up/right > 0, down/left < 0
-            const lines: isize = @divTrunc(delta, @as(isize, @intCast(win32.WHEEL_DELTA)));
-            return .{
-                .mouse_scroll = switch (msg.message) {
-                    win32.WM_MOUSEWHEEL => .{ .vertical = @floatFromInt(lines) },
-                    win32.WM_MOUSEHWHEEL => .{ .horizontal = @floatFromInt(lines) },
-                    else => unreachable,
-                },
-            };
-        },
-        win32.WM_RBUTTONDOWN, win32.WM_MBUTTONDOWN, win32.WM_LBUTTONDOWN, win32.WM_XBUTTONDOWN, win32.WM_RBUTTONUP, win32.WM_MBUTTONUP, win32.WM_LBUTTONUP, win32.WM_XBUTTONUP => |button| .{
-            .mouse_button = .{
-                .state = switch (msg.message) {
-                    win32.WM_RBUTTONDOWN, win32.WM_MBUTTONDOWN, win32.WM_LBUTTONDOWN, win32.WM_XBUTTONDOWN => .pressed,
-                    win32.WM_RBUTTONUP, win32.WM_MBUTTONUP, win32.WM_LBUTTONUP, win32.WM_XBUTTONUP => .released,
-                    else => unreachable,
-                },
-                .button = DesktopWindow.Event.MouseButton.Button.fromWin32(button, msg.wParam) orelse return null,
-            },
-        },
-
-        // Key
-        win32.WM_KEYDOWN, win32.WM_KEYUP => {
-            const sym = DesktopWindow.Event.Key.Sym.fromWin32(std.enums.fromInt(win32.VIRTUAL_KEY, msg.wParam).?, msg.lParam) orelse return null;
-            return .{ .key = .{
-                .state = switch (msg.message) {
-                    win32.WM_KEYDOWN => .pressed,
-                    win32.WM_KEYUP => .released,
-                    else => unreachable,
-                },
-                .code = @intCast((msg.lParam >> @intCast(16)) & 0xFF),
-                .sym = sym,
-            } };
-        },
-        win32.WM_SETCURSOR => {
-            _ = win32.SetCursor(@ptrCast(window.cursor));
-            return windowPoll(userdata, desktop_window);
-        },
-        win32.WM_TOUCH => touch: {
-            const c_inputs = win32.zig.loword(msg.wParam);
-            var inputs: [10]win32.TOUCHINPUT = @splat(std.mem.zeroes(win32.TOUCHINPUT));
-            if (win32.GetTouchInputInfo(@ptrFromInt(@as(usize, @intCast(msg.lParam))), c_inputs, &inputs, @sizeOf(win32.TOUCHINPUT)) == 1) {
-                defer _ = win32.CloseTouchInputHandle(@ptrFromInt(@as(usize, @intCast(msg.lParam))));
-                for (&inputs, 0..) |*input, i| {
-                    const x = @as(f64, @floatFromInt(input.x)) / 100;
-                    const y = @as(f64, @floatFromInt(input.y)) / 100;
-                    const touch: DesktopWindow.Event.Touch = .{ .id = @intCast(i), .x = x, .y = y };
-
-                    if (input.dwFlags.DOWN == 1) break :touch .{ .touch_down = touch };
-                    if (input.dwFlags.UP == 1) break :touch .{ .touch_up = touch };
-                    if (input.dwFlags.MOVE == 1) break :touch .{ .touch_motion = touch };
+                if (max_size) |size| {
+                    mmi.ptMaxTrackSize.x = @intCast(size.width); // maximum width
+                    mmi.ptMaxTrackSize.y = @intCast(size.height); // maximum height
                 }
-            }
-            break :touch null;
-        },
-        else => windowPoll(userdata, desktop_window),
-    };
+                if (min_size) |size| {
+                    mmi.ptMinTrackSize.x = @intCast(size.width); // minimum width
+                    mmi.ptMinTrackSize.y = @intCast(size.height); // minimum height
+                }
+
+                _ = win32.DefWindowProcW(@ptrCast(window.hwnd), win32.WM_GETMINMAXINFO, msg.wParam, msg.lParam);
+            },
+            win32.WM_USER + win32.WM_CLOSE => event = .close,
+            win32.WM_USER + win32.WM_SETFOCUS => {
+                try windowSetProperty(userdata, desktop_window, .{ .cursor_mode = window.interface.cursor_mode });
+                event = .{ .focus = true };
+            },
+            win32.WM_USER + win32.WM_KILLFOCUS => event = .{ .focus = false },
+            win32.WM_USER + win32.WM_SIZE => event = .{ .resize = .{
+                .width = @intCast(@as(u16, @truncate(@as(u32, @intCast(msg.lParam))))),
+                .height = @intCast(@as(u16, @truncate(@as(u32, @intCast(msg.lParam >> 16))))),
+            } },
+            win32.WM_USER + win32.WM_MOVE => event = .{ .move = .{
+                .x = @intCast(@as(u16, @truncate(std.math.cast(u32, msg.lParam) orelse continue))),
+                .y = @intCast(@as(u16, @truncate(std.math.cast(u32, msg.lParam >> 16) orelse continue))),
+            } },
+            win32.WM_WINDOWPOSCHANGED => {
+                std.debug.panic("WM_WINDOWPOSCHANGED", .{});
+            },
+            // Mouse
+            win32.WM_MOUSEMOVE => event = .{ .mouse_motion = .{
+                .x = @floatFromInt(@as(u16, @truncate(@as(usize, @intCast(msg.lParam))))),
+                .y = @floatFromInt(@as(u16, @truncate(@as(usize, @intCast(msg.lParam >> 16))))),
+            } },
+            win32.WM_MOUSEWHEEL, win32.WM_MOUSEHWHEEL => {
+                const delta: isize = @as(i16, @bitCast(@as(u16, @truncate(msg.wParam >> 16)))); // signed high word: up/right > 0, down/left < 0
+                const lines: isize = @divTrunc(delta, @as(isize, @intCast(win32.WHEEL_DELTA)));
+                event = .{
+                    .mouse_scroll = switch (msg.message) {
+                        win32.WM_MOUSEWHEEL => .{ .vertical = @floatFromInt(lines) },
+                        win32.WM_MOUSEHWHEEL => .{ .horizontal = @floatFromInt(lines) },
+                        else => unreachable,
+                    },
+                };
+            },
+            win32.WM_RBUTTONDOWN, win32.WM_MBUTTONDOWN, win32.WM_LBUTTONDOWN, win32.WM_XBUTTONDOWN, win32.WM_RBUTTONUP, win32.WM_MBUTTONUP, win32.WM_LBUTTONUP, win32.WM_XBUTTONUP => |button| event = .{
+                .mouse_button = .{
+                    .state = switch (msg.message) {
+                        win32.WM_RBUTTONDOWN, win32.WM_MBUTTONDOWN, win32.WM_LBUTTONDOWN, win32.WM_XBUTTONDOWN => .pressed,
+                        win32.WM_RBUTTONUP, win32.WM_MBUTTONUP, win32.WM_LBUTTONUP, win32.WM_XBUTTONUP => .released,
+                        else => unreachable,
+                    },
+                    .button = DesktopWindow.Event.MouseButton.Button.fromWin32(button, msg.wParam) orelse continue,
+                },
+            },
+            win32.WM_INPUT => {
+                if (window.interface.cursor_mode != .captured and
+                    window.interface.cursor_mode != .locked)
+                    continue;
+
+                var size: u32 = 0;
+
+                // Get required buffer size
+                _ = win32.GetRawInputData(
+                    @ptrFromInt(@as(usize, @bitCast(msg.lParam))),
+                    win32.RID_INPUT,
+                    null,
+                    &size,
+                    @sizeOf(win32.RAWINPUTHEADER),
+                );
+
+                var buffer: [1024]u8 align(@alignOf(win32.RAWINPUT)) = undefined;
+
+                const result = win32.GetRawInputData(
+                    @ptrFromInt(@as(usize, @bitCast(msg.lParam))),
+                    win32.RID_INPUT,
+                    &buffer,
+                    &size,
+                    @sizeOf(win32.RAWINPUTHEADER),
+                );
+
+                if (result == -1) continue;
+
+                const raw: *win32.RAWINPUT = @ptrCast(&buffer);
+
+                if (raw.header.dwType != @as(u32, @intFromEnum(win32.RIM_TYPEMOUSE))) continue;
+
+                const mouse = raw.data.mouse;
+
+                const dx = mouse.lLastX;
+                const dy = mouse.lLastY;
+
+                event = .{ .relative_mouse_motion = .{ .dx = @floatFromInt(dx), .dy = @floatFromInt(dy) } };
+            },
+            win32.WM_SETCURSOR => _ = win32.SetCursor(@ptrCast(window.cursor)),
+
+            // Key
+            win32.WM_KEYDOWN, win32.WM_KEYUP => {
+                const sym = DesktopWindow.Event.Key.Sym.fromWin32(std.enums.fromInt(win32.VIRTUAL_KEY, msg.wParam).?, msg.lParam) orelse continue;
+                event = .{ .key = .{
+                    .state = switch (msg.message) {
+                        win32.WM_KEYDOWN => .pressed,
+                        win32.WM_KEYUP => .released,
+                        else => unreachable,
+                    },
+                    .code = @intCast((msg.lParam >> @intCast(16)) & 0xFF),
+                    .sym = sym,
+                } };
+            },
+            win32.WM_TOUCH => event = touch: {
+                const c_inputs = win32.zig.loword(msg.wParam);
+                var inputs: [10]win32.TOUCHINPUT = @splat(std.mem.zeroes(win32.TOUCHINPUT));
+                if (win32.GetTouchInputInfo(@ptrFromInt(@as(usize, @intCast(msg.lParam))), c_inputs, &inputs, @sizeOf(win32.TOUCHINPUT)) == 1) {
+                    defer _ = win32.CloseTouchInputHandle(@ptrFromInt(@as(usize, @intCast(msg.lParam))));
+                    for (&inputs, 0..) |*input, i| {
+                        const x = @as(f64, @floatFromInt(input.x)) / 100;
+                        const y = @as(f64, @floatFromInt(input.y)) / 100;
+                        const touch: DesktopWindow.Event.Touch = .{ .id = @intCast(i), .x = x, .y = y };
+
+                        if (input.dwFlags.DOWN == 1) break :touch .{ .touch_down = touch };
+                        if (input.dwFlags.UP == 1) break :touch .{ .touch_up = touch };
+                        if (input.dwFlags.MOVE == 1) break :touch .{ .touch_motion = touch };
+                    }
+                }
+                break :touch null;
+            },
+            else => {},
+        }
+    }
+
+    return event;
 }
 fn windowSetProperty(userdata: ?*anyopaque, desktop_window: *DesktopWindow, property: DesktopWindow.Property) anyerror!void {
     const self: *Win32 = @ptrCast(@alignCast(userdata.?));
@@ -433,7 +484,34 @@ fn windowSetProperty(userdata: ?*anyopaque, desktop_window: *DesktopWindow, prop
             //.move = @ptrCast(win32.LoadCursorW(instance, win32.IDC_SIZEALL)),
             //.grabbing = @ptrCast(win32.LoadCursorW(instance, win32.IDC_HAND)), // fallback
         },
-        .cursor_mode => {},
+        .cursor_mode => |mode| switch (mode) {
+            .normal => {
+                while (win32.ShowCursor(win32.TRUE) < 0) {}
+                _ = win32.ClipCursor(null);
+            },
+            .hidden => {
+                while (win32.ShowCursor(win32.FALSE) >= 0) {}
+                _ = win32.ClipCursor(null);
+            },
+            .confined => {
+                while (win32.ShowCursor(win32.TRUE) < 0) {}
+
+                const rect = getClientScreenRect(@ptrCast(window.hwnd));
+                _ = win32.ClipCursor(&rect);
+            },
+            .captured => {
+                while (win32.ShowCursor(win32.FALSE) >= 0) {}
+
+                const rect = getClientScreenRect(@ptrCast(window.hwnd));
+                _ = win32.ClipCursor(&rect);
+            },
+            .locked => {
+                while (win32.ShowCursor(win32.FALSE) >= 0) {}
+
+                const rect = getClientScreenRect(@ptrCast(window.hwnd));
+                _ = win32.ClipCursor(&rect);
+            },
+        },
     }
 }
 fn windowNative(userdata: ?*anyopaque, desktop_window: *DesktopWindow) DesktopWindow.Native {
@@ -510,6 +588,24 @@ fn wndProc(hwnd: win32.HWND, msg: u32, wParam: usize, lParam: isize) callconv(.w
             return 0;
         },
         else => win32.DefWindowProcW(hwnd, msg, wParam, lParam),
+    };
+}
+
+fn getClientScreenRect(hwnd: win32.HWND) win32.RECT {
+    var rect: win32.RECT = undefined;
+    _ = win32.GetClientRect(hwnd, &rect);
+
+    var min = win32.POINT{ .x = rect.left, .y = rect.top };
+    var max = win32.POINT{ .x = rect.right, .y = rect.bottom };
+
+    _ = win32.ClientToScreen(hwnd, &min);
+    _ = win32.ClientToScreen(hwnd, &max);
+
+    return .{
+        .left = min.x,
+        .top = min.y,
+        .right = max.x,
+        .bottom = max.y,
     };
 }
 
