@@ -351,10 +351,15 @@ fn windowPoll(userdata: ?*anyopaque, desktop_window: *DesktopWindow) anyerror!?D
 
                 const mouse = raw.data.mouse;
 
-                const dx = mouse.lLastX;
-                const dy = mouse.lLastY;
+                const dx: f64 = @floatFromInt(mouse.lLastX);
+                const dy: f64 = @floatFromInt(mouse.lLastY);
 
-                event = .{ .relative_mouse_motion = .{ .dx = @floatFromInt(dx), .dy = @floatFromInt(dy) } };
+                event = .{ .mouse_motion = .{
+                    .x = @as(f64, @floatFromInt(window.interface.size.width)) - dx,
+                    .y = @as(f64, @floatFromInt(window.interface.size.height)) - dx,
+                    .dx = dx,
+                    .dy = dy,
+                } };
             },
             win32.WM_SETCURSOR => _ = win32.SetCursor(@ptrCast(window.cursor)),
 

@@ -824,3 +824,20 @@ fn createInvisibleCursor(display: *xlib.Display) xlib.Cursor {
         0,
     );
 }
+
+pub const Item = struct {
+    name: @EnumLiteral() = .hello,
+    health: u8 = 0,
+    damage: u8 = 0,
+};
+
+pub const items: []const Item = &.{
+    .{
+        .name = .hello2,
+        .health = 90,
+    },
+};
+
+comptime {
+    _ = items;
+}
