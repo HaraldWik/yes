@@ -282,6 +282,10 @@ fn windowPoll(userdata: ?*anyopaque, desktop_window: *DesktopWindow) anyerror!?D
             },
             // Mouse
             win32.WM_MOUSEMOVE => {
+                if (window.interface.cursor_mode == .captured or
+                    window.interface.cursor_mode == .locked)
+                    continue;
+
                 const x: f64 = @floatFromInt(@as(u16, @truncate(@as(usize, @intCast(msg.lParam)))));
                 const y: f64 = @floatFromInt(@as(u16, @truncate(@as(usize, @intCast(msg.lParam >> 16)))));
 
@@ -353,10 +357,11 @@ fn windowPoll(userdata: ?*anyopaque, desktop_window: *DesktopWindow) anyerror!?D
 
                 const dx: f64 = @floatFromInt(mouse.lLastX);
                 const dy: f64 = @floatFromInt(mouse.lLastY);
+                const previous = window.interface.mouse_position;
 
                 event = .{ .mouse_motion = .{
-                    .x = @as(f64, @floatFromInt(window.interface.size.width)) - dx,
-                    .y = @as(f64, @floatFromInt(window.interface.size.height)) - dx,
+                    .x = previous.x + dx,
+                    .y = previous.y + dy,
                     .dx = dx,
                     .dy = dy,
                 } };
