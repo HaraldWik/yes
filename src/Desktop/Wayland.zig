@@ -89,7 +89,7 @@ pub const Window = struct {
     relative_pointer: ?*zwp.RelativePointerV1 = null,
 
     // event_queue: *wl.EventQueue = undefined,
-    events: std.ArrayList(DesktopWindow.Event) = .empty,
+    events: std.Deque(DesktopWindow.Event) = .empty,
     running: bool = true,
     surface: Surface = .empty,
     cursor: DesktopWindow.Cursor = .default,
@@ -112,6 +112,17 @@ pub const Window = struct {
             pixels: [*]align(std.heap.page_size_min) u8,
         };
     };
+
+    fn addEvent(self: *Window, event: DesktopWindow.Event) void {
+        if (self.events.back()) |back| if (std.meta.activeTag(back) == std.meta.activeTag(event)) switch (back) {
+            // events that might be updated so fast that the already queued event is outdated
+            .resize, .move, .mouse_motion => _ = self.events.popBack(),
+            else => {},
+        };
+        self.events.pushBack(self.gpa, event) catch {
+            self.err = error.AddEvent;
+        };
+    }
 };
 
 pub fn connect(gpa: std.mem.Allocator) !Wayland {
@@ -287,8 +298,10 @@ fn windowOpen(userdata: ?*anyopaque, desktop_window: *DesktopWindow, options: De
     window.wl_surface.commit();
     if (self.display.roundtrip() != .SUCCESS) return error.Roundtrip;
 
-    if (options.surface_type != .empty) try window.events.append(self.gpa, .{ .focus = true });
-    try window.events.append(self.gpa, .{ .resize = options.size });
+    if (options.surface_type != .empty) window.addEvent(.{ .focus = true });
+    window.addEvent(.{ .resize = options.size });
+
+    if (window.err) |err| return err;
 }
 fn windowClose(userdata: ?*anyopaque, desktop_window: *DesktopWindow) void {
     const self: *Wayland = @ptrCast(@alignCast(userdata.?));
@@ -347,7 +360,7 @@ fn windowPoll(userdata: ?*anyopaque, desktop_window: *DesktopWindow) anyerror!?D
         if (self.display.dispatchPending() != .SUCCESS) return error.DispatchPending;
     }
 
-    const event = window.events.pop() orelse return null;
+    const event = window.events.popFront() orelse return null;
     switch (event) {
         .resize => |size| switch (window.surface) {
             .framebuffer => if (!size.eql(.{})) {
@@ -616,17 +629,13 @@ fn keyboardListener(_: *wl.Keyboard, event: wl.Keyboard.Event, io_manager: *IoMa
         },
         .enter => |enter| if (enter.surface) |surface| {
             const window: *Window = @ptrCast(@alignCast(surface.getUserData().?));
-            if (!window.interface.focused) window.events.append(window.gpa, .{ .focus = true }) catch |err| {
-                window.err = err;
-            };
+            if (!window.interface.focused) window.addEvent(.{ .focus = true });
             io_manager.current_window.store(window, .seq_cst);
         },
         .leave => |leave| if (leave.surface) |surface| {
             const window: *Window = @ptrCast(@alignCast(surface.getUserData().?));
 
-            if (window.interface.focused) window.events.append(window.gpa, .{ .focus = false }) catch |err| {
-                window.err = err;
-            };
+            if (window.interface.focused) window.addEvent(.{ .focus = false });
             if (current_window.? == window) io_manager.current_window.store(null, .seq_cst);
         },
         .key => |key| if (current_window) |window| {
@@ -645,9 +654,7 @@ fn keyboardListener(_: *wl.Keyboard, event: wl.Keyboard.Event, io_manager: *IoMa
                 .code = key.key + 8,
                 .sym = DesktopWindow.Event.Key.Sym.fromXkb(sym) orelse return,
             };
-            window.events.append(window.gpa, .{ .key = window_event }) catch |err| {
-                window.err = err;
-            };
+            window.addEvent(.{ .key = window_event });
         },
         .repeat_info => {},
     }
@@ -673,18 +680,14 @@ fn pointerListener(pointer: *wl.Pointer, event: wl.Pointer.Event, io_manager: *I
                 .dx = motion.surface_x.toDouble() - previous.x,
                 .dy = motion.surface_y.toDouble() - previous.y,
             };
-            window.events.append(window.gpa, .{ .mouse_motion = mouse_motion }) catch |err| {
-                window.err = err;
-            };
+            window.addEvent(.{ .mouse_motion = mouse_motion });
         },
         .button => |button| {
             const mouse_button: DesktopWindow.Event.MouseButton = .{
                 .state = @enumFromInt(@intFromEnum(button.state)),
                 .button = DesktopWindow.Event.MouseButton.Button.fromWayland(button.button).?,
             };
-            window.events.append(window.gpa, .{ .mouse_button = mouse_button }) catch |err| {
-                window.err = err;
-            };
+            window.addEvent(.{ .mouse_button = mouse_button });
         },
         .axis => |axis| {
             const mouse_scroll: DesktopWindow.Event.MouseScroll = switch (axis.axis) {
@@ -692,9 +695,7 @@ fn pointerListener(pointer: *wl.Pointer, event: wl.Pointer.Event, io_manager: *I
                 .horizontal_scroll => .{ .horizontal = axis.value.toDouble() / 10.0 },
                 _ => unreachable,
             };
-            window.events.append(window.gpa, .{ .mouse_scroll = mouse_scroll }) catch |err| {
-                window.err = err;
-            };
+            window.addEvent(.{ .mouse_scroll = mouse_scroll });
         },
     }
 }
@@ -714,9 +715,7 @@ fn relativePointerListener(_: *zwp.RelativePointerV1, event: zwp.RelativePointer
                 .dy = dy,
             };
 
-            window.events.append(window.gpa, .{ .mouse_motion = mouse_motion }) catch |err| {
-                window.err = err;
-            };
+            window.addEvent(.{ .mouse_motion = mouse_motion });
         },
     }
 }
@@ -730,9 +729,7 @@ fn touchListener(_: *wl.Touch, event: wl.Touch.Event, io_manager: *IoManager) vo
                 .x = down.x.toDouble(),
                 .y = down.y.toDouble(),
             };
-            window.events.append(window.gpa, .{ .touch_down = touch_down }) catch |err| {
-                window.err = err;
-            };
+            window.addEvent(.{ .touch_down = touch_down });
             io_manager.active_touches.put(window.gpa, touch_down.id, .{
                 .x = touch_down.x,
                 .y = touch_down.y,
@@ -747,9 +744,7 @@ fn touchListener(_: *wl.Touch, event: wl.Touch.Event, io_manager: *IoManager) vo
                 .x = touch_position.x,
                 .y = touch_position.y,
             };
-            window.events.append(window.gpa, .{ .touch_up = touch_up }) catch |err| {
-                window.err = err;
-            };
+            window.addEvent(.{ .touch_up = touch_up });
         },
         .motion => |motion| {
             const touch_motion: DesktopWindow.Event.Touch = .{
@@ -757,9 +752,7 @@ fn touchListener(_: *wl.Touch, event: wl.Touch.Event, io_manager: *IoManager) vo
                 .x = motion.x.toDouble(),
                 .y = motion.y.toDouble(),
             };
-            window.events.append(window.gpa, .{ .touch_motion = touch_motion }) catch |err| {
-                window.err = err;
-            };
+            window.addEvent(.{ .touch_motion = touch_motion });
             io_manager.active_touches.put(window.gpa, touch_motion.id, .{
                 .x = touch_motion.x,
                 .y = touch_motion.y,
@@ -790,16 +783,12 @@ fn dataDeviceListener(_: *wl.DataDevice, event: wl.DataDevice.Event, io_manager:
                 io_manager.dnd.offer = offer;
             }
 
-            window.events.append(window.gpa, .drag_enter) catch |err| {
-                window.err = err;
-            };
+            window.addEvent(.drag_enter);
             io_manager.current_window.store(window, .seq_cst);
         },
         .leave => {
             const window = io_manager.current_window.load(.seq_cst) orelse return;
-            window.events.append(window.gpa, .drag_leave) catch |err| {
-                window.err = err;
-            };
+            window.addEvent(.drag_leave);
         },
         .motion => |motion| {
             const window = io_manager.current_window.load(.seq_cst) orelse return;
@@ -813,9 +802,7 @@ fn dataDeviceListener(_: *wl.DataDevice, event: wl.DataDevice.Event, io_manager:
                 .dy = motion.y.toDouble() - previous.y,
             };
 
-            window.events.append(window.gpa, .{ .drag_motion = drag_motion }) catch |err| {
-                window.err = err;
-            };
+            window.addEvent(.{ .drag_motion = drag_motion });
         },
         .drop => {
             const offer = io_manager.dnd.offer;
@@ -831,9 +818,7 @@ fn dataDeviceListener(_: *wl.DataDevice, event: wl.DataDevice.Event, io_manager:
             _ = std.posix.system.close(write_fd);
 
             const window = io_manager.current_window.load(.seq_cst) orelse return;
-            window.events.append(window.gpa, .{ .drag_drop = .{ .action = .copy, .kind = .text, .fd = read_fd } }) catch |err| {
-                window.err = err;
-            };
+            window.addEvent(.{ .drag_drop = .{ .action = .copy, .kind = .text, .fd = read_fd } });
         },
         .selection => |selection| {
             // std.log.scoped(.data_device).info("{t}", .{event});
@@ -934,25 +919,18 @@ fn xdgSurfaceListener(xdg_surface: *xdg.Surface, event: xdg.Surface.Event, confi
 }
 
 fn xdgToplevelListener(_: *xdg.Toplevel, event: xdg.Toplevel.Event, window: *Window) void {
-    const gpa = window.gpa;
     switch (event) {
         .configure => |configure| {
             const size: DesktopWindow.Size = .{ .width = @intCast(configure.width), .height = @intCast(configure.height) };
-            if (!size.eql(.{})) window.events.append(gpa, .{ .resize = size }) catch |err| {
-                window.err = err;
-            };
+            if (!size.eql(.{})) window.addEvent(.{ .resize = size });
 
             for (configure.states.slice(xdg.Toplevel.State)) |state| if (state == .activated and window.interface.focused) {
                 if (window.interface.focused == true) return;
-                window.events.append(gpa, .{ .focus = true }) catch |err| {
-                    window.err = err;
-                };
+                window.addEvent(.{ .focus = true });
             };
         },
         .close => {
-            window.events.append(window.gpa, .close) catch |err| {
-                window.err = err;
-            };
+            window.addEvent(.close);
             window.running = false;
         },
     }
