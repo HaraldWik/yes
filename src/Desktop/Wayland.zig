@@ -114,11 +114,6 @@ pub const Window = struct {
     };
 
     fn addEvent(self: *Window, event: DesktopWindow.Event) void {
-        if (self.events.back()) |back| if (std.meta.activeTag(back) == std.meta.activeTag(event)) switch (back) {
-            // events that might be updated so fast that the already queued event is outdated
-            .resize, .move, .mouse_motion => _ = self.events.popBack(),
-            else => {},
-        };
         self.events.pushBack(self.gpa, event) catch {
             self.err = error.AddEvent;
         };
