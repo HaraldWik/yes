@@ -431,7 +431,10 @@ fn windowSetProperty(userdata: ?*anyopaque, desktop_window: *DesktopWindow, prop
             wp_cursor_shape_device.setShape(0, shape);
         },
         .cursor_mode => |mode| if (self.io_manager.pointer) |pointer| if (self.zwp_pointer_constraints) |zwp_pointer_constraints| {
-            if (mode != .captured) if (window.relative_pointer) |relative_pointer| relative_pointer.destroy();
+            if (mode != .captured and mode != .locked) if (window.relative_pointer) |relative_pointer| {
+                relative_pointer.destroy();
+                window.relative_pointer = null;
+            };
 
             switch (mode) {
                 .normal, .hidden => {
@@ -452,24 +455,33 @@ fn windowSetProperty(userdata: ?*anyopaque, desktop_window: *DesktopWindow, prop
 
                     window.confined_pointer = try zwp_pointer_constraints.confinePointer(window.wl_surface, pointer, null, .persistent);
                 },
-                .captured => if (window.locked_pointer == null) if (self.zwp_relative_pointer_manager) |zwp_relative_pointer_manager| {
+                .captured => if (self.zwp_relative_pointer_manager) |zwp_relative_pointer_manager| {
                     if (window.confined_pointer) |confined_pointer| {
                         confined_pointer.destroy();
                         window.confined_pointer = null;
                     }
 
-                    window.locked_pointer = try zwp_pointer_constraints.lockPointer(window.wl_surface, pointer, null, .persistent);
-
-                    window.relative_pointer = try zwp_relative_pointer_manager.getRelativePointer(pointer);
-                    window.relative_pointer.?.setListener(*Window, relativePointerListener, window);
+                    if (window.locked_pointer == null) {
+                        window.locked_pointer = try zwp_pointer_constraints.lockPointer(window.wl_surface, pointer, null, .persistent);
+                    }
+                    if (window.relative_pointer == null) {
+                        window.relative_pointer = try zwp_relative_pointer_manager.getRelativePointer(pointer);
+                        window.relative_pointer.?.setListener(*Window, relativePointerListener, window);
+                    }
                 },
-                .locked => if (window.locked_pointer == null) {
+                .locked => {
                     if (window.confined_pointer) |confined_pointer| {
                         confined_pointer.destroy();
                         window.confined_pointer = null;
                     }
 
-                    window.locked_pointer = try zwp_pointer_constraints.lockPointer(window.wl_surface, pointer, null, .persistent);
+                    if (window.locked_pointer == null) {
+                        window.locked_pointer = try zwp_pointer_constraints.lockPointer(window.wl_surface, pointer, null, .persistent);
+                    }
+                    if (window.relative_pointer == null) if (self.zwp_relative_pointer_manager) |zwp_relative_pointer_manager| {
+                        window.relative_pointer = try zwp_relative_pointer_manager.getRelativePointer(pointer);
+                        window.relative_pointer.?.setListener(*Window, relativePointerListener, window);
+                    };
                 },
             }
         },
