@@ -344,7 +344,7 @@ pub const Event = union(enum) {
 
     /// Text produced by a key press, already run through the OS keyboard layout,
     /// dead keys and compose. Sent alongside the `key` event, never instead of it.
-    /// Key repeat produces one `tect` event per repeat.
+    /// Key repeat produces one `text` event per repeat.
     pub const Text = struct {
         bytes: [8]u8,
         len: u8,
