@@ -323,16 +323,6 @@ fn windowClose(userdata: ?*anyopaque, desktop_window: *DesktopWindow) void {
     _ = xlib.XDestroyWindow(self.display, window.handle);
     window.* = undefined;
 }
-/// XLookupString returns latin1 and there is no XIM here, so anything outside ascii is dropped rather than passed off as utf8
-fn lookupText(key_event: *xlib.XKeyEvent) ?DesktopWindow.Event.Text {
-    var text: DesktopWindow.Event.Text = .{ .bytes = undefined, .len = 0 };
-    const size = xlib.XLookupString(key_event, &text.bytes, @intCast(text.bytes.len), null, null);
-    if (size <= 0 or size > text.bytes.len) return null;
-    text.len = @intCast(size);
-    for (text.slice()) |byte| if (byte < 0x20 or byte >= 0x7F) return null;
-    return text;
-}
-
 fn windowPoll(userdata: ?*anyopaque, desktop_window: *DesktopWindow) anyerror!?DesktopWindow.Event {
     const self: *Xlib = @ptrCast(@alignCast(userdata.?));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
@@ -783,6 +773,16 @@ fn windowVulkanCreateSurface(userdata: ?*anyopaque, desktop_window: *DesktopWind
     return surface orelse error.InvalidSurface;
 }
 
+/// XLookupString returns latin1 and there is no XIM here, so anything outside ascii is dropped rather than passed off as utf8
+fn lookupText(key_event: *xlib.XKeyEvent) ?DesktopWindow.Event.Text {
+    var text: DesktopWindow.Event.Text = .{ .bytes = undefined, .len = 0 };
+    const size = xlib.XLookupString(key_event, &text.bytes, @intCast(text.bytes.len), null, null);
+    if (size <= 0 or size > text.bytes.len) return null;
+    text.len = @intCast(size);
+    for (text.slice()) |byte| if (byte < 0x20 or byte >= 0x7F) return null;
+    return text;
+}
+
 fn setWmState(self: *Xlib, window: xlib.Window, action: u32, state1: xlib.Atom, state2: xlib.Atom) void {
     const screen = xlib.XDefaultRootWindow(self.display);
 
@@ -842,21 +842,4 @@ fn createInvisibleCursor(display: *xlib.Display) xlib.Cursor {
         0,
         0,
     );
-}
-
-pub const Item = struct {
-    name: @EnumLiteral() = .hello,
-    health: u8 = 0,
-    damage: u8 = 0,
-};
-
-pub const items: []const Item = &.{
-    .{
-        .name = .hello2,
-        .health = 90,
-    },
-};
-
-comptime {
-    _ = items;
 }
