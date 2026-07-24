@@ -662,6 +662,11 @@ fn keyboardListener(_: *wl.Keyboard, event: wl.Keyboard.Event, io_manager: *IoMa
                 .sym = DesktopWindow.Event.Key.Sym.fromXkb(sym) orelse return,
             };
             window.addEvent(.{ .key = window_event });
+            if (window_event.state == .pressed) {
+                if (DesktopWindow.Event.Text.fromXkb(io_manager.xkb.state.?, key.key + 8)) |text| {
+                    window.addEvent(.{ .text = text });
+                }
+            }
         },
         .repeat_info => {},
     }

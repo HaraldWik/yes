@@ -40,6 +40,9 @@ pub const Window = struct {
 
     cursor: std.os.windows.HCURSOR = undefined,
 
+    /// WM_CHAR carries utf-16 so a noBMP codepoint arrives as two messages
+    pending_high_surrogate: ?u16 = null,
+
     pub const Surface = union(enum) {
         empty: void,
         opengl: OpenGL,
@@ -380,6 +383,25 @@ fn windowPoll(userdata: ?*anyopaque, desktop_window: *DesktopWindow) anyerror!?D
                     .code = @intCast((msg.lParam >> @intCast(16)) & 0xFF),
                     .sym = sym,
                 } };
+            },
+            win32.WM_CHAR => {
+                const unit: u16 = @truncate(msg.wParam);
+                if (unit >= 0xD800 and unit < 0xDC00) {
+                    window.pending_high_surrogate = unit;
+                    continue;
+                }
+                const codepoint: u21 = if (unit >= 0xDC00 and unit < 0xE000) pair: {
+                    const high = window.pending_high_surrogate orelse continue;
+                    window.pending_high_surrogate = null;
+                    break :pair 0x10000 + (@as(u21, high - 0xD800) << 10) + (unit - 0xDC00);
+                } else unit;
+                window.pending_high_surrogate = null;
+                // backspace, enter, escape and friends are key events, not text
+                if (codepoint < 0x20 or codepoint == 0x7F) continue;
+
+                var text: DesktopWindow.Event.Text = .{ .bytes = undefined, .len = 0 };
+                text.len = std.unicode.utf8Encode(codepoint, &text.bytes) catch continue;
+                event = .{ .text = text };
             },
             win32.WM_TOUCH => event = touch: {
                 const c_inputs = win32.zig.loword(msg.wParam);

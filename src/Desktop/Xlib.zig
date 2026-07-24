@@ -134,6 +134,7 @@ pub const Window = struct {
     colormap: xlib.Colormap = 0,
     glx_context: ?*anyopaque = null,
     move_event: ?DesktopWindow.Position = null,
+    text_event: ?DesktopWindow.Event.Text = null,
 };
 
 pub fn open() !Xlib {
@@ -322,6 +323,16 @@ fn windowClose(userdata: ?*anyopaque, desktop_window: *DesktopWindow) void {
     _ = xlib.XDestroyWindow(self.display, window.handle);
     window.* = undefined;
 }
+/// XLookupString returns latin1 and there is no XIM here, so anything outside ascii is dropped rather than passed off as utf8
+fn lookupText(key_event: *xlib.XKeyEvent) ?DesktopWindow.Event.Text {
+    var text: DesktopWindow.Event.Text = .{ .bytes = undefined, .len = 0 };
+    const size = xlib.XLookupString(key_event, &text.bytes, @intCast(text.bytes.len), null, null);
+    if (size <= 0 or size > text.bytes.len) return null;
+    text.len = @intCast(size);
+    for (text.slice()) |byte| if (byte < 0x20 or byte >= 0x7F) return null;
+    return text;
+}
+
 fn windowPoll(userdata: ?*anyopaque, desktop_window: *DesktopWindow) anyerror!?DesktopWindow.Event {
     const self: *Xlib = @ptrCast(@alignCast(userdata.?));
     const window: *Window = @alignCast(@fieldParentPtr("interface", desktop_window));
@@ -329,6 +340,10 @@ fn windowPoll(userdata: ?*anyopaque, desktop_window: *DesktopWindow) anyerror!?D
     if (window.move_event) |move_event| {
         window.move_event = null;
         return .{ .move = move_event };
+    }
+    if (window.text_event) |text_event| {
+        window.text_event = null;
+        return .{ .text = text_event };
     }
 
     var event: xlib.XEvent = undefined;
@@ -395,15 +410,19 @@ fn windowPoll(userdata: ?*anyopaque, desktop_window: *DesktopWindow) anyerror!?D
             if (mouse_motion.x != window.interface.mouse_position.x or mouse_motion.y != window.interface.mouse_position.y)
                 return .{ .mouse_motion = mouse_motion };
         },
-        xlib.KeyPress, xlib.KeyRelease => return .{ .key = .{
-            .state = switch (event.type) {
-                xlib.KeyPress => .pressed,
-                xlib.KeyRelease => .released,
-                else => unreachable,
-            },
-            .code = @intCast(event.xkey.keycode),
-            .sym = DesktopWindow.Event.Key.Sym.fromXkb(xlib.XLookupKeysym(&event.xkey, @intCast(event.xkey.state & xlib.ShiftMask))) orelse return null,
-        } },
+        xlib.KeyPress, xlib.KeyRelease => {
+            const key: DesktopWindow.Event.Key = .{
+                .state = switch (event.type) {
+                    xlib.KeyPress => .pressed,
+                    xlib.KeyRelease => .released,
+                    else => unreachable,
+                },
+                .code = @intCast(event.xkey.keycode),
+                .sym = DesktopWindow.Event.Key.Sym.fromXkb(xlib.XLookupKeysym(&event.xkey, @intCast(event.xkey.state & xlib.ShiftMask))) orelse return null,
+            };
+            if (event.type == xlib.KeyPress) window.text_event = lookupText(&event.xkey);
+            return .{ .key = key };
+        },
         xlib.GenericEvent => {
             const gevent: *xlib.XGenericEventCookie = @ptrCast(&event);
             _ = xlib.XGetEventData(self.display, gevent);

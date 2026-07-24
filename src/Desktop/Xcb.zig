@@ -492,6 +492,13 @@ fn windowPoll(userdata: ?*anyopaque, desktop_window: *DesktopWindow) anyerror!?D
                 .code = keycode,
                 .sym = sym,
             } };
+
+            if (state == .pressed) {
+                if (DesktopWindow.Event.Text.fromXkb(self.keyboard.state, keycode)) |text| {
+                    const target, _ = self.windowFromId(target_id).?;
+                    try target.event_queue.append(self.gpa, .{ .text = text });
+                }
+            }
         },
 
         xcb.XCB_MOTION_NOTIFY => {

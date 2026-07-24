@@ -10,6 +10,7 @@ pub const Event = union(enum) {
     move: Position,
     focus: bool,
     key: Key,
+    text: Text,
 
     mouse_motion: MouseMotion,
     mouse_scroll: MouseScroll,
@@ -339,6 +340,29 @@ pub const Event = union(enum) {
                 };
             }
         };
+    };
+
+    /// Text produced by a key press, already run through the OS keyboard layout,
+    /// dead keys and compose. Sent alongside the `key` event, never instead of it.
+    /// Key repeat produces one `text` event per repeat.
+    pub const Text = struct {
+        bytes: [8]u8,
+        len: u8,
+
+        pub fn slice(self: *const Text) []const u8 {
+            return self.bytes[0..self.len];
+        }
+
+        pub fn fromXkb(state: *xkb.xkb_state, keycode: u32) ?Text {
+            var text: Text = .{ .bytes = undefined, .len = 0 };
+            // xkb writes a null terminator, so it can only fill bytes.len - 1
+            const size = xkb.xkb_state_key_get_utf8(state, keycode, &text.bytes, text.bytes.len);
+            if (size <= 0 or size >= text.bytes.len) return null;
+            text.len = @intCast(size);
+            // backspace, enter, escape and friends are key events, not text
+            if (text.len == 1 and (text.bytes[0] < 0x20 or text.bytes[0] == 0x7F)) return null;
+            return text;
+        }
     };
 
     pub const MouseMotion = struct {
